@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import os
 import tempfile
+import time
 
 import pytest
+from fastapi.testclient import TestClient
 
 _TMP_DIR = tempfile.mkdtemp(prefix="qf_test_")
 os.environ.setdefault("QF_DB_PATH", os.path.join(_TMP_DIR, "test_quantflow.db"))
@@ -24,3 +26,32 @@ def clean_db():
     yield
     db.reset()
     LOG_STORE._records.clear()
+
+
+@pytest.fixture
+def client():
+    from app.main import app
+
+    with TestClient(app) as c:
+        yield c
+
+
+@pytest.fixture
+def auth_client():
+    """已注册并登录的鉴权客户端（带 Bearer 头）。"""
+    from app.main import app
+
+    with TestClient(app) as c:
+        username = f"t_{int(time.time() * 1000)}_{os.getpid()}"
+        password = "Test@123"
+        c.post(
+            "/api/auth/register",
+            json={"username": username, "password": password},
+        )
+        resp = c.post(
+            "/api/auth/login",
+            json={"username": username, "password": password},
+        )
+        token = resp.json()["token"]
+        c.headers["Authorization"] = f"Bearer {token}"
+        yield c

@@ -11,6 +11,7 @@ from . import indicators  # noqa: F401  M3 特征节点
 from . import market_data  # noqa: F401  M3 数据节点
 from . import ml_nodes  # noqa: F401  M3 ML 节点
 from . import processing  # noqa: F401  M3 处理节点
+from . import llm  # noqa: F401  V1.1 N1 LLM 策略助手节点
 
 
 def discover() -> None:
