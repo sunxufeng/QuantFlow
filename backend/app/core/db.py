@@ -1,0 +1,109 @@
+"""SQLite 持久化层（M4 起承载用户/项目/成员等业务数据）。
+
+设计：
+- 模块级 :class:`Database` 单例，RLock 串行化写操作（业务数据量小，足够）；
+- WAL 模式支持并发读；`foreign_keys=ON` 保证成员表级联删除；
+- 表结构幂等初始化（`CREATE TABLE IF NOT EXISTS`）；
+- 路径可用环境变量 ``QF_DB_PATH`` 覆盖（生产/测试各自指定）。
+
+V1.0 说明：工作流/运行实例仍为内存态（M1 原型定位），迁移 SQLite/Mongo 排入
+V1.1；用户/项目/成员为多用户业务核心，必须先落地持久化。
+"""
+
+from __future__ import annotations
+
+import os
+import sqlite3
+import threading
+from typing import Any, Iterable, List, Optional
+
+_BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+DEFAULT_DB_PATH = os.path.join(_BASE_DIR, "data", "quantflow.db")
+
+_SCHEMA = """
+CREATE TABLE IF NOT EXISTS users (
+    id            TEXT PRIMARY KEY,
+    username      TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    salt          TEXT NOT NULL,
+    role          TEXT NOT NULL DEFAULT 'user',
+    created_at    TEXT NOT NULL,
+    updated_at    TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS projects (
+    id          TEXT PRIMARY KEY,
+    name        TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    owner_id    TEXT NOT NULL,
+    created_at  TEXT NOT NULL,
+    updated_at  TEXT NOT NULL,
+    FOREIGN KEY(owner_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS project_members (
+    project_id TEXT NOT NULL,
+    user_id    TEXT NOT NULL,
+    role       TEXT NOT NULL DEFAULT 'member',
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (project_id, user_id),
+    FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE,
+    FOREIGN KEY(user_id)    REFERENCES users(id)    ON DELETE CASCADE
+);
+"""
+
+
+class Database:
+    """线程安全的 SQLite 访问封装。"""
+
+    def __init__(self, path: Optional[str] = None) -> None:
+        self._path = path or os.getenv("QF_DB_PATH", DEFAULT_DB_PATH)
+        self._lock = threading.RLock()
+        self._conn: Optional[sqlite3.Connection] = None
+
+    @property
+    def path(self) -> str:
+        return self._path
+
+    def _ensure(self) -> sqlite3.Connection:
+        if self._conn is None:
+            os.makedirs(os.path.dirname(self._path) or ".", exist_ok=True)
+            self._conn = sqlite3.connect(self._path, check_same_thread=False)
+            self._conn.row_factory = sqlite3.Row
+            self._conn.execute("PRAGMA journal_mode=WAL")
+            self._conn.execute("PRAGMA foreign_keys=ON")
+            self._conn.executescript(_SCHEMA)
+            self._conn.commit()
+        return self._conn
+
+    def execute(self, sql: str, params: Iterable[Any] = ()) -> sqlite3.Cursor:
+        with self._lock:
+            cur = self._ensure().execute(sql, tuple(params))
+            self._ensure().commit()
+            return cur
+
+    def executemany(self, sql: str, seq: Iterable[Iterable[Any]]) -> None:
+        with self._lock:
+            self._ensure().executemany(sql, (tuple(item) for item in seq))
+            self._ensure().commit()
+
+    def query(self, sql: str, params: Iterable[Any] = ()) -> List[dict]:
+        with self._lock:
+            rows = self._ensure().execute(sql, tuple(params)).fetchall()
+            return [dict(row) for row in rows]
+
+    def query_one(self, sql: str, params: Iterable[Any] = ()) -> Optional[dict]:
+        rows = self.query(sql, params)
+        return rows[0] if rows else None
+
+    def reset(self) -> None:
+        """清空全部业务表（测试用）。"""
+        with self._lock:
+            conn = self._ensure()
+            conn.execute("DELETE FROM project_members")
+            conn.execute("DELETE FROM projects")
+            conn.execute("DELETE FROM users")
+            conn.commit()
+
+
+db = Database()

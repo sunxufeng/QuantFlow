@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Response, status
+from typing import Optional
 
+from fastapi import APIRouter, Depends, HTTPException, Response, status
+
+from ..core.auth import get_current_user_optional
 from ..core.dag import WorkflowValidationError, validate_workflow
+from ..core.projects import PROJECT_REPOSITORY
 from ..core.registry import REGISTRY
 from ..core.runs import RUN_SERVICE
 from ..core.workflow_repository import WORKFLOW_REPOSITORY, WorkflowNotFoundError
@@ -33,14 +37,52 @@ def _validate_payload(workflow: WorkflowIn) -> None:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
+def _check_project_membership(project_id: Optional[str], user: Optional[dict]) -> None:
+    """认证用户创建/更新工作流时，校验其对目标项目的访问权。"""
+    if project_id is None or user is None:
+        return
+    if user["role"] == "admin":
+        return
+    if PROJECT_REPOSITORY.member_role(project_id, user["id"]) is None:
+        raise HTTPException(status_code=403, detail="无权访问该项目")
+
+
+def _check_workflow_access(item: dict, user: Optional[dict]) -> None:
+    """读取/修改工作流时校验访问权；未认证或遗留公共工作流保持放行。"""
+    if user is None:
+        return
+    if user["role"] == "admin":
+        return
+    if item.get("owner_id") == user["id"]:
+        return
+    project_id = item.get("project_id")
+    if project_id and PROJECT_REPOSITORY.member_role(project_id, user["id"]):
+        return
+    raise HTTPException(status_code=403, detail="无权访问该工作流")
+
+
 @router.get("/nodes", response_model=list[NodeSpecOut], summary="节点库（已注册节点规格）")
 def list_nodes() -> list[dict]:
     return REGISTRY.specs()
 
 
 @router.get("/workflows", response_model=list[WorkflowSummaryOut], summary="工作流列表")
-def list_workflows() -> list[dict]:
-    return WORKFLOW_REPOSITORY.list()
+def list_workflows(
+    project_id: Optional[str] = None,
+    scope: str = "all",
+    user: Optional[dict] = Depends(get_current_user_optional),
+) -> list[dict]:
+    if user and user["role"] != "admin":
+        if scope == "mine":
+            return WORKFLOW_REPOSITORY.list(project_id=project_id, owner_id=user["id"])
+        # 普通用户只可见自己创建或所在项目下的工作流
+        projects = [p["id"] for p in PROJECT_REPOSITORY.list_for_user(user["id"])]
+        return [
+            wf
+            for wf in WORKFLOW_REPOSITORY.list(project_id=project_id)
+            if wf.get("owner_id") == user["id"] or wf.get("project_id") in projects
+        ]
+    return WORKFLOW_REPOSITORY.list(project_id=project_id)
 
 
 @router.post(
@@ -49,9 +91,14 @@ def list_workflows() -> list[dict]:
     status_code=status.HTTP_201_CREATED,
     summary="创建工作流",
 )
-def create_workflow(workflow: WorkflowSaveIn) -> dict:
+def create_workflow(
+    workflow: WorkflowSaveIn,
+    user: Optional[dict] = Depends(get_current_user_optional),
+) -> dict:
     _validate_payload(workflow)
-    return WORKFLOW_REPOSITORY.create(_payload(workflow))
+    _check_project_membership(workflow.project_id, user)
+    owner_id = user["id"] if user else None
+    return WORKFLOW_REPOSITORY.create(_payload(workflow), owner_id=owner_id)
 
 
 @router.post(
@@ -60,36 +107,67 @@ def create_workflow(workflow: WorkflowSaveIn) -> dict:
     status_code=status.HTTP_201_CREATED,
     summary="导入工作流 JSON",
 )
-def import_workflow(workflow: WorkflowImportIn) -> dict:
+def import_workflow(
+    workflow: WorkflowImportIn,
+    user: Optional[dict] = Depends(get_current_user_optional),
+) -> dict:
     _validate_payload(workflow)
-    return WORKFLOW_REPOSITORY.create(_payload(workflow))
+    _check_project_membership(workflow.project_id, user)
+    owner_id = user["id"] if user else None
+    return WORKFLOW_REPOSITORY.create(_payload(workflow), owner_id=owner_id)
 
 
 @router.get("/workflows/{workflow_id}/export", response_model=WorkflowSaveIn, summary="导出工作流 JSON")
-def export_workflow(workflow_id: str) -> dict:
-    item = get_workflow(workflow_id)
+def export_workflow(
+    workflow_id: str,
+    user: Optional[dict] = Depends(get_current_user_optional),
+) -> dict:
+    item = get_workflow_inner(workflow_id, user)
     return {key: item[key] for key in ("name", "description", "nodes", "edges")}
 
 
-@router.get("/workflows/{workflow_id}", response_model=WorkflowOut, summary="工作流详情")
-def get_workflow(workflow_id: str) -> dict:
+def get_workflow_inner(workflow_id: str, user: Optional[dict]) -> dict:
     try:
-        return WORKFLOW_REPOSITORY.get(workflow_id)
+        item = WORKFLOW_REPOSITORY.get(workflow_id)
     except WorkflowNotFoundError:
         raise HTTPException(status_code=404, detail="工作流不存在") from None
+    _check_workflow_access(item, user)
+    return item
+
+
+@router.get("/workflows/{workflow_id}", response_model=WorkflowOut, summary="工作流详情")
+def get_workflow(
+    workflow_id: str,
+    user: Optional[dict] = Depends(get_current_user_optional),
+) -> dict:
+    return get_workflow_inner(workflow_id, user)
 
 
 @router.put("/workflows/{workflow_id}", response_model=WorkflowOut, summary="保存工作流")
-def update_workflow(workflow_id: str, workflow: WorkflowSaveIn) -> dict:
+def update_workflow(
+    workflow_id: str,
+    workflow: WorkflowSaveIn,
+    user: Optional[dict] = Depends(get_current_user_optional),
+) -> dict:
+    item = get_workflow_inner(workflow_id, user)
     _validate_payload(workflow)
+    _check_project_membership(workflow.project_id or item.get("project_id"), user)
     try:
-        return WORKFLOW_REPOSITORY.update(workflow_id, _payload(workflow))
+        return WORKFLOW_REPOSITORY.update(
+            workflow_id,
+            _payload(workflow),
+            owner_id=user["id"] if user else None,
+        )
     except WorkflowNotFoundError:
         raise HTTPException(status_code=404, detail="工作流不存在") from None
 
 
 @router.delete("/workflows/{workflow_id}", status_code=status.HTTP_204_NO_CONTENT, summary="删除工作流")
-def delete_workflow(workflow_id: str) -> Response:
+def delete_workflow(
+    workflow_id: str,
+    user: Optional[dict] = Depends(get_current_user_optional),
+) -> Response:
+    get_workflow_inner(workflow_id, user)
     try:
         WORKFLOW_REPOSITORY.delete(workflow_id)
     except WorkflowNotFoundError:

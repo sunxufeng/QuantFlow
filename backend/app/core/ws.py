@@ -45,4 +45,9 @@ class RunConnectionManager:
                 await self.disconnect(run_id, ws)
 
 
+    def connection_count(self) -> int:
+        """当前活跃 WS 连接数（M4 监控用）。"""
+        return sum(len(conns) for conns in self._conns.values())
+
+
 RUN_CONNECTIONS = RunConnectionManager()

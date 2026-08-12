@@ -35,11 +35,13 @@ class WorkflowIn(BaseModel):
 class WorkflowSaveIn(WorkflowIn):
     name: str = Field(..., min_length=1, max_length=120)
     description: str = Field(default="", max_length=500)
+    project_id: Optional[str] = Field(default=None, description="所属项目（M4，可选）")
 
 
 class WorkflowOut(WorkflowSaveIn):
     id: str
     version: int
+    owner_id: Optional[str] = None
     created_at: str
     updated_at: str
 
@@ -49,6 +51,7 @@ class WorkflowSummaryOut(BaseModel):
     name: str
     description: str
     version: int
+    project_id: Optional[str] = None
     created_at: str
     updated_at: str
 
@@ -56,6 +59,7 @@ class WorkflowSummaryOut(BaseModel):
 class WorkflowImportIn(WorkflowIn):
     name: str = Field(default="Imported workflow", min_length=1, max_length=120)
     description: str = Field(default="", max_length=500)
+    project_id: Optional[str] = Field(default=None, description="所属项目（M4，可选）")
 
 
 class NodeSpecOut(BaseModel):
@@ -73,3 +77,55 @@ class ValidateOut(BaseModel):
     valid: bool
     errors: List[str] = Field(default_factory=list)
     topo_order: List[str] = Field(default_factory=list)
+
+
+# ---- M4：用户 / 认证 / 项目 ----
+
+class RegisterIn(BaseModel):
+    username: str = Field(..., min_length=3, max_length=32, pattern=r"^[A-Za-z0-9_]+$")
+    password: str = Field(..., min_length=6, max_length=128)
+
+
+class LoginIn(BaseModel):
+    username: str
+    password: str
+
+
+class UserOut(BaseModel):
+    id: str
+    username: str
+    role: str
+    created_at: str
+
+
+class AuthTokenOut(BaseModel):
+    token: str
+    token_type: str = "bearer"
+    expires_in: int
+    user: UserOut
+
+
+class ProjectIn(BaseModel):
+    name: str = Field(..., min_length=1, max_length=60)
+    description: str = Field(default="", max_length=300)
+
+
+class ProjectOut(ProjectIn):
+    id: str
+    owner_id: str
+    member_count: int = 0
+    created_at: str
+    updated_at: str
+
+
+class ProjectMemberIn(BaseModel):
+    username: str = Field(..., description="被添加成员的用户名")
+    role: str = Field("member", pattern=r"^(owner|admin|member|viewer)$")
+
+
+class ProjectMemberOut(BaseModel):
+    project_id: str
+    user_id: str
+    username: str
+    role: str
+    created_at: str

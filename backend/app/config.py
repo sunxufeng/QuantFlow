@@ -14,6 +14,12 @@ class Settings:
     # V2.0：MongoDB/Redis 连接串（M1 原型暂用内存态）
     MONGO_URI: str = os.getenv("QF_MONGO_URI", "mongodb://localhost:27017")
     REDIS_URI: str = os.getenv("QF_REDIS_URI", "redis://localhost:6379")
+    # M4：JWT 密钥与有效期（生产环境务必通过环境变量覆盖）
+    SECRET_KEY: str = os.getenv(
+        "QF_SECRET_KEY",
+        "qf-dev-secret-change-me-8f3b2a1c9d4e5f6a",
+    )
+    TOKEN_EXPIRE_MINUTES: int = int(os.getenv("QF_TOKEN_EXPIRE_MINUTES", "1440"))
 
 
 settings = Settings()

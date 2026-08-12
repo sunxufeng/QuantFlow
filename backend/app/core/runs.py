@@ -113,6 +113,15 @@ class RunRepository:
         with self._lock:
             self._items.clear()
 
+    def stats(self) -> dict:
+        """运行状态统计（M4 监控用）。"""
+        with self._lock:
+            counts = {"total": len(self._items)}
+            for record in self._items.values():
+                status = record.get("status", "unknown")
+                counts[status] = counts.get(status, 0) + 1
+            return counts
+
     @staticmethod
     def _summary(record: dict) -> dict:
         return {

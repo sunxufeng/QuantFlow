@@ -24,10 +24,16 @@ class InMemoryWorkflowRepository:
         self._items: Dict[str, Dict[str, Any]] = {}
         self._lock = threading.RLock()
 
-    def list(self) -> List[dict]:
+    def list(self, project_id: str | None = None, owner_id: str | None = None) -> List[dict]:
         with self._lock:
-            items = sorted(self._items.values(), key=lambda item: item["updated_at"], reverse=True)
-            return [deepcopy(item) for item in items]
+            items = [
+                deepcopy(item)
+                for item in self._items.values()
+                if (project_id is None or item.get("project_id") == project_id)
+                and (owner_id is None or item.get("owner_id") == owner_id)
+            ]
+            items.sort(key=lambda item: item["updated_at"], reverse=True)
+            return items
 
     def get(self, workflow_id: str) -> dict:
         with self._lock:
@@ -36,7 +42,7 @@ class InMemoryWorkflowRepository:
             except KeyError:
                 raise WorkflowNotFoundError(workflow_id) from None
 
-    def create(self, payload: dict) -> dict:
+    def create(self, payload: dict, owner_id: str | None = None) -> dict:
         now = _utc_now()
         item = {
             "id": f"wf_{uuid.uuid4().hex[:12]}",
@@ -44,6 +50,8 @@ class InMemoryWorkflowRepository:
             "description": payload.get("description", ""),
             "nodes": deepcopy(payload["nodes"]),
             "edges": deepcopy(payload.get("edges", [])),
+            "project_id": payload.get("project_id"),
+            "owner_id": owner_id,
             "version": 1,
             "created_at": now,
             "updated_at": now,
@@ -52,7 +60,7 @@ class InMemoryWorkflowRepository:
             self._items[item["id"]] = item
         return deepcopy(item)
 
-    def update(self, workflow_id: str, payload: dict) -> dict:
+    def update(self, workflow_id: str, payload: dict, owner_id: str | None = None) -> dict:
         with self._lock:
             if workflow_id not in self._items:
                 raise WorkflowNotFoundError(workflow_id)
@@ -62,6 +70,8 @@ class InMemoryWorkflowRepository:
                 description=payload.get("description", ""),
                 nodes=deepcopy(payload["nodes"]),
                 edges=deepcopy(payload.get("edges", [])),
+                project_id=payload.get("project_id", current.get("project_id")),
+                owner_id=owner_id if owner_id is not None else current.get("owner_id"),
                 version=current["version"] + 1,
                 updated_at=_utc_now(),
             )
