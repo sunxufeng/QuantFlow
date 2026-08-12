@@ -38,6 +38,22 @@ docker compose up --build
 # 前端 http://localhost:8080
 ```
 
+### 方式三：生产部署（systemd + venv + Node 静态服务）
+
+国内服务器拉 Docker Hub 镜像常受阻，实际生产采用「venv 直跑后端 + Node 静态服务」方案，已上线 `https://acqw.areteailab.com`：
+
+```bash
+cd quantflow
+sudo bash deploy/deploy.sh        # 安装到 /opt/quantflow/QuantFlow 并注册 systemd
+# 覆盖默认值：QF_DIR / QF_BACKEND_PORT=8100 / QF_FRONTEND_PORT=8080
+```
+
+systemd 单元（`deploy/systemd/`）：
+- `quantflow.service` — uvicorn 监听 `127.0.0.1:8100`（后端）
+- `quantflow-frontend.service` — `node server.mjs` 监听 `0.0.0.0:8080`，静态托管前端并反代 `/api/*` 到后端
+
+对外域名建议用 Nginx Proxy Manager 反代 443（HTTPS 证书 acme.sh DNS-01 + 自动续期），示例：`acqw.areteailab.com → http://172.17.0.1:8080`。
+
 ## 测试
 
 ```bash
@@ -50,6 +66,8 @@ cd backend && .venv/bin/python -m pytest tests/ -q   # 30 个用例
 
 ```
 quantflow/
+├── .github/workflows/     # GitHub Actions CI（backend 单测 / frontend 构建 / Docker 构建）
+├── deploy/                # 生产部署：deploy.sh + systemd 单元
 ├── backend/
 │   ├── app/
 │   │   ├── core/          # 节点、注册表、DAG、执行器、数据类型、工作流仓储
@@ -61,6 +79,7 @@ quantflow/
 │   └── tests/             # 30 用例
 └── frontend/
     ├── src/               # App.jsx / WorkflowNode.jsx / api.js / styles.css
+    ├── server.mjs         # 生产静态服务 + /api 反代（零依赖）
     └── package.json
 ```
 
@@ -70,4 +89,5 @@ quantflow/
 - [ ] WebSocket 运行状态实时推送
 - [x] 工作流持久化 + JSON 导入导出（M1 内存仓储，MongoDB 持久化后续接入）
 - [ ] 基金回测技术方案预研（Q-01 决策：纳入 V1.0）
-- [ ] GitHub Actions CI（lint / 单测 / Docker 构建）
+- [x] GitHub Actions CI（backend 单测 / frontend 构建 / Docker 构建）
+- [x] 生产部署脚本与 systemd 单元（deploy/）
