@@ -66,6 +66,14 @@ def list_nodes() -> list[dict]:
     return REGISTRY.specs()
 
 
+@router.get("/workflows/templates", summary="内置示例工作流模板库")
+def list_workflow_templates() -> list[dict]:
+    """返回内置策略模板（nodes + edges），前端可直接加载到画布。无需鉴权。"""
+    from ..templates import list_templates
+
+    return list_templates()
+
+
 @router.get("/workflows", response_model=list[WorkflowSummaryOut], summary="工作流列表")
 def list_workflows(
     project_id: Optional[str] = None,
