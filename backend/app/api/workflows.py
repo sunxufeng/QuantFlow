@@ -5,8 +5,8 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Response, status
 
 from ..core.dag import WorkflowValidationError, validate_workflow
-from ..core.executor import WorkflowExecutor
 from ..core.registry import REGISTRY
+from ..core.runs import RUN_SERVICE
 from ..core.workflow_repository import WORKFLOW_REPOSITORY, WorkflowNotFoundError
 from ..models.schemas import (
     NodeSpecOut,
@@ -19,7 +19,6 @@ from ..models.schemas import (
 )
 
 router = APIRouter()
-executor = WorkflowExecutor(max_workers=4)
 
 
 def _payload(workflow: WorkflowIn) -> dict:
@@ -119,5 +118,9 @@ def run(workflow: WorkflowIn) -> dict:
         )
     except WorkflowValidationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    result = executor.run(graph)
+    result = RUN_SERVICE.execute_sync(
+        [n.model_dump() for n in workflow.nodes],
+        [e.model_dump() for e in workflow.edges],
+        workflow_name="run",
+    )
     return result.to_dict()

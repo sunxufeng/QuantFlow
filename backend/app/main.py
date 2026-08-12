@@ -11,7 +11,7 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .api import workflows
+from .api import market, runs, workflows
 from .config import settings
 from .nodes import discover
 
@@ -36,6 +36,8 @@ app.add_middleware(
 )
 
 app.include_router(workflows.router, prefix="/api")
+app.include_router(market.router, prefix="/api")
+app.include_router(runs.router, prefix="/api")
 
 
 @app.on_event("startup")

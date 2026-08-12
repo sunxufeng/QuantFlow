@@ -1,0 +1,91 @@
+"""交易成本模型（M2 回测引擎）。
+
+对标开发计划 §4.2：手续费 / 印花税 / 过户费 / 滑点，配置存于
+``cost_rate.json``（内置默认，支持自定义路径覆盖）。
+
+A 股规则：
+- 佣金：双边，默认万 2.5，最低 5 元
+- 印花税：卖出单边，0.05%（2023-08 起）
+- 过户费：双边，0.001%（沪市，2022-04 起统一）
+- 滑点：按成交价比例（买入上浮 / 卖出下浮），默认 0
+"""
+
+from __future__ import annotations
+
+import json
+import os
+from dataclasses import dataclass
+from typing import Optional
+
+
+def _default_rates() -> dict:
+    return {
+        "commission_rate": 0.00025,   # 佣金万 2.5
+        "commission_min": 5.0,        # 最低佣金（元）
+        "stamp_tax_rate": 0.0005,     # 印花税（卖出）
+        "transfer_fee_rate": 0.00001, # 过户费（双边）
+        "slippage": 0.0,              # 滑点比例（双边方向）
+    }
+
+
+@dataclass(frozen=True)
+class CostRates:
+    commission_rate: float = 0.00025
+    commission_min: float = 5.0
+    stamp_tax_rate: float = 0.0005
+    transfer_fee_rate: float = 0.00001
+    slippage: float = 0.0
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "CostRates":
+        base = _default_rates()
+        base.update({k: float(v) for k, v in data.items() if k in base})
+        return cls(**base)
+
+    def to_dict(self) -> dict:
+        return {
+            "commission_rate": self.commission_rate,
+            "commission_min": self.commission_min,
+            "stamp_tax_rate": self.stamp_tax_rate,
+            "transfer_fee_rate": self.transfer_fee_rate,
+            "slippage": self.slippage,
+        }
+
+
+def load_cost_rates(path: Optional[str] = None) -> CostRates:
+    """加载成本配置；未指定路径时先查 QF_COST_RATE_JSON，否则用内置默认。"""
+    if path is None:
+        path = os.getenv("QF_COST_RATE_JSON", "")
+    if not path or not os.path.exists(path):
+        return CostRates()
+    with open(path, encoding="utf-8") as f:
+        return CostRates.from_dict(json.load(f))
+
+
+class CostCalculator:
+    """按 A 股规则计算单笔交易成本与成交价。"""
+
+    def __init__(self, rates: Optional[CostRates] = None) -> None:
+        self.rates = rates or CostRates()
+
+    def execution_price(self, price: float, is_buy: bool) -> float:
+        """含滑点的执行价：买入上浮、卖出下浮。"""
+        s = self.rates.slippage
+        return price * (1 + s) if is_buy else price * (1 - s)
+
+    def transaction_costs(
+        self, price: float, shares: int, is_buy: bool
+    ) -> dict:
+        """计算一笔交易的成本明细。price 为执行价，shares 为成交股数。"""
+        notional = price * shares
+        commission = max(notional * self.rates.commission_rate, self.rates.commission_min)
+        stamp_tax = notional * self.rates.stamp_tax_rate if not is_buy else 0.0
+        transfer_fee = notional * self.rates.transfer_fee_rate
+        total = commission + stamp_tax + transfer_fee
+        return {
+            "notional": round(notional, 4),
+            "commission": round(commission, 4),
+            "stamp_tax": round(stamp_tax, 4),
+            "transfer_fee": round(transfer_fee, 4),
+            "total": round(total, 4),
+        }
