@@ -57,10 +57,10 @@ systemd 单元（`deploy/systemd/`）：
 ## 测试
 
 ```bash
-cd backend && .venv/bin/python -m pytest tests/ -q   # 30 个用例
+cd backend && .venv/bin/python -m pytest tests/ -q   # 129 个用例
 ```
 
-覆盖：节点注册/规格/参数解析、DAG 拓扑/环检测/端口校验、执行引擎（线性/菱形并行/失败传播/序列化）、API 层。
+覆盖：节点注册/规格/参数解析、DAG 拓扑/环检测/端口校验、执行引擎（线性/菱形并行/失败传播/序列化）、回测引擎（股票 T+1/涨跌停/停牌 + 基金 T+1 确认/费用/定投）、数据层、REST API。
 
 ## 目录结构
 
@@ -72,22 +72,25 @@ quantflow/
 │   ├── app/
 │   │   ├── core/          # 节点、注册表、DAG、执行器、数据类型、工作流仓储
 │   │   ├── nodes/         # 内置节点库（@work_node 注册）
-│   │   ├── api/           # workflows.py 路由
+│   │   ├── backtest/      # 回测引擎：股票/基金账户、策略、绩效、报告
+│   │   ├── market/        # 数据层：多数据源（tushare/fixture）、缓存
+│   │   ├── api/           # workflows.py / backtest.py / market.py / runs.py 路由
 │   │   ├── models/        # Pydantic 契约
 │   │   ├── config.py
 │   │   └── main.py
-│   └── tests/             # 30 用例
+│   └── tests/             # 129 用例
 └── frontend/
     ├── src/               # App.jsx / WorkflowNode.jsx / api.js / styles.css
     ├── server.mjs         # 生产静态服务 + /api 反代（零依赖）
     └── package.json
 ```
 
-## M1 待办（后续迭代）
+## M2 待办（后续迭代）
 
-- [ ] Mongo/Redis 数据访问层（当前内存态）
-- [ ] WebSocket 运行状态实时推送
-- [x] 工作流持久化 + JSON 导入导出（M1 内存仓储，MongoDB 持久化后续接入）
-- [ ] 基金回测技术方案预研（Q-01 决策：纳入 V1.0）
+- [x] Mongo/Redis 数据访问层（当前内存态；M2 数据层：多数据源 + 缓存）
+- [x] WebSocket 运行状态实时推送（M2 执行引擎状态推送）
+- [x] 工作流持久化 + JSON 导入导出
+- [x] 基金回测技术方案预研（Q-01 决策：纳入 V1.0；M2 基金账户/策略/API 已交付）
 - [x] GitHub Actions CI（backend 单测 / frontend 构建 / Docker 构建）
 - [x] 生产部署脚本与 systemd 单元（deploy/）
+- [ ] M3 节点库（数据/处理/特征/ML/因子/回测节点）与前端编辑器
