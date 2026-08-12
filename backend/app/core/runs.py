@@ -13,6 +13,7 @@ RunService 订阅并实时落库，前端 WebSocket 亦订阅同一总线。
 
 from __future__ import annotations
 
+import logging
 import threading
 import time
 import uuid
@@ -284,6 +285,7 @@ class RunService:
             self.repository.update(run_id, **final)
             kind = RUN_SUCCEEDED if status == RunStatus.SUCCEEDED else RUN_FAILED
             self.bus.publish(RunEvent(run_id=run_id, kind=kind))
+            self._notify_finished(run_id, status)
             return result
         except Exception as exc:  # noqa: BLE001 - 兜底：异常视为运行失败
             final = {
@@ -293,7 +295,23 @@ class RunService:
             }
             self.repository.update(run_id, **final)
             self.bus.publish(RunEvent(run_id=run_id, kind=RUN_FAILED, payload={"error": str(exc)}))
+            self._notify_finished(run_id, RunStatus.FAILED, error=str(exc))
             return None
+
+    def _notify_finished(self, run_id: str, status: str, error: Optional[str] = None) -> None:
+        """运行完成/失败后推送外部通知（N5）；失败不影响运行结果。"""
+        try:
+            from .notifications.service import notification_service
+
+            rec = self.repository.get(run_id)
+            wf_name = rec.get("workflow_name", "") if rec else ""
+            notification_service.notify_run_finished(
+                run_id=run_id, workflow_name=wf_name, status=status, error=error
+            )
+        except Exception:  # 通知故障不应影响运行终态
+            logging.getLogger("quantflow.runs").warning(
+                "运行完成通知发送失败（不影响结果）", exc_info=True
+            )
 
     def _on_event(self, event: RunEvent) -> None:
         """订阅总线：节点状态事件实时写入运行记录。"""

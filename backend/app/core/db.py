@@ -88,6 +88,15 @@ CREATE TABLE IF NOT EXISTS market_bars (
     adjustment TEXT NOT NULL DEFAULT 'none',
     PRIMARY KEY (symbol, date, interval)
 );
+
+CREATE TABLE IF NOT EXISTS notification_channels (
+    id         TEXT PRIMARY KEY,
+    type       TEXT NOT NULL,
+    name       TEXT NOT NULL,
+    config     TEXT NOT NULL DEFAULT '{}',
+    enabled    INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL
+);
 """
 
 
@@ -144,6 +153,7 @@ class Database:
             conn.execute("DELETE FROM api_tokens")
             conn.execute("DELETE FROM data_updates")
             conn.execute("DELETE FROM market_bars")
+            conn.execute("DELETE FROM notification_channels")
             conn.commit()
 
 
