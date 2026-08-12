@@ -49,8 +49,8 @@ services:
       backend:
         condition: service_healthy
     ports:
-      # 宿主 8080 → 容器 nginx 80；前端 /api/* 由 nginx 反代到 backend:8000
-      - "8080:80"
+      # 宿主 ${QF_PORT:-8080} → 容器 nginx 80；前端 /api/* 由 nginx 反代到 backend:8000
+      - "${QF_PORT:-8080}:80"
 
 volumes:
   quantflow-data:
