@@ -75,16 +75,22 @@ class PerformanceMetrics:
             if std > 1e-12:
                 self.sharpe = mean_r / std * math.sqrt(TRADING_DAYS_PER_YEAR)
 
-        # 胜率：平仓（卖出）笔数中 pnl > 0 的占比
-        closed = [t for t in self.trades if getattr(t, "side", None) == "sell"]
+        # 胜率：平仓（卖出/赎回）笔数中 pnl > 0 的占比
+        closed = [t for t in self.trades if getattr(t, "side", None) in ("sell", "redeem")]
         if closed:
             wins = sum(1 for t in closed if (getattr(t, "pnl", 0) or 0) > 0)
             self.win_rate = wins / len(closed)
 
-        # 换手率：累计成交额 / 初始资金
-        turnover_value = sum(
-            (getattr(t, "price", 0) or 0) * (getattr(t, "shares", 0) or 0) for t in self.trades
-        )
+        # 换手率：累计成交额 / 初始资金（股票=价格×股数；基金申购=金额、赎回=净值×份额）
+        turnover_value = 0.0
+        for t in self.trades:
+            side = getattr(t, "side", None)
+            if side == "subscribe":
+                turnover_value += getattr(t, "amount", 0) or 0
+            elif side == "redeem":
+                turnover_value += (getattr(t, "nav", 0) or 0) * (getattr(t, "shares", 0) or 0)
+            else:
+                turnover_value += (getattr(t, "price", 0) or 0) * (getattr(t, "shares", 0) or 0)
         self.turnover = turnover_value / self.initial_cash if self.initial_cash else 0.0
 
     # ------------------------------------------------------------------ #

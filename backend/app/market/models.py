@@ -34,6 +34,8 @@ class Bar:
     amount: float = 0.0
     interval: str = INTERVAL_DAILY
     datetime: Optional[str] = None  # 分钟级预留
+    source: str = ""  # provider / fixture，保证数据可追溯
+    adjustment: str = "none"  # none / qfq / hfq
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -47,6 +49,8 @@ class Bar:
             "volume": self.volume,
             "amount": self.amount,
             "interval": self.interval,
+            "source": self.source,
+            "adjustment": self.adjustment,
         }
 
     @classmethod
@@ -62,6 +66,8 @@ class Bar:
             amount=float(data.get("amount", 0.0)),
             interval=data.get("interval", INTERVAL_DAILY),
             datetime=data.get("datetime"),
+            source=data.get("source", ""),
+            adjustment=data.get("adjustment", "none"),
         )
 
 
@@ -107,7 +113,18 @@ class Instrument:
 
 def bars_to_table(bars: List[Bar]) -> DataTable:
     """K 线列表 -> DataTable（供工作流节点消费）。"""
-    columns = ["symbol", "date", "open", "high", "low", "close", "volume", "amount"]
+    columns = [
+        "symbol",
+        "date",
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume",
+        "amount",
+        "source",
+        "adjustment",
+    ]
     if any(b.datetime for b in bars):
         columns.insert(2, "datetime")
     rows = [{c: b.to_dict().get(c) for c in columns} for b in bars]

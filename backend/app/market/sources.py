@@ -1,9 +1,9 @@
 """行情数据源抽象（M2 数据层）。
 
 设计目标（对齐开发计划 §4.2 数据层）：
-- 多数据源适配：tushare 等商业源 + 本地内置数据（离线可用）
+- 多数据源适配：tushare 等商业源 + 明确标记的合成测试数据
 - 统一返回 ``Bar`` 列表，服务层负责缓存与落库
-- 数据源缺 Key / 网络不可用时自动降级到本地数据，保证平台可运行
+- 生产数据源失败时显式报错，不把测试数据冒充真实行情
 """
 
 from __future__ import annotations
@@ -26,6 +26,7 @@ class MarketDataSource(abc.ABC):
     """行情数据源接口。"""
 
     name: str = "base"
+    adjustment: str = "none"
 
     @abc.abstractmethod
     def fetch_daily(self, symbol: str, start: str, end: str) -> List[Bar]:
@@ -37,11 +38,11 @@ class MarketDataSource(abc.ABC):
 
 
 # --------------------------------------------------------------------------- #
-# 本地内置数据源（离线可用，演示/回测基准）
+# 合成测试数据源（仅用于离线演示与手工回测基准）
 # --------------------------------------------------------------------------- #
 # fmt: off
-_BUILTIN_DAILY = {
-    "600519.SH": [
+_FIXTURE_DAILY = {
+    "TEST.STOCK": [
         ("2024-01-02", 1685.0, 1700.0, 1678.0, 1692.5, 3200000),
         ("2024-01-03", 1692.0, 1698.0, 1670.0, 1675.0, 2800000),
         ("2024-01-04", 1672.0, 1680.0, 1655.0, 1660.0, 3100000),
@@ -63,7 +64,7 @@ _BUILTIN_DAILY = {
         ("2024-01-26", 1710.0, 1720.0, 1690.0, 1698.0, 3600000),
         ("2024-01-29", 1700.0, 1705.0, 1650.0, 1658.0, 3700000),
     ],
-    "000001.SZ": [
+    "TEST.BANK": [
         ("2024-01-02", 9.02, 9.15, 8.98, 9.10, 58000000),
         ("2024-01-03", 9.12, 9.20, 9.05, 9.08, 52000000),
         ("2024-01-04", 9.06, 9.12, 8.95, 8.98, 61000000),
@@ -85,7 +86,7 @@ _BUILTIN_DAILY = {
         ("2024-01-26", 9.48, 9.55, 9.20, 9.30, 66000000),
         ("2024-01-29", 9.32, 9.35, 8.95, 9.05, 71000000),
     ],
-    "510300.SH": [  # 沪深300 ETF（基金回测 Q-01 用例）
+    "TEST.FUND": [  # 沪深300 ETF（基金回测 Q-01 用例）
         ("2024-01-02", 3.412, 3.450, 3.400, 3.445, 89000000),
         ("2024-01-03", 3.448, 3.452, 3.410, 3.420, 76000000),
         ("2024-01-04", 3.415, 3.430, 3.380, 3.395, 82000000),
@@ -110,32 +111,43 @@ _BUILTIN_DAILY = {
 }
 # fmt: on
 
-_BUILTIN_INSTRUMENTS = [
-    Instrument("600519.SH", "贵州茅台", "SH", "stock"),
-    Instrument("000001.SZ", "平安银行", "SZ", "stock"),
-    Instrument("510300.SH", "沪深300ETF", "SH", "fund"),
+_FIXTURE_INSTRUMENTS = [
+    Instrument("TEST.STOCK", "Synthetic stock fixture", "TEST", "stock"),
+    Instrument("TEST.BANK", "Synthetic bank fixture", "TEST", "stock"),
+    Instrument("TEST.FUND", "Synthetic domestic ETF fixture", "TEST", "fund"),
 ]
 
 
 class LocalDataSource(MarketDataSource):
-    """内置演示行情：离线可用，作为回测基准与降级兜底。"""
+    """Synthetic offline fixture source; never represents production market data."""
 
-    name = "local"
+    name = "fixture"
+    adjustment = "none"
 
     def fetch_daily(self, symbol: str, start: str, end: str) -> List[Bar]:
-        raw = _BUILTIN_DAILY.get(symbol)
+        raw = _FIXTURE_DAILY.get(symbol)
         if raw is None:
             return []
         bars: List[Bar] = []
         for date, o, h, l, c, vol in raw:
             if start <= date <= end:
                 bars.append(
-                    Bar(symbol=symbol, date=date, open=o, high=h, low=l, close=c, volume=float(vol))
+                    Bar(
+                        symbol=symbol,
+                        date=date,
+                        open=o,
+                        high=h,
+                        low=l,
+                        close=c,
+                        volume=float(vol),
+                        source=self.name,
+                        adjustment=self.adjustment,
+                    )
                 )
         return bars
 
     def symbols(self) -> List[Instrument]:
-        return list(_BUILTIN_INSTRUMENTS)
+        return list(_FIXTURE_INSTRUMENTS)
 
 
 # --------------------------------------------------------------------------- #
@@ -144,12 +156,12 @@ class LocalDataSource(MarketDataSource):
 class TushareDataSource(MarketDataSource):
     """tushare pro 数据源。
 
-    - 通过 ``QF_TUSHARE_TOKEN`` 配置 token；未配置时抛 ``DataSourceError``，
-      由服务层捕获并降级到本地源。
-    - 注意：tushare 日线接口返回的单位与字段需按文档做归一化。
+    - 通过 ``QF_TUSHARE_TOKEN`` 配置 token；未配置时抛 ``DataSourceError``。
+    - Tushare ``vol`` 单位为手、``amount`` 单位为千元；统一转成股和元。
     """
 
     name = "tushare"
+    adjustment = "qfq"
 
     def __init__(self, token: Optional[str] = None) -> None:
         self.token = token
@@ -169,8 +181,12 @@ class TushareDataSource(MarketDataSource):
 
     def fetch_daily(self, symbol: str, start: str, end: str) -> List[Bar]:
         ts = self._client()
-        code = symbol.split(".")[0]  # 600519.SH -> 600519
-        df = ts.pro_bar(ts_code=symbol, adj="qfq", start_date=start.replace("-", ""), end_date=end.replace("-", ""))
+        df = ts.pro_bar(
+            ts_code=symbol,
+            adj=self.adjustment,
+            start_date=start.replace("-", ""),
+            end_date=end.replace("-", ""),
+        )
         if df is None or df.empty:
             return []
         bars: List[Bar] = []
@@ -183,8 +199,10 @@ class TushareDataSource(MarketDataSource):
                     high=float(row["high"]),
                     low=float(row["low"]),
                     close=float(row["close"]),
-                    volume=float(row["vol"]),
-                    amount=float(row["amount"]),
+                    volume=float(row["vol"]) * 100.0,
+                    amount=float(row["amount"]) * 1000.0,
+                    source=self.name,
+                    adjustment=self.adjustment,
                 )
             )
         return bars
@@ -197,13 +215,15 @@ class TushareDataSource(MarketDataSource):
 # 数据源注册与选择
 # --------------------------------------------------------------------------- #
 def default_data_source() -> MarketDataSource:
-    """按配置返回首选数据源；未配置 tushare 时退回本地源。"""
+    """Select the configured provider; fixture mode must be explicit."""
     import os
 
-    token = os.getenv("QF_TUSHARE_TOKEN", "")
-    if token:
-        return TushareDataSource(token=token)
-    return LocalDataSource()
+    provider = os.getenv("QF_MARKET_PROVIDER", "tushare").lower()
+    if provider == "fixture":
+        return LocalDataSource()
+    if provider == "tushare":
+        return TushareDataSource(token=os.getenv("QF_TUSHARE_TOKEN", ""))
+    raise DataSourceError(f"Unsupported market data provider: {provider}")
 
 
 def cache_key(provider: str, symbol: str, start: str, end: str, interval: str) -> str:

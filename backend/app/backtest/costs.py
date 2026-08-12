@@ -25,6 +25,8 @@ def _default_rates() -> dict:
         "stamp_tax_rate": 0.0005,     # 印花税（卖出）
         "transfer_fee_rate": 0.00001, # 过户费（双边）
         "slippage": 0.0,              # 滑点比例（双边方向）
+        "subscription_fee_rate": 0.0015,  # 场外基金申购费（前端，默认 0.15% 一折）
+        "redemption_fee_rate": 0.005,     # 场外基金赎回费（默认 0.5%）
     }
 
 
@@ -35,6 +37,8 @@ class CostRates:
     stamp_tax_rate: float = 0.0005
     transfer_fee_rate: float = 0.00001
     slippage: float = 0.0
+    subscription_fee_rate: float = 0.0015
+    redemption_fee_rate: float = 0.005
 
     @classmethod
     def from_dict(cls, data: dict) -> "CostRates":
@@ -49,6 +53,8 @@ class CostRates:
             "stamp_tax_rate": self.stamp_tax_rate,
             "transfer_fee_rate": self.transfer_fee_rate,
             "slippage": self.slippage,
+            "subscription_fee_rate": self.subscription_fee_rate,
+            "redemption_fee_rate": self.redemption_fee_rate,
         }
 
 

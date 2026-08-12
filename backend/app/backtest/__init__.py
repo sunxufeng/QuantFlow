@@ -20,6 +20,7 @@ from .engine import (
     EquityPoint,
     Strategy,
 )
+from .fund import FundAccount, FundOrderRejected, FundPosition, FundTrade
 from .metrics import PerformanceMetrics
 from .report import BacktestReportStore, build_report
 
@@ -33,6 +34,10 @@ __all__ = [
     "CostCalculator",
     "CostRates",
     "EquityPoint",
+    "FundAccount",
+    "FundOrderRejected",
+    "FundPosition",
+    "FundTrade",
     "Order",
     "OrderRejected",
     "PerformanceMetrics",

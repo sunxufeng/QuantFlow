@@ -8,6 +8,9 @@
 - 引擎按交易日驱动：开盘前设置当日停牌/涨跌停状态，盘中撮合（
   Account + CostCalculator），收盘后 T+1 结算并记录净值曲线
 - 数据输入为 ``{symbol: [Bar, ...]}``（日线，按日期升序）
+- 基金支持（场外开放式基金）：通过 ``instruments`` 传入
+  ``market="fund"`` 且 ``exchange=""`` 的标的，按 NAV 申购/赎回，
+  T+1 确认；ETF/LOF（market="fund" 且带交易所）按股票机制撮合
 """
 
 from __future__ import annotations
@@ -15,9 +18,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-from ..market.models import Bar
+from ..market.models import Bar, Instrument
 from .account import Account, OrderRejected
 from .costs import CostCalculator, CostRates, load_cost_rates
+from .fund import FundAccount
 
 TRADING_DAYS_PER_YEAR = 252
 
@@ -81,6 +85,11 @@ class BacktestContext:
     def symbols(self) -> List[str]:
         return sorted(self.bars.keys())
 
+    @property
+    def fund_account(self) -> Optional[FundAccount]:
+        """场外基金账户（无基金标的时为 None）。"""
+        return self.engine.fund_account
+
     # ------------------------------------------------------------------ #
     # 下单
     # ------------------------------------------------------------------ #
@@ -98,6 +107,39 @@ class BacktestContext:
                 return None
             limit_price = bar.close
         return self.account.order(symbol, side, shares, limit_price, date=self.date)
+
+    # ------------------------------------------------------------------ #
+    # 场外基金交易（按 NAV）
+    # ------------------------------------------------------------------ #
+    def _next_trading_day(self) -> str:
+        """下一个交易日（用于 T+1 确认）；无则返回当日。"""
+        try:
+            i = self.calendar.index(self.date)
+        except ValueError:
+            return self.date
+        return self.calendar[i + 1] if i + 1 < len(self.calendar) else self.date
+
+    def subscribe(self, symbol: str, amount: float) -> Optional[Any]:
+        """场外基金申购（按金额）；非基金标的/当日无净值时返回 None。"""
+        if symbol not in self.engine._fund_symbols:
+            return None
+        bar = self.bar(symbol)
+        if bar is None:
+            return None
+        return self.engine.fund_account.subscribe(
+            symbol, amount, bar.close, self.date, confirm_date=self._next_trading_day()
+        )
+
+    def redeem(self, symbol: str, shares: float) -> Optional[Any]:
+        """场外基金赎回（按份额）；非基金标的/当日无净值时返回 None。"""
+        if symbol not in self.engine._fund_symbols:
+            return None
+        bar = self.bar(symbol)
+        if bar is None:
+            return None
+        return self.engine.fund_account.redeem(
+            symbol, shares, bar.close, self.date, confirm_date=self._next_trading_day()
+        )
 
 
 # --------------------------------------------------------------------------- #
@@ -137,6 +179,7 @@ class BacktestEngine:
         initial_cash: float = 1_000_000.0,
         cost_rates: Optional[CostRates] = None,
         cost_config_path: Optional[str] = None,
+        instruments: Optional[Dict[str, Instrument]] = None,
     ) -> None:
         self.strategy = strategy
         self.initial_cash = float(initial_cash)
@@ -147,6 +190,16 @@ class BacktestEngine:
             raise BacktestError("回测数据为空")
         self.symbols = sorted(data.keys())
         self._validate(data)
+
+        # 资产分类：market="fund" 且无交易所 -> 场外基金（NAV 计价）
+        self._fund_symbols: set = set()
+        if instruments:
+            for sym, inst in instruments.items():
+                if inst.market == "fund" and not inst.exchange:
+                    self._fund_symbols.add(sym)
+        self.fund_account: Optional[FundAccount] = None
+        if self._fund_symbols:
+            self.fund_account = FundAccount(self.initial_cash, cost_rates=rates)
 
         # 按日期索引：{date: {symbol: Bar}}
         self.by_date: Dict[str, Dict[str, Bar]] = {}
@@ -184,7 +237,11 @@ class BacktestEngine:
         for date in self.calendar:
             today = self.by_date[date]
 
-            # 开盘前：更新当日状态（停牌 / 涨停 / 跌停）
+            # 开盘前：基金 T+1 确认（昨日申购/赎回），重置限购计数
+            if self.fund_account:
+                self.fund_account.confirm_pending()
+                self.fund_account.start_new_day()
+            # 股票：当日停牌 / 涨停 / 跌停状态
             account.set_daily_states(*self._daily_states(date))
             ctx.date = date
             ctx.bars = today
@@ -196,28 +253,42 @@ class BacktestEngine:
             self.strategy.handle_data(ctx)
             self.strategy.after_trading(ctx)
 
-            # 收盘：T+1 结算（当日买入下一交易日可卖）
+            # 收盘：股票 T+1 结算（当日买入下一交易日可卖）
             account.settle()
 
             prices = {s: b.close for s, b in today.items()}
-            total = account.total_value(prices)
+            if self.fund_account:
+                # 股票与基金两个账户各自持有 initial_cash，合并净值时
+                # 扣除重复计入的一次初始资金（仅出现一次重复，减一次即可）
+                navs = {s: b.close for s, b in today.items() if s in self._fund_symbols}
+                cash = account.cash + self.fund_account.cash - self.initial_cash
+                market_value = account.market_value(prices) + self.fund_account.market_value(navs)
+                total = cash + market_value + self.fund_account.pending_value(navs)
+            else:
+                cash = account.cash
+                market_value = account.market_value(prices)
+                total = account.total_value(prices)
             equity.append(
                 EquityPoint(
                     date=date,
-                    cash=account.cash,
-                    market_value=account.market_value(prices),
+                    cash=cash,
+                    market_value=market_value,
                     total_value=total,
                     daily_return=total / prev_total - 1.0 if prev_total else 0.0,
                 )
             )
             prev_total = total
 
+        trades = account.trades
+        if self.fund_account:
+            trades = trades + self.fund_account.trades
         return BacktestResult(
             engine=self,
             account=account,
             equity_curve=equity,
-            trades=account.trades,
+            trades=trades,
             strategy=self.strategy,
+            fund_account=self.fund_account,
         )
 
     # ------------------------------------------------------------------ #
@@ -236,6 +307,8 @@ class BacktestEngine:
         limit_up: set = set()
         limit_down: set = set()
         for symbol in self.symbols:
+            if symbol in self._fund_symbols:
+                continue  # 场外基金按 NAV 计价，无涨跌停/停牌
             bar = self.by_date.get(date, {}).get(symbol)
             if bar is None or bar.volume == 0:
                 suspended.add(symbol)
@@ -262,6 +335,7 @@ class BacktestResult:
     equity_curve: List[EquityPoint]
     trades: List[Any]
     strategy: Strategy
+    fund_account: Optional[FundAccount] = None
 
     def to_dict(self, include_curve: bool = True) -> dict:
         """序列化结果（不含绩效指标，指标由 metrics 模块计算）。"""
@@ -272,6 +346,8 @@ class BacktestResult:
             "account": self.account.to_dict(),
             "trades": [t.to_dict() for t in self.trades],
         }
+        if self.fund_account is not None:
+            out["fund_account"] = self.fund_account.to_dict()
         if include_curve:
             out["equity_curve"] = [p.to_dict() for p in self.equity_curve]
         return out

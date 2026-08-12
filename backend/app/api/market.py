@@ -4,16 +4,20 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Query
 
+from ..core.data import to_serializable
 from ..market.models import bars_to_table
 from ..market.service import market_service
-from ..core.data import to_serializable
+from ..market.sources import DataSourceError
 
 router = APIRouter(prefix="/market", tags=["market"])
 
 
 @router.get("/instruments", summary="可用标的列表")
 def list_instruments() -> dict:
-    items = market_service.instruments()
+    try:
+        items = market_service.instruments()
+    except DataSourceError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     return {
         "total": len(items),
         "items": [i.to_dict() for i in items],
@@ -29,7 +33,10 @@ def get_bars(
 ) -> dict:
     if end and start and end < start:
         raise HTTPException(status_code=422, detail="end 不得早于 start")
-    bars = market_service.bars(symbol=symbol, start=start, end=end)
+    try:
+        bars = market_service.bars(symbol=symbol, start=start, end=end)
+    except DataSourceError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     if as_table:
         table = bars_to_table(bars)
         return {"symbol": symbol, "count": len(bars), "data": to_serializable(table)}

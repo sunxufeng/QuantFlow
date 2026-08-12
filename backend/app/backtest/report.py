@@ -44,7 +44,7 @@ def build_report(
     metrics = PerformanceMetrics(
         result.equity_curve, result.engine.initial_cash, result.trades
     )
-    return {
+    report = {
         "run_id": run_id or uuid.uuid4().hex[:12],
         "type": "backtest_report",
         "strategy": strategy_name or type(result.strategy).__name__,
@@ -59,6 +59,9 @@ def build_report(
         "account": result.account.to_dict(),
         "initial_cash": result.engine.initial_cash,
     }
+    if result.fund_account is not None:
+        report["fund_account"] = result.fund_account.to_dict()
+    return report
 
 
 @dataclass
