@@ -73,7 +73,8 @@ class DataBridge:
         if size > self.spill_threshold:
             path = self._write_disk(run_id, node_id, outputs)
             storage = "disk"
-        self._store.setdefault(run_id, {})[node_id] = outputs
+        with self._lock:
+            self._store.setdefault(run_id, {})[node_id] = outputs
         return {
             "run_id": run_id,
             "node_id": node_id,
@@ -85,20 +86,23 @@ class DataBridge:
 
     def read(self, run_id: str, node_id: str) -> Dict[str, Any]:
         """读取节点完整产出；未登记时返回空 dict。"""
-        run_store = self._store.get(run_id, {})
-        if node_id in run_store:
-            return run_store[node_id]
+        with self._lock:
+            run_store = self._store.get(run_id, {})
+            if node_id in run_store:
+                return run_store[node_id]
         path = self._path(run_id, node_id)
         if os.path.exists(path):
             with open(path, encoding="utf-8") as f:
                 data = json.load(f)
-            run_store[node_id] = data
+            with self._lock:
+                self._store.setdefault(run_id, {})[node_id] = data
             return data
         return {}
 
     def drop_run(self, run_id: str) -> None:
         """运行结束后清理（V1.0 保留内存引用用于查询，提供接口供回收）。"""
-        self._store.pop(run_id, None)
+        with self._lock:
+            self._store.pop(run_id, None)
         run_dir = os.path.join(self.data_dir, run_id)
         if os.path.isdir(run_dir):
             import shutil
