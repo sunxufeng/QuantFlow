@@ -1,7 +1,7 @@
 """因子节点：表达式引擎、IC/ICIR、因子合成（M3 因子节点）。
 
-对齐开发计划 §4.3「因子节点：因子计算、IC/ICIR、因子合成（重要度+Spearman）」。
-表达式因子节点基于 pandas eval，支持对列名的算术/逻辑运算。
+V1.1 N3 起，核心计算统一委托给独立模块 ``app.factors``（stats / transform / analyzer），
+本文件仅负责端口/参数编排与 DataTable 契约转换，输出格式与历史测试保持一致。
 """
 
 from __future__ import annotations
@@ -10,6 +10,8 @@ from typing import Any, Dict
 
 from ..core.data import DataTable
 from ..core.node import BaseWorkNode, ParamSpec, PortSpec, work_node
+from ..factors.stats import ic_series, ic_summary
+from ..factors.transform import composite_factors, expression_factor
 from ._utils import df_to_table, require_table, table_to_df
 
 
@@ -29,15 +31,7 @@ from ._utils import df_to_table, require_table, table_to_df
 class ExpressionFactorNode(BaseWorkNode):
     def execute(self, ctx, inputs):
         df = table_to_df(require_table(inputs["table"])).copy()
-        expr = str(self.params["expression"]).strip()
-        output = str(self.params.get("output") or "factor").strip() or "factor"
-        if not expr:
-            raise ValueError("表达式为空")
-        try:
-            df[output] = df.eval(expr)
-        except Exception as exc:
-            raise ValueError(f"表达式求值失败（{expr}）: {exc}") from exc
-        return {"table": df_to_table(df)}
+        return {"table": df_to_table(expression_factor(df, self.params["expression"], self.params["output"]))}
 
 
 @work_node(
@@ -60,26 +54,17 @@ class ICNode(BaseWorkNode):
         for col in (factor, ret):
             if col not in df.columns:
                 raise ValueError(f"缺少列: {col}")
-        if "date" in df.columns:
-            grouped = df.dropna(subset=[factor, ret]).groupby("date")
-        else:
-            grouped = [("", df.dropna(subset=[factor, ret]))]
-        ics, rows = [], []
-        for date, sub in grouped:
-            if len(sub) < 3:
-                continue
-            ic = sub[factor].rank().corr(sub[ret].rank())
-            rows.append({"date": str(date), "ic": round(float(ic), 6) if ic is not None else None})
-            if ic is not None:
-                ics.append(float(ic))
-        icir = None
-        if len(ics) >= 2:
-            mean = sum(ics) / len(ics)
-            std = (sum((x - mean) ** 2 for x in ics) / (len(ics) - 1)) ** 0.5
-            icir = mean / std if std > 0 else None
+
+        series = ic_series(df, factor, ret, "date" if "date" in df.columns else None)
+        rows = [
+            {"date": d, "ic": round(ic, 6)}
+            for d, ic in series
+            if ic is not None
+        ]
+        summary = ic_summary([ic for _, ic in series])
         rows.append({"date": "__summary__", "ic": None})
-        rows.append({"date": "__ic_mean__", "ic": (sum(ics) / len(ics)) if ics else None})
-        rows.append({"date": "__icir__", "ic": icir})
+        rows.append({"date": "__ic_mean__", "ic": summary["mean"]})
+        rows.append({"date": "__icir__", "ic": summary["ir"]})
         return {"table": DataTable(columns=["date", "ic"], rows=rows)}
 
 
@@ -106,22 +91,11 @@ class CompositeFactorNode(BaseWorkNode):
             if c not in df.columns:
                 raise ValueError(f"缺少因子列: {c}")
         weights_raw = [w.strip() for w in str(self.params.get("weights") or "").split(",") if w.strip()]
+        weights = None
         if weights_raw:
             weights = [float(w) for w in weights_raw]
             if len(weights) != len(cols):
                 raise ValueError("权重数量需与因子列一致")
-            total = sum(weights) or 1.0
-            weights = [w / total for w in weights]
-        else:
-            weights = [1.0 / len(cols)] * len(cols)
         output = str(self.params.get("output") or "composite").strip() or "composite"
-        norm_sum = None
-        for col, w in zip(cols, weights):
-            series = df[col].astype(float)
-            mean, std = series.mean(), series.std(ddof=0)
-            if std is None or std == 0 or std != std:
-                std = 1e-12
-            norm = (series - mean) / std * w
-            norm_sum = norm if norm_sum is None else norm_sum + norm
-        df[output] = norm_sum
+        df[output] = composite_factors(df, cols, weights)
         return {"table": df_to_table(df)}
