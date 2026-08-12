@@ -9,6 +9,8 @@ import pytest
 
 _TMP_DIR = tempfile.mkdtemp(prefix="qf_test_")
 os.environ.setdefault("QF_DB_PATH", os.path.join(_TMP_DIR, "test_quantflow.db"))
+os.environ.setdefault("QF_MARKET_PROVIDER", "fixture")
+os.environ["QF_DISABLE_SCHEDULER"] = "1"
 
 
 @pytest.fixture(autouse=True)

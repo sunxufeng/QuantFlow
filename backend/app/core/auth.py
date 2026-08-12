@@ -11,6 +11,7 @@ from typing import Callable, List, Optional
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
+from .api_tokens import API_TOKEN_REPOSITORY
 from .security import decode_token
 from .users import USER_REPOSITORY
 
@@ -22,7 +23,14 @@ def _user_from_credentials(
 ) -> Optional[dict]:
     if credentials is None or not credentials.credentials:
         return None
-    payload = decode_token(credentials.credentials)
+    raw = credentials.credentials
+    # API Token 通道（qf.<prefix>.<secret>）；其余按 JWT 校验
+    if raw.startswith("qf."):
+        user_id = API_TOKEN_REPOSITORY.verify(raw)
+        if user_id is None:
+            return None
+        return USER_REPOSITORY.get(user_id)
+    payload = decode_token(raw)
     if payload is None:
         return None
     return USER_REPOSITORY.get(payload["uid"])

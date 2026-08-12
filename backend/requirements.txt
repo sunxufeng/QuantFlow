@@ -9,3 +9,4 @@ scikit-learn>=1.5
 xgboost>=2.0
 lightgbm>=4.0
 pyjwt>=2.8
+APScheduler>=3.10

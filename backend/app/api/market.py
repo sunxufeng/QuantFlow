@@ -1,11 +1,13 @@
-"""行情 API（M2）：标的列表 + 日线数据获取。"""
+"""行情 API（M2）：标的列表 + 日线数据获取 + 数据同步（V1.1 N4）。"""
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
+from ..core.auth import get_current_user
 from ..core.data import to_serializable
 from ..market.models import bars_to_table
+from ..market.scheduler import data_sync_service
 from ..market.service import market_service
 from ..market.sources import DataSourceError
 
@@ -41,3 +43,13 @@ def get_bars(
         table = bars_to_table(bars)
         return {"symbol": symbol, "count": len(bars), "data": to_serializable(table)}
     return {"symbol": symbol, "count": len(bars), "bars": [b.to_dict() for b in bars]}
+
+
+@router.get("/sync/status", summary="行情同步状态（V1.1 N4）")
+def sync_status() -> dict:
+    return data_sync_service.status()
+
+
+@router.post("/sync", summary="手动触发行情同步（V1.1 N4）", status_code=202)
+def sync_trigger(user: dict = Depends(get_current_user)) -> dict:
+    return data_sync_service.run_once()

@@ -8,7 +8,11 @@ from typing import List, Optional
 
 from .cache import CacheBackend, default_cache
 from .models import Bar, Instrument
-from .repository import InMemoryMarketDataRepository, MarketDataRepository
+from .repository import (
+    InMemoryMarketDataRepository,
+    MarketDataRepository,
+    SQLiteMarketDataRepository,
+)
 from .sources import DataSourceError, MarketDataSource, cache_key, default_data_source
 
 logger = logging.getLogger("quantflow.market.service")
@@ -17,6 +21,9 @@ logger = logging.getLogger("quantflow.market.service")
 DEFAULT_START = "2024-01-01"
 DEFAULT_END = "2024-02-01"
 CACHE_TTL = 3600  # 行情缓存 1 小时
+
+# 默认持久化后端：SQLite（V1.1 N4 行情落库）；测试可显式传入内存版。
+_DEFAULT_REPOSITORY = SQLiteMarketDataRepository
 
 
 class MarketService:
@@ -30,7 +37,7 @@ class MarketService:
     ) -> None:
         self.primary = primary or default_data_source()
         self.cache = cache or default_cache()
-        self.repository = repository or InMemoryMarketDataRepository()
+        self.repository = repository or _DEFAULT_REPOSITORY()
 
     def bars(
         self,

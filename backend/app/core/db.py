@@ -50,6 +50,44 @@ CREATE TABLE IF NOT EXISTS project_members (
     FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE,
     FOREIGN KEY(user_id)    REFERENCES users(id)    ON DELETE CASCADE
 );
+
+CREATE TABLE IF NOT EXISTS api_tokens (
+    id           TEXT PRIMARY KEY,
+    user_id      TEXT NOT NULL,
+    name         TEXT NOT NULL,
+    prefix       TEXT NOT NULL UNIQUE,
+    secret_hash  TEXT NOT NULL,
+    scopes       TEXT NOT NULL DEFAULT '*',
+    created_at   TEXT NOT NULL,
+    last_used_at TEXT,
+    revoked_at   TEXT
+);
+
+CREATE TABLE IF NOT EXISTS data_updates (
+    id           TEXT PRIMARY KEY,
+    source       TEXT NOT NULL,
+    status       TEXT NOT NULL,
+    symbols      TEXT NOT NULL DEFAULT '',
+    bars_written INTEGER NOT NULL DEFAULT 0,
+    error        TEXT,
+    started_at   TEXT NOT NULL,
+    finished_at  TEXT
+);
+
+CREATE TABLE IF NOT EXISTS market_bars (
+    symbol     TEXT NOT NULL,
+    date       TEXT NOT NULL,
+    interval   TEXT NOT NULL DEFAULT 'daily',
+    open       REAL NOT NULL,
+    high       REAL NOT NULL,
+    low        REAL NOT NULL,
+    close      REAL NOT NULL,
+    volume     REAL NOT NULL DEFAULT 0,
+    amount     REAL NOT NULL DEFAULT 0,
+    source     TEXT NOT NULL DEFAULT '',
+    adjustment TEXT NOT NULL DEFAULT 'none',
+    PRIMARY KEY (symbol, date, interval)
+);
 """
 
 
@@ -103,6 +141,9 @@ class Database:
             conn.execute("DELETE FROM project_members")
             conn.execute("DELETE FROM projects")
             conn.execute("DELETE FROM users")
+            conn.execute("DELETE FROM api_tokens")
+            conn.execute("DELETE FROM data_updates")
+            conn.execute("DELETE FROM market_bars")
             conn.commit()
 
 

@@ -12,7 +12,7 @@ import time
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .api import auth, backtest, logs, market, monitoring, projects, runs, workflows
+from .api import auth, backtest, logs, market, monitoring, projects, runs, tokens, workflows
 from .config import settings
 from .core.logging_store import RequestContextMiddleware, install as install_logging
 from .nodes import discover
@@ -45,6 +45,7 @@ app.include_router(market.router, prefix="/api")
 app.include_router(runs.router, prefix="/api")
 app.include_router(backtest.router, prefix="/api")
 app.include_router(auth.router, prefix="/api")
+app.include_router(tokens.router, prefix="/api")
 app.include_router(projects.router, prefix="/api")
 app.include_router(logs.router, prefix="/api")
 app.include_router(monitoring.router, prefix="/api")
@@ -56,12 +57,22 @@ _START_TIME = time.time()
 async def startup() -> None:
     discover()
     logger.info("节点库加载完成，共 %d 种节点", _node_count())
+    from .market.scheduler import data_sync_service
+
+    data_sync_service.start()
 
 
 def _node_count() -> int:
     from .core.registry import REGISTRY
 
     return len(REGISTRY.all())
+
+
+@app.on_event("shutdown")
+async def shutdown() -> None:
+    from .market.scheduler import data_sync_service
+
+    data_sync_service.shutdown()
 
 
 @app.get("/api/health", summary="健康检查")
