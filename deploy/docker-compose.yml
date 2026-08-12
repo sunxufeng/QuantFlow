@@ -1,0 +1,56 @@
+# QuantFlow 一键编排（M4-6）
+# 后端 uvicorn :8000 + 前端 nginx :80（映射宿主 8080），SQLite 数据持久化到 named volume。
+#
+# 用法：
+#   docker compose up -d --build        # 启动
+#   docker compose logs -f backend      # 查看后端日志
+#   docker compose down                 # 停止（保留数据卷）
+#   docker compose down -v              # 停止并清空数据
+#
+# 前置：宿主机安装 Docker Engine 23+ 与 Docker Compose v2（docker compose 插件）。
+
+name: quantflow
+
+services:
+  backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    image: quantflow-backend:latest
+    container_name: quantflow-backend
+    restart: unless-stopped
+    environment:
+      # 演示环境使用内置 fixture 行情（无网络/无 tushare token 依赖）；
+      # 接入真实行情改为 tushare 并配置 QF_TUSHARE_TOKEN。
+      QF_MARKET_PROVIDER: "fixture"
+      # 生产环境务必用强随机密钥覆盖（docker compose 时 --env-file 传入）：
+      #   QF_SECRET_KEY=$(openssl rand -hex 32)
+      QF_SECRET_KEY: "${QF_SECRET_KEY:-please-change-me-in-production-8f3b2a1c9d4e}"
+      QF_DB_PATH: "/srv/app/data/quantflow.db"
+    volumes:
+      - quantflow-data:/srv/app/data
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3).status==200 else 1)"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    image: quantflow-frontend:latest
+    container_name: quantflow-frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      # 宿主 8080 → 容器 nginx 80；前端 /api/* 由 nginx 反代到 backend:8000
+      - "8080:80"
+
+volumes:
+  quantflow-data:
