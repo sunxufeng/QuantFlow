@@ -8,7 +8,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect
 
 from ..core.events import EVENT_BUS
-from ..core.runs import RUN_SERVICE, RunNotFoundError
+from ..core.runs import RUN_SERVICE, RunCapacityError, RunNotFoundError
 from ..core.ws import RUN_CONNECTIONS
 
 router = APIRouter()
@@ -27,6 +27,8 @@ def submit_run(payload: dict) -> dict:
             workflow_id=payload.get("workflow_id"),
             workflow_name=payload.get("workflow_name", ""),
         )
+    except RunCapacityError as exc:
+        raise HTTPException(status_code=429, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=422, detail=f"工作流校验失败: {exc}") from exc
 

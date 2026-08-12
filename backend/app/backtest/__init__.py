@@ -23,6 +23,13 @@ from .engine import (
 from .fund import FundAccount, FundOrderRejected, FundPosition, FundTrade
 from .metrics import PerformanceMetrics
 from .report import BacktestReportStore, build_report
+from .strategies import (
+    STRATEGY_REGISTRY,
+    BuyHoldStrategy,
+    FundDingTouStrategy,
+    MaCrossStrategy,
+    get_strategy,
+)
 
 __all__ = [
     "Account",
@@ -31,19 +38,24 @@ __all__ = [
     "BacktestError",
     "BacktestReportStore",
     "BacktestResult",
+    "BuyHoldStrategy",
     "CostCalculator",
     "CostRates",
     "EquityPoint",
     "FundAccount",
+    "FundDingTouStrategy",
     "FundOrderRejected",
     "FundPosition",
     "FundTrade",
+    "MaCrossStrategy",
     "Order",
     "OrderRejected",
     "PerformanceMetrics",
     "Position",
+    "STRATEGY_REGISTRY",
     "Strategy",
     "Trade",
     "build_report",
+    "get_strategy",
     "load_cost_rates",
 ]

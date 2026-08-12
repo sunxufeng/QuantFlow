@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 from typing import Any, Dict, Optional
 
 from ..core.data import DataTable
@@ -60,6 +61,7 @@ class DataBridge:
         self.spill_threshold = spill_threshold
         # 内存引用：run_id -> node_id -> outputs（同一进程内下游/回放直接读取）
         self._store: Dict[str, Dict[str, Any]] = {}
+        self._lock = threading.RLock()
 
     # ------------------------------------------------------------------ #
     def capture(self, run_id: str, node_id: str, outputs: Dict[str, Any]) -> dict:

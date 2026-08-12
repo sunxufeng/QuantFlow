@@ -1,0 +1,152 @@
+"""内置回测策略（M2 交易 API）。
+
+对标开发计划 §4.2「交易 API」：策略注册表按名称构建可复用策略，
+供 ``POST /api/backtest/run`` 使用。
+
+内置策略：
+- ``buy_hold``：首日按份额/全仓买入，末日卖出（股票）
+- ``ma_cross``：MA5 上穿 MA20 买入、下穿卖出（股票）
+- ``fund_dingtou``：场外基金定投（每月首个交易日申购固定金额）
+"""
+
+from __future__ import annotations
+
+from typing import Any, Callable, Dict
+
+from .engine import BacktestContext, Strategy
+
+
+class BuyHoldStrategy(Strategy):
+    """买入持有：首日买入，末日全部卖出。"""
+
+    def __init__(self, shares: int = 0, symbol: str = "") -> None:
+        # shares=0 表示首日按全部可用现金买入最大整手
+        self.shares = int(shares or 0)
+        self.symbol = symbol
+
+    def initialize(self, ctx: BacktestContext) -> None:
+        self.bought = False
+
+    def handle_data(self, ctx: BacktestContext) -> None:
+        sym = self.symbol or ctx.symbols()[0]
+        if not self.bought:
+            pos = ctx.account.positions.get(sym)
+            if self.shares > 0:
+                ctx.order(sym, self.shares, "buy")
+            else:
+                # 全仓：先按现金试买超大整手，账户自动按可用资金缩减
+                ctx.order(sym, int(ctx.account.cash), "buy")
+            self.bought = True
+        elif ctx.date == ctx.calendar[-1]:
+            pos = ctx.account.positions.get(sym)
+            if pos:
+                ctx.order(sym, pos.shares, "sell")
+
+
+def _ma(bars, n: int) -> float:
+    closes = [b.close for b in bars]
+    if len(closes) < n:
+        return float("nan")
+    return sum(closes[-n:]) / n
+
+
+class MaCrossStrategy(Strategy):
+    """均线金叉/死叉：MA5 上穿 MA20 全仓买入，下穿全部卖出。"""
+
+    def __init__(self, fast: int = 5, slow: int = 20, symbol: str = "") -> None:
+        self.fast = int(fast)
+        self.slow = int(slow)
+        self.symbol = symbol
+
+    def initialize(self, ctx: BacktestContext) -> None:
+        self.prev_diff: float = 0.0
+        self.have_prev = False
+
+    def handle_data(self, ctx: BacktestContext) -> None:
+        sym = self.symbol or ctx.symbols()[0]
+        bars = ctx.history(sym, self.slow)
+        if len(bars) < self.slow:
+            return
+        fast_ma = _ma(bars, self.fast)
+        slow_ma = _ma(bars, self.slow)
+        if fast_ma != fast_ma or slow_ma != slow_ma:  # NaN
+            return
+        diff = fast_ma - slow_ma
+        if self.have_prev:
+            if self.prev_diff <= 0 and diff > 0:
+                # 金叉：全仓买入
+                ctx.order(sym, int(ctx.account.cash), "buy")
+            elif self.prev_diff >= 0 and diff < 0:
+                # 死叉：全部卖出
+                pos = ctx.account.positions.get(sym)
+                if pos:
+                    ctx.order(sym, pos.shares, "sell")
+        self.prev_diff = diff
+        self.have_prev = True
+
+
+class FundDingTouStrategy(Strategy):
+    """场外基金定投：每月首个交易日申购固定金额；末日可全赎。"""
+
+    def __init__(
+        self,
+        amount: float = 1000.0,
+        symbol: str = "",
+        redeem_on_last_day: bool = True,
+    ) -> None:
+        self.amount = float(amount)
+        self.symbol = symbol
+        self.redeem_on_last_day = bool(redeem_on_last_day)
+
+    def initialize(self, ctx: BacktestContext) -> None:
+        self.last_month = ""
+
+    def handle_data(self, ctx: BacktestContext) -> None:
+        sym = self.symbol or ctx.symbols()[0]
+        month = ctx.date[:7]
+        if month != self.last_month:
+            # 当月首个交易日：申购
+            ctx.subscribe(sym, self.amount)
+            self.last_month = month
+        if self.redeem_on_last_day and ctx.date == ctx.calendar[-1]:
+            fa = ctx.fund_account
+            if fa and sym in fa.positions:
+                ctx.redeem(sym, fa.positions[sym].shares)
+
+
+def _buy_hold_factory(params: Dict[str, Any]) -> Strategy:
+    return BuyHoldStrategy(
+        shares=int(params.get("shares", 0)),
+        symbol=str(params.get("symbol", "")),
+    )
+
+
+def _ma_cross_factory(params: Dict[str, Any]) -> Strategy:
+    return MaCrossStrategy(
+        fast=int(params.get("fast", 5)),
+        slow=int(params.get("slow", 20)),
+        symbol=str(params.get("symbol", "")),
+    )
+
+
+def _fund_dingtou_factory(params: Dict[str, Any]) -> Strategy:
+    return FundDingTouStrategy(
+        amount=float(params.get("amount", 1000.0)),
+        symbol=str(params.get("symbol", "")),
+        redeem_on_last_day=bool(params.get("redeem_on_last_day", True)),
+    )
+
+
+# 策略注册表：名称 -> 工厂（由 params 构建策略实例）
+STRATEGY_REGISTRY: Dict[str, Callable[[Dict[str, Any]], Strategy]] = {
+    "buy_hold": _buy_hold_factory,
+    "ma_cross": _ma_cross_factory,
+    "fund_dingtou": _fund_dingtou_factory,
+}
+
+
+def get_strategy(name: str) -> Callable[[Dict[str, Any]], Strategy]:
+    """按名称查找策略工厂（KeyError 由 API 层转 404/422）。"""
+    if name not in STRATEGY_REGISTRY:
+        raise KeyError(f"未知策略: {name}")
+    return STRATEGY_REGISTRY[name]

@@ -16,6 +16,7 @@ from __future__ import annotations
 import threading
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -47,6 +48,10 @@ class RunNotFoundError(KeyError):
 
 class RunExecutionError(RuntimeError):
     """同步执行时出现的意外错误（非节点失败）。"""
+
+
+class RunCapacityError(RuntimeError):
+    """运行队列已满，拒绝新的异步执行请求。"""
 
 
 def _utc_now() -> str:
@@ -130,13 +135,26 @@ class RunService:
         repository: Optional[RunRepository] = None,
         bridge: Optional[DataBridge] = None,
         bus=None,
+        run_workers: int = 20,
+        queue_size: int = 100,
     ) -> None:
+        if run_workers < 1:
+            raise ValueError("run_workers must be at least 1")
+        if queue_size < 0:
+            raise ValueError("queue_size cannot be negative")
         self.repository = repository or RunRepository()
         self.bridge = bridge or DataBridge()
         self.bus = bus if bus is not None else EVENT_BUS
         self.executor = executor or WorkflowExecutor(
             max_workers=4, event_bus=self.bus, bridge=self.bridge
         )
+        self.run_workers = run_workers
+        self.queue_size = queue_size
+        self._run_pool = ThreadPoolExecutor(
+            max_workers=run_workers,
+            thread_name_prefix="quantflow-run",
+        )
+        self._capacity = threading.BoundedSemaphore(run_workers + queue_size)
         # 实时订阅：节点事件即时写入运行记录
         self.bus.subscribe(self._on_event)
 
@@ -153,6 +171,10 @@ class RunService:
     ) -> dict:
         """校验并异步执行工作流，立即返回 ``{run_id, status}``。"""
         graph = validate_workflow(nodes, edges)
+        if not self._capacity.acquire(blocking=False):
+            raise RunCapacityError(
+                f"run capacity reached ({self.run_workers} active, {self.queue_size} queued)"
+            )
         run_id = uuid.uuid4().hex[:12]
         now = _utc_now()
         record = {
@@ -166,21 +188,19 @@ class RunService:
             "finished_at": None,
             "result": None,
         }
-        self.repository.create(record)
-        self.bus.publish(
-            RunEvent(
-                run_id=run_id,
-                kind=RUN_STARTED,
-                payload={"workflow_name": workflow_name, "node_ids": graph.nodes},
+        try:
+            self.repository.create(record)
+            self.bus.publish(
+                RunEvent(
+                    run_id=run_id,
+                    kind=RUN_STARTED,
+                    payload={"workflow_name": workflow_name, "node_ids": graph.nodes},
+                )
             )
-        )
-        thread = threading.Thread(
-            target=self._execute,
-            args=(run_id, graph),
-            name=f"run-{run_id}",
-            daemon=True,
-        )
-        thread.start()
+            self._run_pool.submit(self._execute_async, run_id, graph)
+        except Exception:
+            self._capacity.release()
+            raise
         return {"run_id": run_id, "status": RunStatus.RUNNING}
 
     def execute_sync(
@@ -236,6 +256,12 @@ class RunService:
     # ------------------------------------------------------------------ #
     # 执行与事件消费
     # ------------------------------------------------------------------ #
+    def _execute_async(self, run_id: str, graph: WorkflowGraph) -> None:
+        try:
+            self._execute(run_id, graph)
+        finally:
+            self._capacity.release()
+
     def _execute(self, run_id: str, graph: WorkflowGraph):
         """执行并持久化；成功返回 RunResult，意外异常时更新记录并返回 None。"""
         try:

@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import threading
+
+import pytest
+
 from app.core.dag import validate_workflow
 from app.core.databridge import DataBridge, make_preview
-from app.core.events import EVENT_BUS, NODE_SUCCEEDED, RUN_STARTED, RunEvent
+from app.core.events import EVENT_BUS, NODE_SUCCEEDED, RUN_STARTED, EventBus, RunEvent
 from app.core.executor import WorkflowExecutor
-from app.core.runs import RUN_SERVICE, RunRepository, RunService
+from app.core.runs import RUN_SERVICE, RunCapacityError, RunRepository, RunService
 from app.core.data import DataTable
 
 
@@ -182,9 +186,80 @@ class TestRunService:
 
     def test_get_missing_raises(self, tmp_path):
         service, repo = self._service(tmp_path)
-        import pytest
-
         from app.core.runs import RunNotFoundError
 
         with pytest.raises(RunNotFoundError):
             service.get("missing_run")
+
+    def test_twenty_runs_execute_concurrently_without_state_leaks(self, tmp_path):
+        barrier = threading.Barrier(20, timeout=10)
+        bus = EventBus()
+        bridge = DataBridge(data_dir=str(tmp_path))
+
+        class BarrierExecutor(WorkflowExecutor):
+            def run(self, graph, run_id=None):
+                barrier.wait()
+                return super().run(graph, run_id=run_id)
+
+        executor = BarrierExecutor(max_workers=1, event_bus=bus, bridge=bridge)
+        service = RunService(
+            executor=executor,
+            repository=RunRepository(),
+            bridge=bridge,
+            bus=bus,
+            run_workers=20,
+            queue_size=0,
+        )
+
+        submissions = [
+            service.submit(
+                [{"id": "c", "node_type": "data.constant", "params": {"value": value}}],
+                [],
+                workflow_name=f"run-{value}",
+            )
+            for value in range(20)
+        ]
+        run_ids = [item["run_id"] for item in submissions]
+        assert len(set(run_ids)) == 20
+
+        records = [service.wait(run_id, timeout=10) for run_id in run_ids]
+        assert all(record["status"] == "succeeded" for record in records)
+        for value, record in enumerate(records):
+            assert record["workflow_name"] == f"run-{value}"
+            assert record["nodes"]["c"]["outputs"]["value"] == value
+            assert bridge.read(record["run_id"], "c")["value"] == value
+
+    def test_submit_rejects_when_run_capacity_is_full(self, tmp_path):
+        release = threading.Event()
+        started = threading.Event()
+        bus = EventBus()
+        bridge = DataBridge(data_dir=str(tmp_path))
+
+        class BlockingExecutor(WorkflowExecutor):
+            def run(self, graph, run_id=None):
+                started.set()
+                release.wait(timeout=10)
+                return super().run(graph, run_id=run_id)
+
+        service = RunService(
+            executor=BlockingExecutor(max_workers=1, event_bus=bus, bridge=bridge),
+            repository=RunRepository(),
+            bridge=bridge,
+            bus=bus,
+            run_workers=1,
+            queue_size=0,
+        )
+        first = service.submit(
+            [{"id": "c", "node_type": "data.constant", "params": {"value": 1}}],
+            [],
+        )
+        assert started.wait(timeout=2)
+        try:
+            with pytest.raises(RunCapacityError):
+                service.submit(
+                    [{"id": "c", "node_type": "data.constant", "params": {"value": 2}}],
+                    [],
+                )
+        finally:
+            release.set()
+        assert service.wait(first["run_id"], timeout=10)["status"] == "succeeded"
