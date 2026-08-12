@@ -16,5 +16,7 @@ dist/
 # 运行时
 *.log
 
-# 运行时数据（SQLite / ML 模型）
+# 运行时数据（SQLite / ML 模型 / 回测报告）
 backend/data/
+backend/app/data/
+.coverage
