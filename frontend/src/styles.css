@@ -241,3 +241,72 @@
 .qf-up { color: #e11d48; }
 .qf-down { color: #0891b2; }
 .qf-chart-wrap { flex: 1; min-height: 0; }
+
+/* ---------- M4：登录弹窗 / 项目切换 / 监控页 ---------- */
+.qf-topbar { display: flex; align-items: center; gap: 10px; }
+.qf-topbar-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.qf-project-select {
+  padding: 5px 8px; border: 1px solid rgba(255,255,255,.25); border-radius: 6px;
+  background: rgba(255,255,255,.08); color: #e2e8f0; font-size: 12px; max-width: 180px;
+}
+.qf-user-chip {
+  display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px;
+  background: rgba(99,102,241,.25); border: 1px solid rgba(99,102,241,.4);
+  color: #e0e7ff; border-radius: 999px; font-size: 12px; font-weight: 600;
+}
+.qf-user-chip em { font-style: normal; font-size: 10px; color: #a5b4fc; }
+
+.qf-modal-mask {
+  position: fixed; inset: 0; background: rgba(15,23,42,.55); display: flex;
+  align-items: center; justify-content: center; z-index: 1000;
+}
+.qf-modal {
+  width: 360px; max-width: calc(100vw - 32px); background: #fff; border-radius: 12px;
+  box-shadow: 0 24px 60px rgba(2,6,23,.35); overflow: hidden;
+}
+.qf-modal-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 16px; border-bottom: 1px solid var(--border);
+}
+.qf-modal-head h3 { margin: 0; font-size: 15px; color: var(--text); }
+.qf-modal-body { display: flex; flex-direction: column; gap: 12px; padding: 16px; }
+.qf-field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-dim); }
+.qf-field input {
+  padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;
+}
+.qf-hint { font-size: 11px; color: #94a3b8; }
+.qf-modal-submit { margin-top: 4px; }
+.qf-inline-error { margin-left: 8px; }
+
+/* 监控页 */
+.qf-monitor { height: calc(100% - 48px); overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 16px; }
+.qf-toolbar-title { font-weight: 600; font-size: 13px; color: var(--text); }
+.qf-mcards { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+.qf-mcard {
+  background: #fff; border: 1px solid var(--border); border-radius: 10px;
+  padding: 14px; box-shadow: 0 1px 2px rgba(15,23,42,.04);
+}
+.qf-mcard-value { font-size: 24px; font-weight: 700; color: var(--primary); }
+.qf-mcard-label { font-size: 11px; color: #94a3b8; margin-top: 2px; }
+.qf-monitor-section { display: flex; flex-direction: column; gap: 8px; }
+.qf-log-list {
+  background: #0f172a; border-radius: 10px; padding: 8px 0; max-height: 420px;
+  overflow-y: auto; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.qf-log-item {
+  display: flex; align-items: center; gap: 10px; padding: 5px 12px; font-size: 11px;
+  border-bottom: 1px solid rgba(255,255,255,.05);
+}
+.qf-log-item:hover { background: rgba(255,255,255,.04); }
+.qf-log-level {
+  width: 58px; flex-shrink: 0; text-align: center; padding: 1px 0; border-radius: 4px;
+  font-weight: 700; font-size: 10px;
+}
+.qf-log-debug { color: #94a3b8; }
+.qf-log-info { color: #38bdf8; }
+.qf-log-warning { color: #fbbf24; }
+.qf-log-error { color: #f87171; background: rgba(248,113,113,.12); }
+.qf-log-ts { color: #64748b; flex-shrink: 0; }
+.qf-log-logger { color: #818cf8; flex-shrink: 0; }
+.qf-log-msg { color: #e2e8f0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.qf-log-rid { margin-left: auto; color: #475569; flex-shrink: 0; }

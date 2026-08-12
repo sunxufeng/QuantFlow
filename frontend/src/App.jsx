@@ -14,14 +14,22 @@ import WorkflowNode from './WorkflowNode.jsx'
 import Palette from './Palette.jsx'
 import PropertyPanel from './PropertyPanel.jsx'
 import ChartView from './ChartView.jsx'
+import Monitoring from './Monitoring.jsx'
+import AuthModal from './AuthModal.jsx'
 import { useGraphHistory } from './useHistory.js'
 import {
+  clearToken,
+  createProject,
   createWorkflow,
+  deleteProject,
   deleteWorkflow,
   exportWorkflow,
   fetchNodes,
+  fetchProjects,
   fetchWorkflow,
   fetchWorkflows,
+  getMe,
+  getToken,
   importWorkflow,
   listRuns,
   runWsUrl,
@@ -99,7 +107,7 @@ function RunsPanel({ runs, activeRunId, onSelectRun, onRefresh }) {
   )
 }
 
-function Canvas() {
+function Canvas({ projectId }) {
   const [specs, setSpecs] = useState([])
   const [nodes, setNodes, onNodesChange] = useNodesState([])
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
@@ -122,8 +130,8 @@ function Canvas() {
   const { canUndo, canRedo, undo, redo, clearHistory } = useGraphHistory(nodes, edges, setNodes, setEdges)
 
   const refreshWorkflows = useCallback(() => {
-    return fetchWorkflows().then(setSavedWorkflows)
-  }, [])
+    return fetchWorkflows(projectId).then(setSavedWorkflows)
+  }, [projectId])
 
   const refreshRuns = useCallback(() => {
     return listRuns().then((r) => setRuns(r.items || []))
@@ -137,6 +145,11 @@ function Canvas() {
     refreshWorkflows().catch((e) => setError(`工作流列表加载失败: ${e.message}`))
     refreshRuns().catch(() => {})
   }, [])
+
+  // 切换项目时刷新工作流列表
+  useEffect(() => {
+    refreshWorkflows().catch(() => {})
+  }, [projectId, refreshWorkflows])
 
   const specOf = useCallback(
     (type) => specs.find((s) => s.node_type === type),
@@ -265,7 +278,12 @@ function Canvas() {
   }, [clearHistory, setEdges, setNodes, specOf])
 
   const onSave = useCallback(async () => {
-    const payload = { name: workflowName.trim() || 'Untitled workflow', description: '', ...buildWorkflow() }
+    const payload = {
+      name: workflowName.trim() || 'Untitled workflow',
+      description: '',
+      project_id: projectId || undefined,
+      ...buildWorkflow(),
+    }
     setBusy(true)
     setError('')
     try {
@@ -280,7 +298,7 @@ function Canvas() {
     } finally {
       setBusy(false)
     }
-  }, [buildWorkflow, refreshWorkflows, workflowId, workflowName])
+  }, [buildWorkflow, projectId, refreshWorkflows, workflowId, workflowName])
 
   const onLoad = useCallback(async (id) => {
     if (!id) return
@@ -590,11 +608,78 @@ function Canvas() {
 
 export default function App() {
   const [view, setView] = useState('editor')
+  const [user, setUser] = useState(null)
+  const [authOpen, setAuthOpen] = useState(false)
+  const [projects, setProjects] = useState([])
+  const [projectId, setProjectId] = useState('')
+
+  // 启动时若已有令牌则恢复会话
+  useEffect(() => {
+    if (getToken()) {
+      getMe().then(setUser).catch(() => clearToken())
+    }
+  }, [])
+
+  // 登录后加载项目列表
+  const refreshProjects = useCallback(() => {
+    if (!getToken()) {
+      setProjects([])
+      setProjectId('')
+      return
+    }
+    fetchProjects()
+      .then((list) => {
+        setProjects(list || [])
+        setProjectId((cur) => (cur && (list || []).some((p) => p.id === cur) ? cur : ''))
+      })
+      .catch(() => setProjects([]))
+  }, [])
+
+  useEffect(() => {
+    refreshProjects()
+  }, [user, refreshProjects])
+
+  const handleAuthed = () => {
+    getMe().then(setUser).catch(() => {})
+    refreshProjects()
+  }
+
+  const handleLogout = () => {
+    clearToken()
+    setUser(null)
+    setProjects([])
+    setProjectId('')
+  }
+
+  const handleCreateProject = () => {
+    const name = window.prompt('新项目名称：')
+    if (!name || !name.trim()) return
+    createProject(name.trim())
+      .then((p) => {
+        setProjects((prev) => [...prev, p])
+        setProjectId(p.id)
+      })
+      .catch((e) => window.alert(`创建项目失败: ${e.message}`))
+  }
+
+  const handleDeleteProject = () => {
+    if (!projectId) return
+    const p = projects.find((x) => x.id === projectId)
+    if (!p) return
+    if (!window.confirm(`确认删除项目「${p.name}」？项目内工作流将失去归属（不删除工作流）。`)) return
+    deleteProject(projectId)
+      .then(() => {
+        setProjects((prev) => prev.filter((x) => x.id !== projectId))
+        setProjectId('')
+      })
+      .catch((e) => window.alert(`删除项目失败: ${e.message}`))
+  }
+
   return (
     <ReactFlowProvider>
       <div className="qf-topbar">
         <span className="qf-logo">⚡ QuantFlow</span>
-        <span className="qf-sub">量化工作流平台 · M3 节点库编辑器</span>
+        <span className="qf-sub">量化工作流平台 · M4 业务能力</span>
         <nav className="qf-nav">
           <button
             className={`qf-nav-btn ${view === 'editor' ? 'qf-nav-active' : ''}`}
@@ -608,9 +693,50 @@ export default function App() {
           >
             行情图表
           </button>
+          <button
+            className={`qf-nav-btn ${view === 'monitor' ? 'qf-nav-active' : ''}`}
+            onClick={() => setView('monitor')}
+          >
+            系统监控
+          </button>
         </nav>
+        <div className="qf-topbar-right">
+          {user && (
+            <>
+              <select
+                className="qf-project-select"
+                value={projectId}
+                onChange={(e) => setProjectId(e.target.value)}
+                aria-label="切换项目"
+                title="切换项目"
+              >
+                <option value="">未分组（全局）</option>
+                {projects.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}（{p.member_count} 人）
+                  </option>
+                ))}
+              </select>
+              <button className="qf-btn qf-btn-sm" onClick={handleCreateProject} title="新建项目">＋ 项目</button>
+              <button className="qf-btn qf-btn-sm" onClick={handleDeleteProject} disabled={!projectId} title="删除当前项目">🗑</button>
+              <span className="qf-user-chip" title={`${user.username} · ${user.role}`}>
+                {user.username}
+                <em>{user.role === 'admin' ? '管理员' : user.role}</em>
+              </span>
+              <button className="qf-btn qf-btn-sm" onClick={handleLogout}>退出</button>
+            </>
+          )}
+          {!user && (
+            <button className="qf-btn qf-btn-sm" onClick={() => setAuthOpen(true)}>登录 / 注册</button>
+          )}
+        </div>
       </div>
-      {view === 'editor' ? <Canvas /> : <ChartView />}
+      {view === 'editor' && <Canvas projectId={projectId} />}
+      {view === 'chart' && <ChartView />}
+      {view === 'monitor' && <Monitoring />}
+      {authOpen && (
+        <AuthModal onClose={() => setAuthOpen(false)} onAuthed={handleAuthed} />
+      )}
     </ReactFlowProvider>
   )
 }
