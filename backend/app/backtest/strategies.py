@@ -16,6 +16,14 @@ from typing import Any, Callable, Dict
 from .engine import BacktestContext, Strategy
 
 
+def _lot_floor(cash: float) -> int:
+    """全仓下单股数：向下取整到整手（100 的倍数），账户再按价格缩减。
+
+    避免 int(cash) 非整手导致 OrderRejected（如现金 970202 元）。
+    """
+    return int(float(cash) // 100) * 100
+
+
 class BuyHoldStrategy(Strategy):
     """买入持有：首日买入，末日全部卖出。"""
 
@@ -35,7 +43,9 @@ class BuyHoldStrategy(Strategy):
                 ctx.order(sym, self.shares, "buy")
             else:
                 # 全仓：先按现金试买超大整手，账户自动按可用资金缩减
-                ctx.order(sym, int(ctx.account.cash), "buy")
+                shares = _lot_floor(ctx.account.cash)
+                if shares > 0:
+                    ctx.order(sym, shares, "buy")
             self.bought = True
         elif ctx.date == ctx.calendar[-1]:
             pos = ctx.account.positions.get(sym)
@@ -74,8 +84,10 @@ class MaCrossStrategy(Strategy):
         diff = fast_ma - slow_ma
         if self.have_prev:
             if self.prev_diff <= 0 and diff > 0:
-                # 金叉：全仓买入
-                ctx.order(sym, int(ctx.account.cash), "buy")
+                # 金叉：全仓买入（整手）
+                shares = _lot_floor(ctx.account.cash)
+                if shares > 0:
+                    ctx.order(sym, shares, "buy")
             elif self.prev_diff >= 0 and diff < 0:
                 # 死叉：全部卖出
                 pos = ctx.account.positions.get(sym)
