@@ -1,0 +1,113 @@
+.qf-topbar {
+  height: 48px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 16px;
+  background: #1e293b;
+  color: #fff;
+}
+.qf-logo { font-weight: 700; font-size: 16px; }
+.qf-sub { color: #94a3b8; font-size: 12px; }
+
+.qf-layout {
+  display: flex;
+  height: calc(100% - 48px);
+}
+
+/* Palette */
+.qf-palette {
+  width: 220px;
+  background: #f8fafc;
+  border-right: 1px solid #e2e8f0;
+  overflow-y: auto;
+  padding: 12px;
+}
+.qf-palette h3 { margin: 0 0 8px; font-size: 13px; color: #334155; }
+.qf-palette-group { margin-bottom: 10px; }
+.qf-palette-cat { font-size: 11px; color: #64748b; margin: 6px 0 4px; }
+.qf-palette-item {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 6px 8px;
+  margin-bottom: 4px;
+  font-size: 12px;
+  cursor: grab;
+  display: flex;
+  flex-direction: column;
+  transition: border-color .15s;
+}
+.qf-palette-item:hover { border-color: #6366f1; }
+.qf-palette-desc { font-size: 10px; color: #94a3b8; }
+
+/* Canvas */
+.qf-canvas-wrap { flex: 1; position: relative; }
+
+/* Node */
+.qf-node {
+  min-width: 150px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0,0,0,.08);
+  font-size: 12px;
+}
+.qf-node-selected { border-color: #6366f1; box-shadow: 0 0 0 2px rgba(99,102,241,.25); }
+.qf-node-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  border-bottom: 2px solid #cbd5e1;
+  border-radius: 8px 8px 0 0;
+  background: #f1f5f9;
+}
+.qf-node-title { font-weight: 600; }
+.qf-node-status { width: 8px; height: 8px; border-radius: 50%; background: #8a94a6; }
+.qf-st-running { background: #f59e0b; animation: pulse 1s infinite; }
+.qf-st-succeeded { background: #22c55e; }
+.qf-st-failed { background: #ef4444; }
+.qf-st-blocked { background: #9ca3af; }
+@keyframes pulse { 50% { opacity: .4; } }
+.qf-node-cat { padding: 2px 10px; color: #94a3b8; font-size: 10px; }
+.qf-node-body { padding: 6px 10px 10px; display: flex; flex-direction: column; gap: 4px; }
+.qf-param { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #475569; }
+.qf-param span { width: 42px; flex-shrink: 0; }
+.qf-param input, .qf-param select {
+  flex: 1; min-width: 0; padding: 3px 6px; border: 1px solid #cbd5e1;
+  border-radius: 4px; font-size: 11px;
+}
+.qf-node-outputs { border-top: 1px dashed #e2e8f0; margin-top: 6px; padding-top: 6px; }
+.qf-output-row { display: flex; gap: 6px; align-items: flex-start; font-size: 11px; }
+.qf-output-name { color: #6366f1; font-weight: 600; }
+.qf-output-value { color: #334155; word-break: break-all; }
+.qf-table-preview table { border-collapse: collapse; font-size: 10px; }
+.qf-table-preview th, .qf-table-preview td { border: 1px solid #e2e8f0; padding: 1px 4px; }
+
+/* Side panel */
+.qf-side { width: 340px; border-left: 1px solid #e2e8f0; background: #f8fafc; display: flex; flex-direction: column; }
+.qf-actions { display: flex; gap: 8px; padding: 12px; border-bottom: 1px solid #e2e8f0; }
+.qf-workflow-actions { flex-wrap: wrap; }
+.qf-name-input, .qf-workflow-actions select {
+  width: 100%; box-sizing: border-box; padding: 6px 8px; border: 1px solid #cbd5e1;
+  border-radius: 6px; background: #fff; color: #334155; font-size: 12px;
+}
+.qf-btn {
+  padding: 6px 14px; border: 1px solid #cbd5e1; background: #fff; border-radius: 6px;
+  font-size: 12px; cursor: pointer;
+}
+.qf-btn-primary { background: #6366f1; border-color: #6366f1; color: #fff; }
+.qf-btn-primary:disabled { opacity: .6; cursor: not-allowed; }
+.qf-result { padding: 12px; overflow-y: auto; }
+.qf-result h3 { margin: 0 0 8px; font-size: 13px; color: #334155; }
+.qf-error { color: #dc2626; font-size: 12px; white-space: pre-wrap; }
+.qf-busy { color: #f59e0b; font-size: 12px; }
+.qf-run-meta { font-size: 12px; color: #475569; margin-bottom: 8px; }
+.qf-run-succeeded { color: #16a34a; }
+.qf-run-failed { color: #dc2626; }
+.qf-run-running { color: #f59e0b; }
+.qf-state-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.qf-state-table th, .qf-state-table td { border: 1px solid #e2e8f0; padding: 4px 6px; text-align: left; vertical-align: top; }
+.qf-state-table th { background: #f1f5f9; }
+.qf-cell-out { color: #475569; }
