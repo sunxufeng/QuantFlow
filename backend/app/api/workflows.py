@@ -10,7 +10,7 @@ from ..core.auth import get_current_user_optional
 from ..core.dag import WorkflowValidationError, validate_workflow
 from ..core.projects import PROJECT_REPOSITORY
 from ..core.registry import REGISTRY
-from ..core.runs import RUN_SERVICE
+from ..core import runs as run_module
 from ..core.workflow_repository import WORKFLOW_REPOSITORY, WorkflowNotFoundError
 from ..models.schemas import (
     NodeSpecOut,
@@ -196,7 +196,7 @@ def run(workflow: WorkflowIn) -> dict:
         )
     except WorkflowValidationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    result = RUN_SERVICE.execute_sync(
+    result = run_module.RUN_SERVICE.execute_sync(
         [n.model_dump() for n in workflow.nodes],
         [e.model_dump() for e in workflow.edges],
         workflow_name="run",

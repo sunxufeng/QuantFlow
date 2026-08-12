@@ -24,6 +24,7 @@ from typing import Any, Dict, List, Optional
 
 from .dag import WorkflowGraph, validate_workflow
 from .databridge import DataBridge
+from .eventlog import RUN_EVENT_LOG, RunEventLog
 from .events import (
     EVENT_BUS,
     NODE_FAILED,
@@ -35,16 +36,15 @@ from .events import (
     RunEvent,
 )
 from .executor import WorkflowExecutor
+from .jobs import JOB_QUEUE, JobQueue
+from .runstore import DatabaseRunRepository, RUN_REPOSITORY, RunNotFoundError
 
 
 class RunStatus:
+    QUEUED = "queued"
     RUNNING = "running"
     SUCCEEDED = "succeeded"
     FAILED = "failed"
-
-
-class RunNotFoundError(KeyError):
-    pass
 
 
 class RunExecutionError(RuntimeError):
@@ -147,12 +147,26 @@ class RunService:
         bus=None,
         run_workers: int = 20,
         queue_size: int = 100,
+        backend: str = "local",
+        job_queue: Optional[JobQueue] = None,
+        event_log: Optional[RunEventLog] = None,
     ) -> None:
         if run_workers < 1:
             raise ValueError("run_workers must be at least 1")
         if queue_size < 0:
             raise ValueError("queue_size cannot be negative")
-        self.repository = repository or RunRepository()
+        if backend not in ("local", "worker"):
+            raise ValueError(f"unknown backend: {backend}")
+        self.backend = backend
+        self.job_queue = job_queue or JOB_QUEUE
+        self.event_log = event_log or RUN_EVENT_LOG
+        if repository is not None:
+            self.repository = repository
+        elif backend == "worker":
+            # 共享存储：API 与 worker 进程看到同一份运行态
+            self.repository = RUN_REPOSITORY
+        else:
+            self.repository = RunRepository()
         self.bridge = bridge or DataBridge()
         self.bus = bus if bus is not None else EVENT_BUS
         self.executor = executor or WorkflowExecutor(
@@ -165,7 +179,7 @@ class RunService:
             thread_name_prefix="quantflow-run",
         )
         self._capacity = threading.BoundedSemaphore(run_workers + queue_size)
-        # 实时订阅：节点事件即时写入运行记录
+        # 实时订阅：节点事件即时写入运行记录（local 进程内执行 / 同步执行均生效）
         self.bus.subscribe(self._on_event)
 
     # ------------------------------------------------------------------ #
@@ -179,7 +193,12 @@ class RunService:
         workflow_id: Optional[str] = None,
         workflow_name: str = "",
     ) -> dict:
-        """校验并异步执行工作流，立即返回 ``{run_id, status}``。"""
+        """校验并异步执行工作流，立即返回 ``{run_id, status}``。
+
+        - ``backend="local"``：进程内线程池执行（历史默认行为）。
+        - ``backend="worker"``：仅入队共享任务队列，由 ``quantflow-worker`` 进程消费执行；
+          运行态写入共享存储，状态先为 ``queued``，worker 认领后转 ``running``。
+        """
         graph = validate_workflow(nodes, edges)
         if not self._capacity.acquire(blocking=False):
             raise RunCapacityError(
@@ -187,12 +206,13 @@ class RunService:
             )
         run_id = uuid.uuid4().hex[:12]
         now = _utc_now()
+        is_worker = self.backend == "worker"
         record = {
             "run_id": run_id,
             "workflow_id": workflow_id,
             "workflow_name": workflow_name,
             "nodes": {},   # node_id -> NodeRunState.to_dict()
-            "status": RunStatus.RUNNING,
+            "status": RunStatus.QUEUED if is_worker else RunStatus.RUNNING,
             "created_at": now,
             "started_at": time.time(),
             "finished_at": None,
@@ -200,18 +220,34 @@ class RunService:
         }
         try:
             self.repository.create(record)
-            self.bus.publish(
-                RunEvent(
-                    run_id=run_id,
-                    kind=RUN_STARTED,
-                    payload={"workflow_name": workflow_name, "node_ids": graph.nodes},
+            if is_worker:
+                # 仅入队；RUN_STARTED 由 worker 认领时写入（单一来源）
+                self.job_queue.enqueue(
+                    {"nodes": nodes, "edges": edges},
+                    job_id=run_id,
+                    workflow_id=workflow_id,
+                    workflow_name=workflow_name,
                 )
-            )
-            self._run_pool.submit(self._execute_async, run_id, graph)
+                self._capacity.release()  # 入队即视为接纳，受 queue_size 约束
+            else:
+                self.bus.publish(
+                    RunEvent(
+                        run_id=run_id,
+                        kind=RUN_STARTED,
+                        payload={"workflow_name": workflow_name, "node_ids": graph.nodes},
+                    )
+                )
+                self.event_log.append(
+                    run_id,
+                    RUN_STARTED,
+                    None,
+                    {"workflow_name": workflow_name, "node_ids": list(graph.nodes)},
+                )
+                self._run_pool.submit(self._execute_async, run_id, graph)
         except Exception:
             self._capacity.release()
             raise
-        return {"run_id": run_id, "status": RunStatus.RUNNING}
+        return {"run_id": run_id, "status": record["status"]}
 
     def execute_sync(
         self,
@@ -257,7 +293,7 @@ class RunService:
         deadline = time.time() + timeout if timeout else None
         while True:
             record = self.repository.get(run_id)
-            if record["status"] != RunStatus.RUNNING:
+            if record["status"] not in (RunStatus.RUNNING, RunStatus.QUEUED):
                 return record
             if deadline is not None and time.time() > deadline:
                 return record
@@ -285,6 +321,7 @@ class RunService:
             self.repository.update(run_id, **final)
             kind = RUN_SUCCEEDED if status == RunStatus.SUCCEEDED else RUN_FAILED
             self.bus.publish(RunEvent(run_id=run_id, kind=kind))
+            self.event_log.append(run_id, kind, None, final.get("result") or {})
             self._notify_finished(run_id, status)
             return result
         except Exception as exc:  # noqa: BLE001 - 兜底：异常视为运行失败
@@ -295,13 +332,14 @@ class RunService:
             }
             self.repository.update(run_id, **final)
             self.bus.publish(RunEvent(run_id=run_id, kind=RUN_FAILED, payload={"error": str(exc)}))
+            self.event_log.append(run_id, RUN_FAILED, None, {"error": str(exc)})
             self._notify_finished(run_id, RunStatus.FAILED, error=str(exc))
             return None
 
     def _notify_finished(self, run_id: str, status: str, error: Optional[str] = None) -> None:
         """运行完成/失败后推送外部通知（N5）；失败不影响运行结果。"""
         try:
-            from .notifications.service import notification_service
+            from ..notifications.service import notification_service
 
             rec = self.repository.get(run_id)
             wf_name = rec.get("workflow_name", "") if rec else ""
@@ -314,7 +352,7 @@ class RunService:
             )
 
     def _on_event(self, event: RunEvent) -> None:
-        """订阅总线：节点状态事件实时写入运行记录。"""
+        """订阅总线：节点状态事件实时写入运行记录 + 持久化到跨进程事件日志。"""
         if event.kind not in (NODE_RUNNING, NODE_SUCCEEDED, NODE_FAILED):
             return
         if not event.node_id:
@@ -329,6 +367,7 @@ class RunService:
         }
         try:
             self.repository.patch_node(event.run_id, event.node_id, state)
+            self.event_log.append(event.run_id, event.kind, event.node_id, payload)
         except RunNotFoundError:
             pass  # 运行记录不存在（如直接被删除）时忽略
 

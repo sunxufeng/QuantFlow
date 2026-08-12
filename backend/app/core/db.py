@@ -97,6 +97,44 @@ CREATE TABLE IF NOT EXISTS notification_channels (
     enabled    INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL
 );
+
+-- V1.1 N6 分布式 Worker：共享运行态 + 任务队列 + 事件日志（SQLite 承载，进程间共享）
+CREATE TABLE IF NOT EXISTS runs (
+    run_id       TEXT PRIMARY KEY,
+    workflow_id  TEXT,
+    workflow_name TEXT NOT NULL DEFAULT '',
+    status       TEXT NOT NULL,
+    created_at   TEXT NOT NULL,
+    started_at   REAL NOT NULL,
+    finished_at  REAL,
+    result       TEXT,
+    nodes        TEXT NOT NULL DEFAULT '{}'
+);
+
+CREATE TABLE IF NOT EXISTS run_events (
+    seq       INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id    TEXT NOT NULL,
+    kind      TEXT NOT NULL,
+    node_id   TEXT,
+    payload   TEXT NOT NULL DEFAULT '{}',
+    timestamp REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_run_events_run ON run_events(run_id, seq);
+
+CREATE TABLE IF NOT EXISTS run_jobs (
+    id            TEXT PRIMARY KEY,
+    workflow_id   TEXT,
+    workflow_name TEXT NOT NULL DEFAULT '',
+    payload       TEXT NOT NULL,
+    status        TEXT NOT NULL DEFAULT 'queued',
+    claimed_by    TEXT,
+    claimed_at    REAL,
+    error         TEXT,
+    created_at    REAL NOT NULL,
+    updated_at    REAL NOT NULL,
+    priority      INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_run_jobs_status ON run_jobs(status, priority, created_at);
 """
 
 
@@ -118,6 +156,7 @@ class Database:
             self._conn = sqlite3.connect(self._path, check_same_thread=False)
             self._conn.row_factory = sqlite3.Row
             self._conn.execute("PRAGMA journal_mode=WAL")
+            self._conn.execute("PRAGMA busy_timeout=5000")  # 多进程(worker)并发写容错
             self._conn.execute("PRAGMA foreign_keys=ON")
             self._conn.executescript(_SCHEMA)
             self._conn.commit()
@@ -154,6 +193,9 @@ class Database:
             conn.execute("DELETE FROM data_updates")
             conn.execute("DELETE FROM market_bars")
             conn.execute("DELETE FROM notification_channels")
+            conn.execute("DELETE FROM run_events")
+            conn.execute("DELETE FROM run_jobs")
+            conn.execute("DELETE FROM runs")
             conn.commit()
 
 

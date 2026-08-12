@@ -11,7 +11,7 @@ from ..config import settings
 from ..core.auth import get_current_user, require_roles
 from ..core.projects import PROJECT_REPOSITORY
 from ..core.registry import REGISTRY
-from ..core.runs import RUN_SERVICE
+from ..core import runs as run_module
 from ..core.users import USER_REPOSITORY
 from ..core.ws import RUN_CONNECTIONS
 
@@ -26,7 +26,7 @@ def _uptime_seconds() -> float:
 
 @router.get("/overview", summary="系统概览（运行队列/节点/连接/用户/项目）")
 def overview(user: dict = Depends(get_current_user)) -> dict:
-    run_stats = RUN_SERVICE.repository.stats()
+    run_stats = run_module.RUN_SERVICE.repository.stats()
     base = {
         "server": {
             "app": settings.APP_NAME,
@@ -39,7 +39,7 @@ def overview(user: dict = Depends(get_current_user)) -> dict:
             "running": run_stats.get("running", 0),
             "succeeded": run_stats.get("succeeded", 0),
             "failed": run_stats.get("failed", 0),
-            "capacity": RUN_SERVICE.run_workers + RUN_SERVICE.queue_size,
+            "capacity": run_module.RUN_SERVICE.run_workers + run_module.RUN_SERVICE.queue_size,
             "queued": max(0, run_stats.get("total", 0) - run_stats.get("running", 0)),
         },
         "nodes": {"registered": len(REGISTRY.all())},
@@ -54,7 +54,7 @@ def overview(user: dict = Depends(get_current_user)) -> dict:
 
 @router.get("/metrics", summary="Prometheus 指标（admin）")
 def metrics(user: dict = Depends(require_roles("admin"))) -> Response:
-    run_stats = RUN_SERVICE.repository.stats()
+    run_stats = run_module.RUN_SERVICE.repository.stats()
 
     def counter(name: str, value: int) -> str:
         return f"quantflow_{name} {value}"

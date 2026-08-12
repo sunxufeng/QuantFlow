@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import time
 
 from fastapi import FastAPI
@@ -14,6 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .api import auth, backtest, factors, logs, market, monitoring, notifications, projects, runs, tokens, workflows
 from .config import settings
+from .core import runs as run_module
 from .core.logging_store import RequestContextMiddleware, install as install_logging
 from .nodes import discover
 
@@ -39,6 +41,22 @@ app.add_middleware(
 app.add_middleware(RequestContextMiddleware)
 
 install_logging()
+
+# V1.1 N6：按环境变量选择运行后端。
+# - local（默认）：进程内线程池执行，运行态存内存（历史行为，零变化）。
+# - worker：API 仅入队共享任务队列，由独立 quantflow-worker 进程消费执行；
+#   运行态/事件落共享 SQLite，跨进程可见。
+_RUN_BACKEND = os.getenv("QF_RUN_BACKEND", "local")
+if _RUN_BACKEND not in ("local", "worker"):
+    logger.warning("未知 QF_RUN_BACKEND=%r，回退 local", _RUN_BACKEND)
+    _RUN_BACKEND = "local"
+if _RUN_BACKEND == "worker":
+    from .core.runs import RunService
+
+    run_module.RUN_SERVICE = RunService(backend="worker")
+    logger.info("运行后端=worker（API 入队，quantflow-worker 进程消费）")
+else:
+    logger.info("运行后端=local（进程内线程池执行）")
 
 app.include_router(workflows.router, prefix="/api")
 app.include_router(market.router, prefix="/api")
@@ -79,9 +97,8 @@ async def shutdown() -> None:
 
 @app.get("/api/health", summary="健康检查")
 def health() -> dict:
-    from .core.runs import RUN_SERVICE
-
-    run_stats = RUN_SERVICE.repository.stats()
+    run_service = run_module.RUN_SERVICE
+    run_stats = run_service.repository.stats()
     return {
         "status": "ok",
         "app": settings.APP_NAME,
