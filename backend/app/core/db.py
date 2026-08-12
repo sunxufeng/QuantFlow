@@ -135,6 +135,21 @@ CREATE TABLE IF NOT EXISTS run_jobs (
     priority      INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_run_jobs_status ON run_jobs(status, priority, created_at);
+
+-- V1.2 定时调度：工作流定时执行计划
+CREATE TABLE IF NOT EXISTS schedules (
+    id            TEXT PRIMARY KEY,
+    name          TEXT NOT NULL,
+    trigger_type  TEXT NOT NULL,           -- 'cron' | 'interval'
+    trigger_cfg   TEXT NOT NULL,           -- cron 表达式 或 {"minutes": N} JSON
+    payload       TEXT NOT NULL,           -- {"nodes":[...],"edges":[...],"workflow_name":""}
+    enabled       INTEGER NOT NULL DEFAULT 1,
+    created_at    TEXT NOT NULL,
+    last_run_at   TEXT,
+    last_run_status TEXT,
+    last_run_id   TEXT,
+    next_run_at   TEXT
+);
 """
 
 
@@ -193,6 +208,7 @@ class Database:
             conn.execute("DELETE FROM data_updates")
             conn.execute("DELETE FROM market_bars")
             conn.execute("DELETE FROM notification_channels")
+            conn.execute("DELETE FROM schedules")
             conn.execute("DELETE FROM run_events")
             conn.execute("DELETE FROM run_jobs")
             conn.execute("DELETE FROM runs")

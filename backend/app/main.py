@@ -13,7 +13,7 @@ import time
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .api import auth, backtest, factors, logs, llm, market, monitoring, notifications, projects, runs, tokens, workflows
+from .api import auth, backtest, factors, logs, llm, market, monitoring, notifications, projects, runs, schedules, tokens, workflows
 from .config import settings
 from .core import runs as run_module
 from .core.logging_store import RequestContextMiddleware, install as install_logging
@@ -67,6 +67,7 @@ app.include_router(tokens.router, prefix="/api")
 app.include_router(factors.router, prefix="/api")
 app.include_router(notifications.router, prefix="/api")
 app.include_router(llm.router, prefix="/api")
+app.include_router(schedules.router, prefix="/api")
 app.include_router(projects.router, prefix="/api")
 app.include_router(logs.router, prefix="/api")
 app.include_router(monitoring.router, prefix="/api")
@@ -78,9 +79,11 @@ _START_TIME = time.time()
 async def startup() -> None:
     discover()
     logger.info("节点库加载完成，共 %d 种节点", _node_count())
+    from .core.scheduler import workflow_scheduler
     from .market.scheduler import data_sync_service
 
     data_sync_service.start()
+    workflow_scheduler.start()
 
 
 def _node_count() -> int:
@@ -91,8 +94,10 @@ def _node_count() -> int:
 
 @app.on_event("shutdown")
 async def shutdown() -> None:
+    from .core.scheduler import workflow_scheduler
     from .market.scheduler import data_sync_service
 
+    workflow_scheduler.shutdown()
     data_sync_service.shutdown()
 
 
