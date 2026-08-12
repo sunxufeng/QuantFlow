@@ -15,3 +15,6 @@ dist/
 
 # 运行时
 *.log
+
+# 运行时数据（SQLite / ML 模型）
+backend/data/
