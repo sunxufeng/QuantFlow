@@ -30,7 +30,7 @@ def overview(user: dict = Depends(get_current_user)) -> dict:
     base = {
         "server": {
             "app": settings.APP_NAME,
-            "version": "0.1.0",
+            "version": settings.APP_VERSION,
             "uptime_seconds": _uptime_seconds(),
             "pid": os.getpid(),
         },

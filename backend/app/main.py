@@ -26,7 +26,7 @@ logger = logging.getLogger("quantflow")
 app = FastAPI(
     title="QuantFlow 量化工作流平台",
     description="可视化量化工作流平台（V1.0）",
-    version="1.0.0",
+    version=settings.APP_VERSION,
 )
 
 app.add_middleware(
