@@ -1,5 +1,6 @@
 // QuantFlow 生产静态服务 + /api 反向代理（零依赖 Node 实现）
 // 用法：node server.mjs  （监听 8080，/api 转发到 QF_BACKEND_URL 默认 http://127.0.0.1:8100）
+// 支持 /api/ws/* WebSocket 升级转发（运行状态实时推送）
 import { createReadStream, existsSync, statSync } from "node:fs";
 import { createServer, request } from "node:http";
 import { dirname, extname, join, normalize } from "node:path";
@@ -18,7 +19,7 @@ const types = {
   ".json": "application/json",
 };
 
-createServer((req, res) => {
+const server = createServer((req, res) => {
   const url = new URL(req.url, "http://localhost");
 
   // /api/* 反向代理到后端
@@ -44,6 +45,49 @@ createServer((req, res) => {
     "Cache-Control": file.endsWith("index.html") ? "no-cache" : "public, max-age=31536000, immutable",
   });
   createReadStream(file).pipe(res);
-}).listen(PORT, "0.0.0.0");
+});
+
+// WebSocket 升级转发（/api/ws/* → 后端）
+server.on("upgrade", (req, socket, head) => {
+  const url = new URL(req.url, "http://localhost");
+  if (!url.pathname.startsWith("/api/ws/")) {
+    socket.destroy();
+    return;
+  }
+  const upstream = new URL(url.pathname + url.search, BACKEND_URL);
+  const proxy = request(upstream, {
+    method: "GET",
+    headers: {
+      ...req.headers,
+      host: upstream.host,
+      connection: "Upgrade",
+      upgrade: "websocket",
+    },
+  });
+  proxy.on("upgrade", (res, upstreamSocket, upstreamHead) => {
+    upstreamSocket.on("error", () => socket.destroy());
+    socket.on("error", () => upstreamSocket.destroy());
+    // 客户端已发出的首个帧数据（head）转发给上游
+    if (head?.length) upstreamSocket.write(head);
+    // 回写 101 握手响应（原样转发上游头，含 Sec-WebSocket-Extensions 等）
+    const hdrs = Object.entries(res.headers || {})
+      .filter(([k]) => !["connection", "upgrade", "transfer-encoding"].includes(k))
+      .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(", ") : v}\r\n`)
+      .join("");
+    socket.write("HTTP/1.1 101 Switching Protocols\r\n" +
+      `Upgrade: ${res.headers.upgrade || "websocket"}\r\n` +
+      "Connection: Upgrade\r\n" +
+      hdrs + "\r\n");
+    // 上游已发出的首个帧数据转发给客户端
+    if (upstreamHead?.length) socket.write(upstreamHead);
+    // 双向管道
+    upstreamSocket.pipe(socket);
+    socket.pipe(upstreamSocket);
+  });
+  proxy.on("error", () => socket.destroy());
+  proxy.end();
+});
+
+server.listen(PORT, "0.0.0.0");
 
 console.log(`QuantFlow frontend serving ${root} on :${PORT}, proxying /api -> ${BACKEND_URL}`);

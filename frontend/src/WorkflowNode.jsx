@@ -9,6 +9,15 @@ const STATUS_COLOR = {
   blocked: '#9ca3af',
 }
 
+const PORT_COLOR = {
+  number: '#6366f1',
+  string: '#0ea5e9',
+  boolean: '#f59e0b',
+  table: '#10b981',
+  any: '#64748b',
+  default: '#6366f1',
+}
+
 function PortHandles({ ports, side, type }) {
   const n = Math.max(ports.length, 1)
   return ports.map((p, i) => (
@@ -17,9 +26,14 @@ function PortHandles({ ports, side, type }) {
       id={p.name}
       type={type}
       position={side}
-      style={{ top: `${((i + 0.5) / n) * 100}%`, background: '#6366f1' }}
+      className={`qf-handle qf-handle-${side}`}
+      style={{ top: `${((i + 0.5) / n) * 100}%`, background: PORT_COLOR[p.type] || PORT_COLOR.default }}
       data-port-type={p.type}
-    />
+    >
+      <span className={`qf-handle-label qf-handle-label-${side}`} title={`${p.name}: ${p.type}`}>
+        {p.name}
+      </span>
+    </Handle>
   ))
 }
 
@@ -96,7 +110,7 @@ function WorkflowNode({ data, selected }) {
         <span className="qf-node-title">{spec.label}</span>
         <span className={`qf-node-status qf-st-${data.status || 'pending'}`} />
       </div>
-      <div className="qf-node-cat">{spec.category}</div>
+      <div className="qf-node-cat">{spec.category} · {spec.node_type}</div>
       <div className="qf-node-body">
         {spec.params.map((p) => (
           <ParamField key={p.name} spec={p} value={data.params[p.name]} onChange={data.onChange} />

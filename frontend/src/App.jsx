@@ -11,86 +11,90 @@ import ReactFlow, {
 } from 'reactflow'
 import 'reactflow/dist/style.css'
 import WorkflowNode from './WorkflowNode.jsx'
+import Palette from './Palette.jsx'
+import PropertyPanel from './PropertyPanel.jsx'
+import ChartView from './ChartView.jsx'
+import { useGraphHistory } from './useHistory.js'
 import {
   createWorkflow,
+  deleteWorkflow,
   exportWorkflow,
   fetchNodes,
   fetchWorkflow,
   fetchWorkflows,
   importWorkflow,
-  runWorkflow,
+  listRuns,
+  runWsUrl,
+  submitRun,
   updateWorkflow,
   validateWorkflow,
 } from './api.js'
 
 const nodeTypes = { qf: WorkflowNode }
 
-function Palette({ specs, onAddNode }) {
-  const groups = useMemo(() => {
-    const map = {}
-    for (const s of specs) (map[s.category] ||= []).push(s)
-    return map
-  }, [specs])
-
+function ResultPanel({ result, error, busy, runStatus, onClose }) {
   return (
-    <div className="qf-palette">
-      <h3>节点库</h3>
-      {Object.entries(groups).map(([cat, list]) => (
-        <div key={cat} className="qf-palette-group">
-          <div className="qf-palette-cat">{cat}</div>
-          {list.map((s) => (
-            <div
-              key={s.node_type}
-              className="qf-palette-item"
-              draggable
-              onDragStart={(e) => {
-                e.dataTransfer.setData('application/qf-type', s.node_type)
-                e.dataTransfer.effectAllowed = 'move'
-              }}
-              onClick={() => onAddNode(s, { x: 120 + Math.random() * 200, y: 120 + Math.random() * 200 })}
-            >
-              {s.label}
-              <span className="qf-palette-desc">{s.description}</span>
-            </div>
-          ))}
+    <div className="qf-result">
+      <div className="qf-result-head">
+        <h3>运行结果</h3>
+        {onClose && <button className="qf-btn qf-btn-sm" onClick={onClose}>×</button>}
+      </div>
+      {busy && <div className="qf-busy">提交中…</div>}
+      {error && <div className="qf-error">{error}</div>}
+      {runStatus && (
+        <div className="qf-run-meta">
+          状态 <b className={`qf-run-${runStatus}`}>{runStatus}</b>
         </div>
-      ))}
+      )}
+      {result && result.nodes?.length ? (
+        <table className="qf-state-table">
+          <thead>
+            <tr><th>节点</th><th>状态</th><th>耗时(ms)</th><th>输出</th><th>错误</th></tr>
+          </thead>
+          <tbody>
+            {result.nodes.map((n) => (
+              <tr key={n.node_id}>
+                <td>{n.node_id}</td>
+                <td className={`qf-run-${n.status}`}>{n.status}</td>
+                <td>{n.duration_ms}</td>
+                <td className="qf-cell-out">{n.outputs ? Object.entries(n.outputs).map(([k, v]) => (
+                  <div key={k}>{k} = {v && v.__type__ === 'table' ? `table(${v.rows.length}行)` : JSON.stringify(v)}</div>
+                )) : ''}</td>
+                <td>{n.error || ''}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : runStatus && (
+        <div className="qf-busy">运行中… 节点状态实时更新到画布</div>
+      )}
     </div>
   )
 }
 
-function ResultPanel({ result, error, busy }) {
+function RunsPanel({ runs, activeRunId, onSelectRun, onRefresh }) {
   return (
-    <div className="qf-result">
-      <h3>运行结果</h3>
-      {busy && <div className="qf-busy">运行中…</div>}
-      {error && <div className="qf-error">{error}</div>}
-      {result && !error && (
-        <>
-          <div className="qf-run-meta">
-            状态 <b className={`qf-run-${result.status}`}>{result.status}</b> · 耗时{' '}
-            {result.duration_ms}ms · run_id {result.run_id}
+    <div className="qf-runs">
+      <div className="qf-result-head">
+        <h3>运行记录</h3>
+        <button className="qf-btn qf-btn-sm" onClick={onRefresh}>刷新</button>
+      </div>
+      {runs.length === 0 && <div className="qf-prop-hint">暂无运行记录</div>}
+      {runs.map((r) => (
+        <div
+          key={r.run_id}
+          className={`qf-run-item ${r.run_id === activeRunId ? 'qf-run-item-active' : ''}`}
+          onClick={() => onSelectRun(r.run_id)}
+        >
+          <span className={`qf-run-dot qf-run-${r.status}`} />
+          <div className="qf-run-item-body">
+            <div className="qf-run-item-name">{r.workflow_name || r.run_id.slice(0, 8)}</div>
+            <div className="qf-run-item-meta">
+              {r.status} · {new Date(r.started_at).toLocaleTimeString()}
+            </div>
           </div>
-          <table className="qf-state-table">
-            <thead>
-              <tr><th>节点</th><th>状态</th><th>耗时(ms)</th><th>输出</th><th>错误</th></tr>
-            </thead>
-            <tbody>
-              {result.nodes.map((n) => (
-                <tr key={n.node_id}>
-                  <td>{n.node_id}</td>
-                  <td className={`qf-run-${n.status}`}>{n.status}</td>
-                  <td>{n.duration_ms}</td>
-                  <td className="qf-cell-out">{n.outputs ? Object.entries(n.outputs).map(([k, v]) => (
-                    <div key={k}>{k} = {v && v.__type__ === 'table' ? `table(${v.rows.length}行)` : JSON.stringify(v)}</div>
-                  )) : ''}</td>
-                  <td>{n.error || ''}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </>
-      )}
+        </div>
+      ))}
     </div>
   )
 }
@@ -99,18 +103,30 @@ function Canvas() {
   const [specs, setSpecs] = useState([])
   const [nodes, setNodes, onNodesChange] = useNodesState([])
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
+  const [selectedId, setSelectedId] = useState(null)
+  const [runNodeStates, setRunNodeStates] = useState({})
   const [result, setResult] = useState(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [savedWorkflows, setSavedWorkflows] = useState([])
   const [workflowId, setWorkflowId] = useState('')
   const [workflowName, setWorkflowName] = useState('Untitled workflow')
+  const [runId, setRunId] = useState('')
+  const [runStatus, setRunStatus] = useState('')
+  const [runs, setRuns] = useState([])
+  const [rightTab, setRightTab] = useState('props')
   const rf = useReactFlow()
   const idRef = useRef(0)
   const importRef = useRef(null)
 
+  const { canUndo, canRedo, undo, redo, clearHistory } = useGraphHistory(nodes, edges, setNodes, setEdges)
+
   const refreshWorkflows = useCallback(() => {
     return fetchWorkflows().then(setSavedWorkflows)
+  }, [])
+
+  const refreshRuns = useCallback(() => {
+    return listRuns().then((r) => setRuns(r.items || []))
   }, [])
 
   useEffect(() => {
@@ -119,6 +135,7 @@ function Canvas() {
       if (list.length) addNode(list.find((s) => s.node_type === 'data.constant'), { x: 60, y: 120 })
     }).catch((e) => setError(`节点库加载失败: ${e.message}`))
     refreshWorkflows().catch((e) => setError(`工作流列表加载失败: ${e.message}`))
+    refreshRuns().catch(() => {})
   }, [])
 
   const specOf = useCallback(
@@ -129,29 +146,49 @@ function Canvas() {
   const addNode = useCallback((spec, position) => {
     const id = `${spec.node_type}-${++idRef.current}`
     const params = {}
-    for (const p of spec.params) {
-      params[p.name] = p.default
-    }
-    setNodes((nds) => [
-      ...nds,
-      {
-        id,
-        type: 'qf',
-        position,
-        data: { nodeType: spec.node_type, spec, params, status: 'pending', outputs: null },
-      },
-    ])
-    // 默认把上游最后一个节点的第一个输出接过来（快速演示）
+    for (const p of spec.params) params[p.name] = p.default
+    setNodes((nds) => [...nds, {
+      id,
+      type: 'qf',
+      position,
+      data: { nodeType: spec.node_type, spec, params },
+    }])
     return id
   }, [setNodes])
 
-  const patchNode = useCallback((id, patch) => {
-    setNodes((nds) => nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, ...patch } } : n)))
+  const patchNodeParams = useCallback((id, patch) => {
+    setNodes((nds) => nds.map((n) => (
+      n.id === id ? { ...n, data: { ...n.data, params: { ...n.data.params, ...patch } } } : n
+    )))
   }, [setNodes])
 
+  const removeNode = useCallback((id) => {
+    setNodes((nds) => nds.filter((n) => n.id !== id))
+    setEdges((eds) => eds.filter((e) => e.source !== id && e.target !== id))
+    setSelectedId((cur) => (cur === id ? null : cur))
+  }, [setEdges, setNodes])
+
+  // ---- 连接：类型校验 + 去重 + 防自环 ----
   const onConnect = useCallback((conn) => {
+    if (conn.source === conn.target) {
+      setError('不能连接节点自身')
+      return
+    }
+    const srcSpec = specOf(nodes.find((n) => n.id === conn.source)?.data?.nodeType)
+    const dstSpec = specOf(nodes.find((n) => n.id === conn.target)?.data?.nodeType)
+    const srcPort = srcSpec?.outputs.find((p) => p.name === conn.sourceHandle)
+    const dstPort = dstSpec?.inputs.find((p) => p.name === conn.targetHandle)
+    if (srcPort && dstPort && srcPort.type !== dstPort.type && srcPort.type !== 'any' && dstPort.type !== 'any') {
+      setError(`端口类型不匹配：${srcPort.name}(${srcPort.type}) → ${dstPort.name}(${dstPort.type})`)
+      return
+    }
+    const dup = edges.some((e) =>
+      e.source === conn.source && e.sourceHandle === conn.sourceHandle &&
+      e.target === conn.target && e.targetHandle === conn.targetHandle)
+    if (dup) return
+    setError('')
     setEdges((eds) => addEdge({ ...conn, type: 'default' }, eds))
-  }, [setEdges])
+  }, [edges, nodes, setEdges, specOf])
 
   const onDrop = useCallback((e) => {
     e.preventDefault()
@@ -168,23 +205,32 @@ function Canvas() {
     e.dataTransfer.dropEffect = 'move'
   }, [])
 
-  const buildWorkflow = useCallback(() => {
-    return {
-      nodes: nodes.map((n) => ({
-        id: n.id,
-        node_type: n.data.nodeType,
-        params: n.data.params,
-        position: n.position,
-      })),
-      edges: edges.map((e) => ({
-        id: e.id,
-        source: e.source,
-        source_port: e.sourceHandle,
-        target: e.target,
-        target_port: e.targetHandle,
-      })),
+  // ---- 键盘快捷键：撤销/重做/删除 ----
+  useEffect(() => {
+    const onKey = (e) => {
+      const mod = e.metaKey || e.ctrlKey
+      if (mod && e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo() }
+      else if (mod && e.shiftKey && (e.key === 'z' || e.key === 'Z')) { e.preventDefault(); redo() }
     }
-  }, [nodes, edges])
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [undo, redo])
+
+  const buildWorkflow = useCallback(() => ({
+    nodes: nodes.map((n) => ({
+      id: n.id,
+      node_type: n.data.nodeType,
+      params: n.data.params,
+      position: n.position,
+    })),
+    edges: edges.map((e) => ({
+      id: e.id,
+      source: e.source,
+      source_port: e.sourceHandle,
+      target: e.target,
+      target_port: e.targetHandle,
+    })),
+  }), [nodes, edges])
 
   const applyWorkflow = useCallback((workflow) => {
     const restoredNodes = workflow.nodes.map((node, index) => {
@@ -194,13 +240,7 @@ function Canvas() {
         id: node.id,
         type: 'qf',
         position: node.position || { x: 80 + index * 220, y: 120 },
-        data: {
-          nodeType: node.node_type,
-          spec,
-          params: node.params || {},
-          status: 'pending',
-          outputs: null,
-        },
+        data: { nodeType: node.node_type, spec, params: node.params || {} },
       }
     })
     setNodes(restoredNodes)
@@ -211,14 +251,18 @@ function Canvas() {
       target: edge.target,
       targetHandle: edge.target_port,
     })))
-    const maxNodeSuffix = restoredNodes.reduce((max, node) => {
-      const match = node.id.match(/-(\d+)$/)
-      return match ? Math.max(max, Number(match[1])) : max
+    const maxSuffix = restoredNodes.reduce((max, node) => {
+      const m = node.id.match(/-(\d+)$/)
+      return m ? Math.max(max, Number(m[1])) : max
     }, restoredNodes.length)
-    idRef.current = Math.max(idRef.current, maxNodeSuffix)
+    idRef.current = Math.max(idRef.current, maxSuffix)
+    setRunNodeStates({})
+    setRunId('')
+    setRunStatus('')
     setResult(null)
     setError('')
-  }, [setEdges, setNodes, specOf])
+    clearHistory()
+  }, [clearHistory, setEdges, setNodes, specOf])
 
   const onSave = useCallback(async () => {
     const payload = { name: workflowName.trim() || 'Untitled workflow', description: '', ...buildWorkflow() }
@@ -253,11 +297,27 @@ function Canvas() {
     }
   }, [applyWorkflow])
 
-  const onExport = useCallback(async () => {
-    if (!workflowId) {
-      setError('请先保存工作流，再导出 JSON')
-      return
+  const onDeleteWorkflow = useCallback(async (id) => {
+    const wf = savedWorkflows.find((w) => w.id === id)
+    if (!wf) return
+    if (!window.confirm(`确认删除工作流「${wf.name}」？此操作不可恢复。`)) return
+    setBusy(true)
+    try {
+      await deleteWorkflow(id)
+      if (workflowId === id) {
+        setWorkflowId('')
+        setWorkflowName('Untitled workflow')
+      }
+      await refreshWorkflows()
+    } catch (err) {
+      setError(`删除失败: ${err.message}`)
+    } finally {
+      setBusy(false)
     }
+  }, [refreshWorkflows, savedWorkflows, workflowId])
+
+  const onExport = useCallback(async () => {
+    if (!workflowId) { setError('请先保存工作流，再导出 JSON'); return }
     try {
       const workflow = await exportWorkflow(workflowId)
       const blob = new Blob([JSON.stringify(workflow, null, 2)], { type: 'application/json' })
@@ -297,10 +357,16 @@ function Canvas() {
     setEdges([])
     setWorkflowId('')
     setWorkflowName('Untitled workflow')
+    setRunNodeStates({})
+    setRunId('')
+    setRunStatus('')
     setResult(null)
     setError('')
-  }, [setEdges, setNodes])
+    setSelectedId(null)
+    clearHistory()
+  }, [clearHistory, setEdges, setNodes])
 
+  // ---- 异步运行 + WebSocket 实时状态 ----
   const onRun = useCallback(async () => {
     setError('')
     setResult(null)
@@ -312,65 +378,133 @@ function Canvas() {
         return
       }
       setBusy(true)
-      nodes.forEach((n) => patchNode(n.id, { status: 'pending', outputs: null }))
-      const r = await runWorkflow(wf)
-      setResult(r)
-      const byId = Object.fromEntries(r.nodes.map((s) => [s.node_id, s]))
-      nodes.forEach((n) => {
-        const st = byId[n.id]
-        if (st) patchNode(n.id, { status: st.status, outputs: st.outputs || null })
+      setRunNodeStates({})
+      setRunStatus('running')
+      const { run_id } = await submitRun({
+        nodes: wf.nodes,
+        edges: wf.edges,
+        workflow_id: workflowId || undefined,
+        workflow_name: workflowName,
       })
+      setRunId(run_id)
+      setRightTab('result')
+      refreshRuns().catch(() => {})
     } catch (err) {
+      setRunStatus('')
       setError(`运行失败: ${err.message}`)
     } finally {
       setBusy(false)
     }
-  }, [buildWorkflow, nodes, patchNode])
+  }, [buildWorkflow, refreshRuns, workflowId, workflowName])
+
+  // WebSocket 订阅
+  useEffect(() => {
+    if (!runId) return
+    let ws = null
+    let closed = false
+    let retry = 0
+
+    const applyNodeEvent = (nid, payload) => {
+      setRunNodeStates((prev) => ({ ...prev, [nid]: { ...(prev[nid] || {}), ...payload } }))
+    }
+
+    const connect = () => {
+      try {
+        ws = new WebSocket(runWsUrl(runId))
+      } catch {
+        return
+      }
+      ws.onmessage = (ev) => {
+        let msg
+        try { msg = JSON.parse(ev.data) } catch { return }
+        if (msg.kind === 'snapshot') {
+          const record = msg.payload
+          setRunStatus(record.status)
+          const states = {}
+          for (const [nid, st] of Object.entries(record.nodes || {})) states[nid] = st
+          setRunNodeStates(states)
+        } else if (msg.kind === 'node_running' || msg.kind === 'node_succeeded' || msg.kind === 'node_failed' || msg.kind === 'node_blocked') {
+          applyNodeEvent(msg.node_id, msg.payload)
+        } else if (msg.kind === 'run_succeeded' || msg.kind === 'run_failed') {
+          setRunStatus(msg.payload?.status || msg.kind)
+          refreshRuns().catch(() => {})
+        }
+      }
+      ws.onerror = () => { /* 网络层错误，交给 onclose 重连 */ }
+      ws.onclose = () => {
+        if (closed) return
+        retry += 1
+        if (retry <= 10) setTimeout(connect, 1500)
+      }
+    }
+    connect()
+    return () => { closed = true; if (ws) ws.close() }
+  }, [runId, refreshRuns])
+
+  // 运行状态 → 画布展示节点（派生数据，不进撤销历史）
+  const displayNodes = useMemo(() => nodes.map((n) => ({
+    ...n,
+    data: {
+      ...n.data,
+      status: runNodeStates[n.id]?.status || 'pending',
+      outputs: runNodeStates[n.id]?.outputs || null,
+    },
+  })), [nodes, runNodeStates])
+
+  const selectedNode = useMemo(
+    () => nodes.find((n) => n.id === selectedId) || null,
+    [nodes, selectedId],
+  )
+
+  const onNodeClick = useCallback((_, node) => {
+    setSelectedId(node.id)
+    setRightTab('props')
+  }, [])
+
+  const onPaneClick = useCallback(() => {
+    setSelectedId(null)
+  }, [])
+
+  const onNodesDelete = useCallback((deleted) => {
+    const ids = new Set(deleted.map((d) => d.id))
+    setEdges((eds) => eds.filter((e) => !ids.has(e.source) && !ids.has(e.target)))
+    setRunNodeStates((prev) => {
+      const next = { ...prev }
+      for (const id of ids) delete next[id]
+      return next
+    })
+    setSelectedId((cur) => (ids.has(cur) ? null : cur))
+  }, [setEdges])
 
   const autoConnectDemo = useCallback(() => {
-    // 用示例节点搭一个最小闭环：常量 -> 加法 -> 乘法
     setNodes([]); setEdges([])
+    clearHistory()
     const c = addNode(specOf('data.constant'), { x: 60, y: 160 })
     const a = addNode(specOf('math.add'), { x: 320, y: 120 })
     const m = addNode(specOf('math.multiply'), { x: 580, y: 160 })
-    patchNode(c, { params: { value: 8 } })
+    patchNodeParams(c, { value: 8 })
     setEdges([
       { id: 'e1', source: c, sourceHandle: 'value', target: a, targetHandle: 'a' },
       { id: 'e2', source: c, sourceHandle: 'value', target: a, targetHandle: 'b' },
       { id: 'e3', source: a, sourceHandle: 'result', target: m, targetHandle: 'a' },
       { id: 'e4', source: c, sourceHandle: 'value', target: m, targetHandle: 'b' },
     ])
-  }, [specOf, addNode, patchNode, setEdges, setNodes])
+  }, [addNode, clearHistory, patchNodeParams, setEdges, setNodes, specOf])
 
   return (
     <div className="qf-layout">
       <Palette specs={specs} onAddNode={addNode} />
-      <div className="qf-canvas-wrap">
-        <ReactFlow
-          nodes={nodes}
-          edges={edges}
-          nodeTypes={nodeTypes}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          onConnect={onConnect}
-          onDrop={onDrop}
-          onDragOver={onDragOver}
-          fitView
-        >
-          <Background gap={16} />
-          <Controls />
-          <MiniMap />
-        </ReactFlow>
-      </div>
-      <div className="qf-side">
-        <div className="qf-actions qf-workflow-actions">
+
+      <div className="qf-center">
+        <div className="qf-toolbar">
           <input
             className="qf-name-input"
             value={workflowName}
-            onChange={(event) => setWorkflowName(event.target.value)}
+            onChange={(e) => setWorkflowName(e.target.value)}
             aria-label="工作流名称"
+            style={{ width: 180 }}
           />
-          <select value={workflowId} onChange={(event) => onLoad(event.target.value)} disabled={busy}>
+          <select value={workflowId} onChange={(e) => onLoad(e.target.value)} disabled={busy} aria-label="已保存工作流">
             <option value="">选择已保存工作流</option>
             {savedWorkflows.map((workflow) => (
               <option key={workflow.id} value={workflow.id}>{workflow.name} · v{workflow.version}</option>
@@ -378,30 +512,105 @@ function Canvas() {
           </select>
           <button className="qf-btn" onClick={onNew} disabled={busy}>新建</button>
           <button className="qf-btn" onClick={onSave} disabled={busy}>保存</button>
+          <button className="qf-btn" onClick={() => onDeleteWorkflow(workflowId)} disabled={busy || !workflowId} title="删除当前工作流">删除</button>
           <button className="qf-btn" onClick={() => importRef.current?.click()} disabled={busy}>导入 JSON</button>
           <button className="qf-btn" onClick={onExport} disabled={busy || !workflowId}>导出 JSON</button>
+          <span className="qf-toolbar-sep" />
+          <button className="qf-btn" onClick={undo} disabled={!canUndo} title="撤销 (Ctrl+Z)">↶</button>
+          <button className="qf-btn" onClick={redo} disabled={!canRedo} title="重做 (Ctrl+Shift+Z)">↷</button>
+          <span className="qf-toolbar-sep" />
+          <button className="qf-btn" onClick={autoConnectDemo}>示例</button>
+          <button className="qf-btn qf-btn-primary" onClick={onRun} disabled={busy}>
+            {busy ? '提交中…' : '运行'}
+          </button>
+          {runStatus && <span className={`qf-run-pill qf-run-${runStatus}`}>{runStatus}</span>}
           <input ref={importRef} type="file" accept="application/json,.json" hidden onChange={onImport} />
         </div>
-        <div className="qf-actions">
-          <button className="qf-btn" onClick={autoConnectDemo}>示例工作流</button>
-          <button className="qf-btn qf-btn-primary" onClick={onRun} disabled={busy}>
-            {busy ? '运行中…' : '运行'}
+
+        <div className="qf-canvas-wrap">
+          <ReactFlow
+            nodes={displayNodes}
+            edges={edges}
+            nodeTypes={nodeTypes}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            onConnect={onConnect}
+            onDrop={onDrop}
+            onDragOver={onDragOver}
+            onNodeClick={onNodeClick}
+            onPaneClick={onPaneClick}
+            onNodesDelete={onNodesDelete}
+            fitView
+          >
+            <Background gap={16} />
+            <Controls />
+            <MiniMap />
+          </ReactFlow>
+        </div>
+      </div>
+
+      <div className="qf-side">
+        <div className="qf-tabs">
+          <button className={`qf-tab ${rightTab === 'props' ? 'qf-tab-active' : ''}`} onClick={() => setRightTab('props')}>
+            属性
+          </button>
+          <button className={`qf-tab ${rightTab === 'result' ? 'qf-tab-active' : ''}`} onClick={() => setRightTab('result')}>
+            运行结果
+          </button>
+          <button className={`qf-tab ${rightTab === 'runs' ? 'qf-tab-active' : ''}`} onClick={() => setRightTab('runs')}>
+            运行记录
           </button>
         </div>
-        <ResultPanel result={result} error={error} busy={busy} />
+        <div className="qf-side-body">
+          {rightTab === 'props' && (
+            <PropertyPanel node={selectedNode} onChange={patchNodeParams} />
+          )}
+          {rightTab === 'result' && (
+            <ResultPanel
+              result={result}
+              error={error}
+              busy={busy}
+              runStatus={runStatus}
+              onClose={() => setRunStatus('')}
+            />
+          )}
+          {rightTab === 'runs' && (
+            <RunsPanel
+              runs={runs}
+              activeRunId={runId}
+              onSelectRun={(id) => setRunId(id)}
+              onRefresh={() => refreshRuns().catch(() => {})}
+            />
+          )}
+        </div>
       </div>
     </div>
   )
 }
 
 export default function App() {
+  const [view, setView] = useState('editor')
   return (
     <ReactFlowProvider>
       <div className="qf-topbar">
         <span className="qf-logo">⚡ QuantFlow</span>
-        <span className="qf-sub">量化工作流平台 · M1 原型</span>
+        <span className="qf-sub">量化工作流平台 · M3 节点库编辑器</span>
+        <nav className="qf-nav">
+          <button
+            className={`qf-nav-btn ${view === 'editor' ? 'qf-nav-active' : ''}`}
+            onClick={() => setView('editor')}
+          >
+            工作流编辑器
+          </button>
+          <button
+            className={`qf-nav-btn ${view === 'chart' ? 'qf-nav-active' : ''}`}
+            onClick={() => setView('chart')}
+          >
+            行情图表
+          </button>
+        </nav>
       </div>
-      <Canvas />
+      {view === 'editor' ? <Canvas /> : <ChartView />}
     </ReactFlowProvider>
   )
 }
