@@ -6,8 +6,11 @@ import base64
 import hashlib
 import hmac
 import json
+import smtplib
+import ssl
 import time
-from typing import Any, Dict, Optional
+from email.message import EmailMessage
+from typing import Any, Dict, List, Optional, Sequence
 
 import httpx
 
@@ -80,6 +83,114 @@ class FeishuChannel(NotificationChannel):
 CHANNEL_REGISTRY: Dict[str, type] = {
     WebhookChannel.type: WebhookChannel,
     FeishuChannel.type: FeishuChannel,
+}
+
+
+def _send_email(
+    smtp_host: str,
+    smtp_port: int,
+    sender: str,
+    recipients: Sequence[str],
+    subject: str,
+    body: str,
+    username: Optional[str] = None,
+    password: Optional[str] = None,
+    use_tls: bool = True,
+    timeout: float = 15.0,
+) -> None:
+    """通过 SMTP 发送纯文本邮件；抽取为独立函数便于测试 monkeypatch。
+
+    - ``use_tls=True``：隐式 SSL（SMTP_SSL，常用于 465）；
+    - ``use_tls=False``：明文连接后 STARTTLS（常用于 587）。
+    """
+    msg = EmailMessage()
+    msg["From"] = sender
+    msg["To"] = ", ".join(recipients)
+    msg["Subject"] = subject
+    msg.set_content(body)
+
+    if use_tls:
+        server = smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=timeout, context=ssl.create_default_context())
+    else:
+        server = smtplib.SMTP(smtp_host, smtp_port, timeout=timeout)
+    try:
+        if not use_tls:
+            server.starttls(context=ssl.create_default_context())
+        if username:
+            server.login(username, password or "")
+        server.sendmail(sender, list(recipients), msg.as_string())
+    finally:
+        server.quit()
+
+
+class EmailChannel(NotificationChannel):
+    """邮件渠道（SMTP）：运行完成/失败时向配置的收件人发送邮件。
+
+    配置（config）：
+      - smtp_host  必填，SMTP 服务器地址
+      - smtp_port  端口，默认 465（use_tls=True）或 587（use_tls=False）
+      - username   可选，SMTP 登录用户名（为空则不登录）
+      - password   可选，SMTP 登录密码/授权码
+      - use_tls    bool，默认 True（SMTP_SSL）；False 走 STARTTLS
+      - from_addr  可选，发件人；缺省用 username 或 username@smtp_host 兜底
+      - to_addrs   必填，收件人；支持 list 或逗号/分号分隔字符串
+    """
+
+    type = "email"
+
+    def validate(self) -> None:
+        if not self.config.get("smtp_host"):
+            raise ValueError("邮件渠道需要 smtp_host")
+        to = self.config.get("to_addrs")
+        if not to:
+            raise ValueError("邮件渠道需要 to_addrs（收件人）")
+        if isinstance(to, str):
+            if not to.strip():
+                raise ValueError("邮件渠道 to_addrs 不能为空")
+        elif isinstance(to, (list, tuple)):
+            if not to:
+                raise ValueError("邮件渠道 to_addrs 不能为空")
+
+    @staticmethod
+    def _normalize_recipients(to_addrs: Any) -> List[str]:
+        if isinstance(to_addrs, str):
+            return [a.strip() for a in to_addrs.replace(";", ",").split(",") if a.strip()]
+        return [str(a).strip() for a in to_addrs if str(a).strip()]
+
+    def send(self, message: NotificationMessage) -> None:
+        host = self.config.get("smtp_host")
+        if not host:
+            raise ValueError("邮件渠道未配置 smtp_host")
+        port = int(self.config.get("smtp_port", 465))
+        use_tls = bool(self.config.get("use_tls", True))
+        username = self.config.get("username") or None
+        password = self.config.get("password") or None
+        sender = self.config.get("from_addr") or username or ""
+        if not sender:
+            raise ValueError("邮件渠道无法推断发件人（请配置 from_addr 或 username）")
+        recipients = self._normalize_recipients(self.config.get("to_addrs"))
+        if not recipients:
+            raise ValueError("邮件渠道无有效收件人")
+        subject = f"[QuantFlow] {message.title}"
+        body = message.to_text()
+        _send_email(
+            smtp_host=host,
+            smtp_port=port,
+            sender=sender,
+            recipients=recipients,
+            subject=subject,
+            body=body,
+            username=username,
+            password=password,
+            use_tls=use_tls,
+        )
+
+
+# 已注册渠道类型 → 实现类（置于所有渠道类定义之后）
+CHANNEL_REGISTRY: Dict[str, type] = {
+    WebhookChannel.type: WebhookChannel,
+    FeishuChannel.type: FeishuChannel,
+    EmailChannel.type: EmailChannel,
 }
 
 

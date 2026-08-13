@@ -16,6 +16,7 @@ import PropertyPanel from './PropertyPanel.jsx'
 import ChartView from './ChartView.jsx'
 import Monitoring from './Monitoring.jsx'
 import FactorLibrary from './FactorLibrary.jsx'
+import Notifications from './Notifications.jsx'
 import AuthModal from './AuthModal.jsx'
 import { useGraphHistory } from './useHistory.js'
 import {
@@ -706,6 +707,12 @@ export default function App() {
           >
             因子库
           </button>
+          <button
+            className={`qf-nav-btn ${view === 'notify' ? 'qf-nav-active' : ''}`}
+            onClick={() => setView('notify')}
+          >
+            通知渠道
+          </button>
         </nav>
         <div className="qf-topbar-right">
           {user && (
@@ -742,6 +749,7 @@ export default function App() {
       {view === 'chart' && <ChartView />}
       {view === 'monitor' && <Monitoring />}
       {view === 'factor' && <FactorLibrary />}
+      {view === 'notify' && <Notifications />}
       {authOpen && (
         <AuthModal onClose={() => setAuthOpen(false)} onAuthed={handleAuthed} />
       )}

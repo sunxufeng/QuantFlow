@@ -127,3 +127,16 @@ export const factorAnalyze = (payload) => request('/factors/analyze', {
   method: 'POST',
   body: JSON.stringify(payload),
 })
+
+// ---- 通知渠道配置（V1.1 N5）----
+export const notificationsList = () => request('/notifications')
+export const notificationsCreate = (channel) => request('/notifications', {
+  method: 'POST',
+  body: JSON.stringify(channel),
+})
+export const notificationsDelete = (id) => request(`/notifications/${id}`, {
+  method: 'DELETE',
+})
+export const notificationsTest = (id) => request(`/notifications/${id}/test`, {
+  method: 'POST',
+})

@@ -21,7 +21,7 @@ router = APIRouter()
 
 
 class ChannelCreate(BaseModel):
-    type: str = Field(..., description="webhook | feishu")
+    type: str = Field(..., description="webhook | feishu | email")
     name: str
     config: Dict[str, Any] = Field(default_factory=dict)
 

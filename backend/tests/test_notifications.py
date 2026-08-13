@@ -187,3 +187,84 @@ def test_api_configure_invalid_type():
         headers=headers,
     )
     assert resp.status_code == 400
+
+
+# --------------------------------------------------------------------------- #
+# 邮件渠道（N5 补齐）
+# --------------------------------------------------------------------------- #
+def test_email_channel_send(monkeypatch):
+    captured = {}
+
+    def fake_send(
+        smtp_host, smtp_port, sender, recipients, subject, body,
+        username=None, password=None, use_tls=True, timeout=15.0,
+    ):
+        captured.update(
+            smtp_host=smtp_host, smtp_port=smtp_port, sender=sender,
+            recipients=list(recipients), subject=subject, body=body,
+            username=username, use_tls=use_tls,
+        )
+
+    monkeypatch.setattr(channels, "_send_email", fake_send)
+    ch = channels.EmailChannel(
+        name="mail",
+        config={
+            "smtp_host": "smtp.example.com",
+            "smtp_port": 465,
+            "username": "bot@example.com",
+            "password": "pw",
+            "from_addr": "bot@example.com",
+            "to_addrs": "a@x.com, b@x.com",
+        },
+    )
+    ch.send(NotificationMessage(title="运行成功", content="done", fields={"run_id": "r1"}))
+    assert captured["smtp_host"] == "smtp.example.com"
+    assert captured["recipients"] == ["a@x.com", "b@x.com"]
+    assert captured["subject"] == "[QuantFlow] 运行成功"
+    assert "run_id: r1" in captured["body"]
+    assert captured["use_tls"] is True
+
+
+def test_email_channel_validate_requires_host_and_recipients():
+    with pytest.raises(ValueError):
+        channels.EmailChannel(name="m", config={}).validate()
+    with pytest.raises(ValueError):
+        channels.EmailChannel(name="m", config={"smtp_host": "h"}).validate()
+    # to_addrs 为空字符串也不行
+    with pytest.raises(ValueError):
+        channels.EmailChannel(name="m", config={"smtp_host": "h", "to_addrs": ""}).validate()
+
+
+def test_email_channel_via_api(monkeypatch):
+    captured = {}
+
+    def fake_send(
+        smtp_host, smtp_port, sender, recipients, subject, body,
+        username=None, password=None, use_tls=True, timeout=15.0,
+    ):
+        captured.update(smtp_host=smtp_host, recipients=list(recipients))
+
+    monkeypatch.setattr(channels, "_send_email", fake_send)
+    headers = _auth("ntf_email_user")
+    resp = client.post(
+        "/api/notifications",
+        json={
+            "type": "email",
+            "name": "运维邮箱",
+            "config": {
+                "smtp_host": "smtp.example.com",
+                "smtp_port": 465,
+                "username": "bot@example.com",
+                "from_addr": "bot@example.com",
+                "to_addrs": "ops@x.com",
+            },
+        },
+        headers=headers,
+    )
+    assert resp.status_code == 201
+    cid = resp.json()["id"]
+    # 测试发送走真实 send（monkeypatch 生效）
+    t = client.post(f"/api/notifications/{cid}/test", headers=headers)
+    assert t.status_code == 202
+    assert captured["smtp_host"] == "smtp.example.com"
+    assert captured["recipients"] == ["ops@x.com"]
