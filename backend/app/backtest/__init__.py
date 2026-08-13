@@ -22,6 +22,7 @@ from .engine import (
 )
 from .fund import FundAccount, FundOrderRejected, FundPosition, FundTrade
 from .metrics import PerformanceMetrics
+from .portfolio import PortfolioBacktest
 from .report import BacktestReportStore, build_report
 from .strategies import (
     STRATEGY_REGISTRY,
@@ -53,6 +54,7 @@ __all__ = [
     "Order",
     "OrderRejected",
     "PerformanceMetrics",
+    "PortfolioBacktest",
     "Position",
     "STRATEGY_REGISTRY",
     "Strategy",

@@ -16,7 +16,8 @@ from typing import Dict, List, Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from ..backtest import BacktestEngine, BacktestReportStore, build_report
+from ..backtest import BacktestEngine, BacktestError, BacktestReportStore, build_report
+from ..backtest.portfolio import PortfolioBacktest
 from ..backtest.strategies import STRATEGY_REGISTRY
 from ..market.models import Bar, Instrument
 from ..market.service import market_service
@@ -142,3 +143,52 @@ def get_report(run_id: str) -> dict:
         return report_store.load(run_id)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+# --------------------------------------------------------------------------- #
+# 组合回测（V1.2）
+# --------------------------------------------------------------------------- #
+class PortfolioLegRequest(BaseModel):
+    strategy: str = Field(..., description="策略名称（见 /strategies）")
+    params: Dict[str, object] = Field(default_factory=dict, description="策略参数")
+    symbols: List[str] = Field(..., min_length=1, description="回测标的")
+    asset_types: Dict[str, str] = Field(
+        default_factory=dict, description="标的资产类型覆盖（symbol -> stock/fund）"
+    )
+    weight: float = Field(default=1.0, gt=0, description="组合权重（自动归一化）")
+
+
+class PortfolioRunRequest(BaseModel):
+    legs: List[PortfolioLegRequest] = Field(..., min_length=1, description="组合各腿")
+    initial_cash: float = Field(default=1_000_000.0, gt=0, description="总初始资金")
+    start: str = Field(..., description="起始日期 YYYY-MM-DD")
+    end: str = Field(..., description="结束日期 YYYY-MM-DD")
+    rebalance: str = Field(default="none", description="再平衡方式（当前仅支持 none）")
+
+
+@router.post("/portfolio", summary="组合回测（多腿合并净值）")
+def run_portfolio(payload: PortfolioRunRequest) -> dict:
+    if payload.end < payload.start:
+        raise HTTPException(status_code=422, detail="end 不得早于 start")
+    if payload.rebalance != "none":
+        raise HTTPException(
+            status_code=422, detail=f"暂不支持再平衡方式 {payload.rebalance!r}（当前仅 none）"
+        )
+    legs = [l.model_dump() for l in payload.legs]
+    try:
+        pb = PortfolioBacktest(
+            legs=legs,
+            initial_cash=payload.initial_cash,
+            start=payload.start,
+            end=payload.end,
+            rebalance=payload.rebalance,
+        )
+        report = pb.run()
+    except BacktestError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception as exc:  # 行情源失败统一转 503
+        logger.warning("portfolio backtest failed: %s", exc)
+        raise HTTPException(status_code=503, detail=f"组合回测失败: {exc}") from exc
+    report_store.save(report)
+    logger.info("portfolio backtest %s generated (%d legs)", report["run_id"], len(legs))
+    return report
