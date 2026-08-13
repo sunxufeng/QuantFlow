@@ -2,7 +2,7 @@
 
 对标 PandaAI QuantFlow 的**自主实现方案**（全部代码自研，避开上游 GPL 传染）。
 
-**里程碑进度**：M1 最小闭环 ✅ → M2 数据/回测/执行引擎 ✅ → M3 节点库与前端编辑器 ✅ → M4 业务能力（用户/RBAC/项目/日志/监控/Docker）✅ → M5 测试与发布（进行中）
+**里程碑进度**：M1 最小闭环 ✅ → M2 数据/回测/执行引擎 ✅ → M3 节点库与前端编辑器 ✅ → M4 业务能力（用户/RBAC/项目/日志/监控/Docker）✅ → M5 测试与发布 ✅ → **V1.3 核心引擎补完 ✅**（期货回测 + 示例工作流模板库，版本 1.3.0）
 
 ## 已实现能力
 
@@ -11,12 +11,15 @@
 | 插件框架 | `BaseWorkNode` 抽象 + `@work_node` 装饰器 + `PluginRegistry` 注册表，类型系统（number/string/boolean/array/table/...） |
 | DAG 引擎 | 拓扑排序 / 环检测 / 端口存在性与类型校验 / 单输入源约束 / 并发执行 / 失败传播（下游 BLOCKED，独立分支继续） |
 | 节点库（M3） | 24 类节点：数据源（行情/表格）、处理（转换/去重/合并）、特征（移动平均/RSI/布林带）、因子、ML（LinearRegression/DecisionTree/...）、回测入口 |
-| 回测引擎（M2） | 股票账户（T+1/涨跌停/停牌/佣金/滑点）+ 基金账户（T+1 确认/申购费/定投），绩效报告（年化/回撤/夏普/换手） |
+| 回测引擎（M2→V1.3） | 股票账户（T+1/涨跌停/停牌/佣金/滑点）+ 基金账户（T+1 确认/申购费/定投）+ **期货账户（保证金占用 / 盯市浮盈浮亏 / 强平 / 多空净仓）**；组合回测（多资产多腿）；绩效报告（年化/回撤/夏普/换手） |
+| 期货策略（V1.3） | `futures_ma_cross` 均线金叉做多、死叉做空（多空净仓切换），经回测 API / 组合 / 节点全链路可用 |
 | 数据层（M2） | 多数据源（tushare / fixture 内置样例）+ 内存缓存 + 冷启动自动初始化 |
 | 执行引擎（M2） | 运行实例持久化 + WebSocket 状态实时推送（节点级状态/输出预览） |
+| 定时调度（V1.2） | APScheduler 定时全量行情同步 + 更新状态监控；`QF_DISABLE_SCHEDULER` 可关 |
 | 业务能力（M4） | 用户注册/登录（PBKDF2 + JWT）、RBAC（admin/user/viewer）、项目与成员管理（owner/admin/member/viewer）、结构化日志查询、监控指标（Prometheus 格式） |
-| 前端 | React + Vite + React Flow：节点面板（搜索/分组）、属性面板（schema 表单校验）、画布（类型校验/撤销重做）、运行可视化（WS 实时着色）、K线图表页、工作流管理（列表/重命名/JSON 导入导出）、登录/项目切换/监控页 |
-| 测试 | 210 个 pytest 用例 + 前端生产构建，GitHub Actions CI（backend 单测 / frontend 构建 / Docker 构建） |
+| 模板库（V1.3） | 内置示例工作流模板（股票均线 / 股票动量 / 期货均线多空），前端「模板库」页一键加载到画布 |
+| 前端 | React + Vite + React Flow：节点面板（搜索/分组）、属性面板（schema 表单校验）、画布（类型校验/撤销重做）、运行可视化（WS 实时着色）、K线图表页、模板库、工作流管理（列表/重命名/JSON 导入导出）、登录/项目切换/监控页 |
+| 测试 | 344 个 pytest 用例 + 前端生产构建，GitHub Actions CI（backend 单测 / frontend 构建 / Docker 构建） |
 
 ## 快速启动
 
@@ -69,10 +72,20 @@ systemd 单元（`deploy/systemd/`）：
 ## 测试
 
 ```bash
-cd backend && .venv/bin/python -m pytest tests/ -q   # 210 个用例
+cd backend && .venv/bin/python -m pytest tests/ -q   # 344 个用例
 ```
 
-覆盖：节点注册/规格/参数解析、DAG 拓扑/环检测/端口校验、执行引擎（线性/菱形并行/失败传播/序列化）、回测引擎（股票 T+1/涨跌停/停牌 + 基金 T+1 确认/费用/定投）、数据层、REST API、用户/JWT/RBAC（test_auth）、项目与成员权限（test_projects）、结构化日志（test_logs）、监控接口（test_monitoring）。
+覆盖：节点注册/规格/参数解析、DAG 拓扑/环检测/端口校验、执行引擎（线性/菱形并行/失败传播/序列化）、回测引擎（股票 T+1/涨跌停/停牌 + 基金 T+1 确认/费用/定投 + **期货保证金/强平/多空净仓** + 组合回测）、数据层、REST API、用户/JWT/RBAC（test_auth）、项目与成员权限（test_projects）、结构化日志（test_logs）、监控接口（test_monitoring）。
+
+## API 文档
+
+后端基于 FastAPI 自动生成 OpenAPI 文档，路径统一收口在 `/api` 前缀下：
+
+- 交互式 Swagger UI：`/api/docs`
+- ReDoc：`/api/redoc`
+- OpenAPI Schema：`/api/openapi.json`
+
+本地开发（`uvicorn`，后端 :8000）与 Docker / 生产反代（`:8080` → 后端 `/api/*`）均可直接访问，无需额外配置。
 
 ## 目录结构
 

@@ -27,8 +27,12 @@ logger = logging.getLogger("quantflow")
 
 app = FastAPI(
     title="QuantFlow 量化工作流平台",
-    description="可视化量化工作流平台（V1.0）",
+    description="可视化量化工作流平台（股票 / 基金 / 期货 回测 + 工作流编排）",
     version=settings.APP_VERSION,
+    # 文档路径统一收口到 /api 前缀，使 Swagger/OpenAPI 能经反向代理（prod/docker）直接访问。
+    docs_url="/api/docs",
+    redoc_url="/api/redoc",
+    openapi_url="/api/openapi.json",
 )
 
 app.add_middleware(
