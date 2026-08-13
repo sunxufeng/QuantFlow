@@ -140,3 +140,10 @@ export const notificationsDelete = (id) => request(`/notifications/${id}`, {
 export const notificationsTest = (id) => request(`/notifications/${id}/test`, {
   method: 'POST',
 })
+
+// ---- LLM 策略助手（V1.1 N1）----
+export const llmStatus = () => request('/llm/status')
+export const llmAssist = (payload) => request('/llm/assist', {
+  method: 'POST',
+  body: JSON.stringify(payload),
+})

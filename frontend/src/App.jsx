@@ -17,6 +17,7 @@ import ChartView from './ChartView.jsx'
 import Monitoring from './Monitoring.jsx'
 import FactorLibrary from './FactorLibrary.jsx'
 import Notifications from './Notifications.jsx'
+import LLMAssistant from './LLMAssistant.jsx'
 import AuthModal from './AuthModal.jsx'
 import { useGraphHistory } from './useHistory.js'
 import {
@@ -713,6 +714,12 @@ export default function App() {
           >
             通知渠道
           </button>
+          <button
+            className={`qf-nav-btn ${view === 'llm' ? 'qf-nav-active' : ''}`}
+            onClick={() => setView('llm')}
+          >
+            LLM 助手
+          </button>
         </nav>
         <div className="qf-topbar-right">
           {user && (
@@ -750,6 +757,7 @@ export default function App() {
       {view === 'monitor' && <Monitoring />}
       {view === 'factor' && <FactorLibrary />}
       {view === 'notify' && <Notifications />}
+      {view === 'llm' && <LLMAssistant />}
       {authOpen && (
         <AuthModal onClose={() => setAuthOpen(false)} onAuthed={handleAuthed} />
       )}

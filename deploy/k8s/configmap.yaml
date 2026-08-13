@@ -16,3 +16,12 @@ data:
   # 跨域（按需放开前端来源）
   QF_CORS_ORIGINS: "http://localhost:8080"
   QF_DEBUG: "0"
+  # ---- V1.1 N1 LLM 策略助手 ----
+  # 默认 mock（无需 key，可演示）；启用真实大模型改为 openai 并配置 key：
+  #   QF_LLM_PROVIDER: "openai"
+  #   QF_LLM_API_KEY: "<你的 API Key>"   # 建议放 Secret 而非 ConfigMap
+  # 兼容 OpenAI 协议网关（DeepSeek / 通义 / 自建）可一并覆盖 QF_LLM_BASE_URL / QF_LLM_MODEL
+  QF_LLM_PROVIDER: "mock"
+  QF_LLM_API_KEY: ""
+  QF_LLM_BASE_URL: "https://api.openai.com/v1"
+  QF_LLM_MODEL: "gpt-4o-mini"
