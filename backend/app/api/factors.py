@@ -10,15 +10,95 @@ POST /api/factors/analyze —— 对任意「因子 + 下期收益」宽表做�
 
 from __future__ import annotations
 
+from typing import Optional
+
 import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from ..core.auth import get_current_user
 from ..factors.analyzer import FactorAnalyzer
+from ..factors import library as factor_library
 from ..market.service import market_service
 
 router = APIRouter()
+
+
+# ----------------------------- 因子库 CRUD（V1.1 N3） -----------------------------
+
+
+class FactorCreateRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=80, description="因子名称")
+    expression: str = Field(..., min_length=1, description="pandas 表达式，如 close.pct_change(20)")
+    category: str = Field(default="自定义", max_length=40, description="类别")
+    description: str = Field(default="", max_length=500, description="说明")
+    params: dict = Field(default_factory=dict, description="附加参数（JSON）")
+
+
+class FactorUpdateRequest(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=80)
+    expression: Optional[str] = Field(None, min_length=1)
+    category: Optional[str] = Field(None, max_length=40)
+    description: Optional[str] = Field(None, max_length=500)
+    params: Optional[dict] = None
+
+
+@router.get("/factors/library", summary="因子库列表（V1.1 N3）")
+def list_factor_library(
+    category: Optional[str] = None,
+    user=Depends(get_current_user),
+) -> dict:
+    items = factor_library.list_factors(owner_id=user["id"], category=category)
+    return {"items": items, "total": len(items)}
+
+
+@router.post("/factors/library", summary="新建因子定义（V1.1 N3）", status_code=201)
+def create_factor_definition(
+    req: FactorCreateRequest,
+    user=Depends(get_current_user),
+) -> dict:
+    factor = factor_library.create_factor(
+        name=req.name,
+        expression=req.expression,
+        category=req.category,
+        description=req.description,
+        params=req.params,
+        owner_id=user["id"],
+    )
+    return factor
+
+
+@router.get("/factors/library/{factor_id}", summary="因子定义详情（V1.1 N3）")
+def get_factor_definition(factor_id: str, user=Depends(get_current_user)) -> dict:
+    factor = factor_library.get_factor(factor_id)
+    if factor is None:
+        raise HTTPException(status_code=404, detail="因子定义不存在")
+    return factor
+
+
+@router.put("/factors/library/{factor_id}", summary="更新因子定义（V1.1 N3）")
+def update_factor_definition(
+    factor_id: str,
+    req: FactorUpdateRequest,
+    user=Depends(get_current_user),
+) -> dict:
+    factor = factor_library.update_factor(
+        factor_id,
+        name=req.name,
+        expression=req.expression,
+        category=req.category,
+        description=req.description,
+        params=req.params,
+    )
+    if factor is None:
+        raise HTTPException(status_code=404, detail="因子定义不存在")
+    return factor
+
+
+@router.delete("/factors/library/{factor_id}", summary="删除因子定义（V1.1 N3）", status_code=204)
+def delete_factor_definition(factor_id: str, user=Depends(get_current_user)) -> None:
+    if not factor_library.delete_factor(factor_id):
+        raise HTTPException(status_code=404, detail="因子定义不存在")
 
 
 class FactorAnalyzeRequest(BaseModel):

@@ -150,6 +150,21 @@ CREATE TABLE IF NOT EXISTS schedules (
     last_run_id   TEXT,
     next_run_at   TEXT
 );
+
+-- V1.1 N3 因子库：用户可持久化的因子定义（表达式 + 类别 + 参数），供工作流与分析复用
+CREATE TABLE IF NOT EXISTS factor_library (
+    id          TEXT PRIMARY KEY,
+    name        TEXT NOT NULL,
+    category    TEXT NOT NULL DEFAULT '自定义',
+    expression  TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    params      TEXT NOT NULL DEFAULT '{}',
+    owner_id    TEXT,
+    created_at  TEXT NOT NULL,
+    updated_at  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_factor_library_owner ON factor_library(owner_id);
+
 """
 
 

@@ -15,6 +15,7 @@ import Palette from './Palette.jsx'
 import PropertyPanel from './PropertyPanel.jsx'
 import ChartView from './ChartView.jsx'
 import Monitoring from './Monitoring.jsx'
+import FactorLibrary from './FactorLibrary.jsx'
 import AuthModal from './AuthModal.jsx'
 import { useGraphHistory } from './useHistory.js'
 import {
@@ -699,6 +700,12 @@ export default function App() {
           >
             系统监控
           </button>
+          <button
+            className={`qf-nav-btn ${view === 'factor' ? 'qf-nav-active' : ''}`}
+            onClick={() => setView('factor')}
+          >
+            因子库
+          </button>
         </nav>
         <div className="qf-topbar-right">
           {user && (
@@ -734,6 +741,7 @@ export default function App() {
       {view === 'editor' && <Canvas projectId={projectId} />}
       {view === 'chart' && <ChartView />}
       {view === 'monitor' && <Monitoring />}
+      {view === 'factor' && <FactorLibrary />}
       {authOpen && (
         <AuthModal onClose={() => setAuthOpen(false)} onAuthed={handleAuthed} />
       )}

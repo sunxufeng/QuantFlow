@@ -107,3 +107,23 @@ export const fetchInstruments = () => request('/market/instruments')
 export const fetchBars = (symbol, start, end) => request(
   `/market/bars?symbol=${encodeURIComponent(symbol)}&as_table=false${start ? `&start=${start}` : ''}${end ? `&end=${end}` : ''}`,
 )
+
+// ---- 因子库 CRUD（V1.1 N3）----
+export const factorLibraryList = (category) => request(
+  `/factors/library${category ? `?category=${encodeURIComponent(category)}` : ''}`,
+)
+export const factorLibraryCreate = (factor) => request('/factors/library', {
+  method: 'POST',
+  body: JSON.stringify(factor),
+})
+export const factorLibraryUpdate = (id, factor) => request(`/factors/library/${id}`, {
+  method: 'PUT',
+  body: JSON.stringify(factor),
+})
+export const factorLibraryDelete = (id) => request(`/factors/library/${id}`, {
+  method: 'DELETE',
+})
+export const factorAnalyze = (payload) => request('/factors/analyze', {
+  method: 'POST',
+  body: JSON.stringify(payload),
+})

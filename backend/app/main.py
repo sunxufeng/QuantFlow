@@ -81,9 +81,16 @@ async def startup() -> None:
     logger.info("节点库加载完成，共 %d 种节点", _node_count())
     from .core.scheduler import workflow_scheduler
     from .market.scheduler import data_sync_service
+    from .factors import library as factor_library
 
     data_sync_service.start()
     workflow_scheduler.start()
+    try:
+        seeded = factor_library.seed_defaults()
+        if seeded:
+            logger.info("因子库已写入 %d 个内置因子", seeded)
+    except Exception as exc:  # pragma: no cover - 启动容错
+        logger.warning("因子库初始化失败（可忽略）：%s", exc)
 
 
 def _node_count() -> int:
