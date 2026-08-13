@@ -52,6 +52,7 @@ def _table_to_bars(table: DataTable) -> List[Any]:
         PortSpec("equity", "table", label="净值曲线"),
         PortSpec("trades", "table", label="交易明细"),
         PortSpec("summary", "table", label="概要"),
+        PortSpec("attribution", "string", label="绩效归因"),
     ],
     params=[
         ParamSpec("strategy", "string", default="buy_hold", label="策略",
@@ -111,6 +112,26 @@ class BacktestRunNode(BaseWorkNode):
             instruments={symbol: instrument},
         )
         result = engine.run()
+        # 基准：买入持有（首笔资金按首日收盘建仓，随收盘价缩放）
+        benchmark_values = None
+        try:
+            if bars:
+                first_close = float(bars[0].close)
+                benchmark_values = [
+                    float(self.params.get("initial_cash") or 1_000_000.0) * (float(b.close) / first_close)
+                    for b in bars
+                ]
+        except (IndexError, KeyError, TypeError, ValueError):
+            benchmark_values = None
+        from ..backtest.metrics import PerformanceMetrics
+
+        pm = PerformanceMetrics(
+            result.equity_curve,
+            result.engine.initial_cash,
+            result.trades,
+            benchmark_values=benchmark_values,
+        )
+        attr = pm.to_dict()["attribution"]
         equity = DataTable(
             columns=["date", "cash", "market_value", "total_value", "daily_return"],
             rows=[
@@ -148,20 +169,52 @@ class BacktestRunNode(BaseWorkNode):
         )
         total = equity.rows[-1]["total_value"] if equity.rows else 0.0
         base = equity.rows[0]["total_value"] if equity.rows else 0.0
-        summary = DataTable(
-            columns=["metric", "value"],
-            rows=[
-                {"metric": "strategy", "value": strategy_name},
-                {"metric": "symbol", "value": symbol},
-                {"metric": "days", "value": len(equity.rows)},
-                {"metric": "initial_cash", "value": float(self.params.get("initial_cash") or 1_000_000.0)},
-                {"metric": "final_value", "value": round(total, 2)},
-                # 与 equity 曲线同口径：相对首日净值（已含首日成本）
-                {"metric": "total_return", "value": round(total / base - 1.0, 6) if base else 0.0},
-                {"metric": "trade_count", "value": len(trades.rows)},
-            ],
-        )
-        return {"equity": equity, "trades": trades, "summary": summary}
+        summary_rows = [
+            {"metric": "strategy", "value": strategy_name},
+            {"metric": "symbol", "value": symbol},
+            {"metric": "days", "value": len(equity.rows)},
+            {"metric": "initial_cash", "value": float(self.params.get("initial_cash") or 1_000_000.0)},
+            {"metric": "final_value", "value": round(total, 2)},
+            # 与 equity 曲线同口径：相对首日净值（已含首日成本）
+            {"metric": "total_return", "value": round(total / base - 1.0, 6) if base else 0.0},
+            {"metric": "trade_count", "value": len(trades.rows)},
+        ]
+        # 绩效归因（V1.5）：交易层面 + 曲线层面 + 基准对比
+        trade_attr = attr.get("trade", {})
+        if trade_attr:
+            for key, label in [
+                ("profit_factor", "盈亏比(profit_factor)"),
+                ("avg_win", "平均盈利"),
+                ("avg_loss", "平均亏损"),
+                ("payoff_ratio", " payoff_ratio"),
+                ("max_win_streak", "最大连胜"),
+                ("max_loss_streak", "最大连亏"),
+            ]:
+                if key in trade_attr:
+                    summary_rows.append({"metric": label, "value": round(trade_attr[key], 4) if isinstance(trade_attr[key], float) else trade_attr[key]})
+        curve_attr = attr.get("curve", {})
+        if curve_attr:
+            if "max_drawdown_days" in curve_attr:
+                summary_rows.append({"metric": "最大回撤天数", "value": curve_attr["max_drawdown_days"]})
+            if "exposure_ratio" in curve_attr:
+                summary_rows.append({"metric": "持仓暴露比", "value": round(curve_attr["exposure_ratio"], 4)})
+        bench_attr = attr.get("benchmark", {})
+        if bench_attr:
+            for key, label in [
+                ("benchmark_return", "基准收益(买入持有)"),
+                ("excess_return", "超额收益"),
+                ("alpha", "alpha(年化)"),
+                ("beta", "beta"),
+            ]:
+                if key in bench_attr:
+                    summary_rows.append({"metric": label, "value": round(bench_attr[key], 6)})
+        summary = DataTable(columns=["metric", "value"], rows=summary_rows)
+        return {
+            "equity": equity,
+            "trades": trades,
+            "summary": summary,
+            "attribution": json.dumps(attr, ensure_ascii=False, default=str),
+        }
 
 
 @work_node(
@@ -170,7 +223,10 @@ class BacktestRunNode(BaseWorkNode):
     category="回测",
     description="基于净值曲线表计算绩效指标：收益、年化、最大回撤、夏普、波动率",
     inputs=[PortSpec("equity", "table", label="净值曲线")],
-    outputs=[PortSpec("metrics", "table", label="绩效指标")],
+    outputs=[
+        PortSpec("metrics", "table", label="绩效指标"),
+        PortSpec("attribution", "string", label="绩效归因"),
+    ],
     params=[
         ParamSpec("annual_factor", "number", default=252, label="年化交易日"),
         ParamSpec("risk_free", "number", default=0.0, label="无风险利率（年化）"),
@@ -178,38 +234,52 @@ class BacktestRunNode(BaseWorkNode):
 )
 class PerformanceNode(BaseWorkNode):
     def execute(self, ctx, inputs):
-        df = table_to_df(require_table(inputs["equity"]))
-        if "total_value" not in df.columns:
+        from ..backtest.metrics import PerformanceMetrics
+        from ..backtest.engine import EquityPoint
+
+        table = require_table(inputs["equity"])
+        if "total_value" not in table.columns:
             raise ValueError("净值曲线表缺少 total_value 列")
-        values = df["total_value"].astype(float).tolist()
-        if len(values) < 2:
+        points = [
+            EquityPoint(
+                date=str(r.get("date") or ""),
+                cash=float(r.get("cash") or 0.0),
+                market_value=float(r.get("market_value") or 0.0),
+                total_value=float(r.get("total_value") or 0.0),
+                daily_return=float(r.get("daily_return") or 0.0),
+            )
+            for r in table.rows
+        ]
+        if len(points) < 2:
             raise ValueError("净值曲线至少需要 2 个点")
         factor = max(float(self.params.get("annual_factor") or 252), 1.0)
         rf = float(self.params.get("risk_free") or 0.0)
-        returns = []
-        for i in range(1, len(values)):
-            prev = values[i - 1]
-            returns.append(values[i] / prev - 1.0 if prev else 0.0)
-        total_return = values[-1] / values[0] - 1.0
-        annual_return = (1.0 + total_return) ** (factor / (len(values) - 1)) - 1.0
+        pm = PerformanceMetrics(points, points[0].total_value, [], benchmark_values=None)
+        base = pm.to_dict()
+        # 用节点自身参数重算夏普（含无风险利率），覆盖 engine 默认 rf=0
+        values = [p.total_value for p in points]
+        returns = [values[i] / values[i - 1] - 1.0 if values[i - 1] else 0.0 for i in range(1, len(values))]
         mean_r = sum(returns) / len(returns)
         std_r = (sum((r - mean_r) ** 2 for r in returns) / len(returns)) ** 0.5
         sharpe = (mean_r * factor - rf) / (std_r * (factor ** 0.5)) if std_r > 0 else 0.0
-        peak = values[0]
-        max_dd = 0.0
-        for v in values:
-            peak = max(peak, v)
-            dd = (v - peak) / peak if peak else 0.0
-            max_dd = min(max_dd, dd)
         rows = [
             {"metric": "days", "value": len(values)},
-            {"metric": "total_return", "value": round(total_return, 6)},
-            {"metric": "annual_return", "value": round(annual_return, 6)},
-            {"metric": "max_drawdown", "value": round(max_dd, 6)},
+            {"metric": "total_return", "value": round(base["total_return"], 6)},
+            {"metric": "annual_return", "value": round(base["annual_return"], 6)},
+            {"metric": "max_drawdown", "value": round(base["max_drawdown"], 6)},
             {"metric": "sharpe", "value": round(sharpe, 6)},
             {"metric": "annual_volatility", "value": round(std_r * (factor ** 0.5), 6)},
         ]
-        return {"metrics": DataTable(columns=["metric", "value"], rows=rows)}
+        # 曲线层面归因
+        curve_attr = base["attribution"].get("curve", {})
+        if "max_drawdown_days" in curve_attr:
+            rows.append({"metric": "最大回撤天数", "value": curve_attr["max_drawdown_days"]})
+        if "exposure_ratio" in curve_attr:
+            rows.append({"metric": "持仓暴露比", "value": round(curve_attr["exposure_ratio"], 4)})
+        return {
+            "metrics": DataTable(columns=["metric", "value"], rows=rows),
+            "attribution": json.dumps(base["attribution"], ensure_ascii=False, default=str),
+        }
 
 
 @work_node(

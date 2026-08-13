@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   factorLibraryList,
   factorLibraryCreate,
@@ -190,6 +190,7 @@ export default function FactorLibrary() {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [category, setCategory] = useState('')
   const [editing, setEditing] = useState(null) // null | 'new' | factor
   const [busyForm, setBusyForm] = useState(false)
   const [analyzing, setAnalyzing] = useState(null)
@@ -197,13 +198,18 @@ export default function FactorLibrary() {
   const refresh = useCallback(() => {
     setLoading(true)
     setError('')
-    return factorLibraryList()
+    return factorLibraryList(category)
       .then((res) => setItems(res.items || []))
       .catch((e) => setError(`加载失败: ${e.message}`))
       .finally(() => setLoading(false))
-  }, [])
+  }, [category])
 
   useEffect(() => { refresh() }, [refresh])
+
+  const categories = useMemo(() => {
+    const set = new Set(items.map((f) => f.category).filter(Boolean))
+    return ['', ...Array.from(set)]
+  }, [items])
 
   const onDelete = async (fac) => {
     if (!window.confirm(`确认删除因子「${fac.name}」？`)) return
@@ -236,7 +242,20 @@ export default function FactorLibrary() {
     <div className="qf-monitor" style={{ padding: 16 }}>
       <div className="qf-result-head">
         <h3>因子库（N3）</h3>
-        <button className="qf-btn qf-btn-primary" onClick={() => setEditing(EMPTY)}>＋ 新建因子</button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <select
+            className="qf-name-input"
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            aria-label="按类别筛选"
+            style={{ width: 140 }}
+          >
+            {categories.map((c) => (
+              <option key={c || '__all'} value={c}>{c || '全部类别'}</option>
+            ))}
+          </select>
+          <button className="qf-btn qf-btn-primary" onClick={() => setEditing(EMPTY)}>＋ 新建因子</button>
+        </div>
       </div>
       {error && <div className="qf-error">{error}</div>}
       {loading && <div className="qf-busy">加载中…</div>}
@@ -248,7 +267,14 @@ export default function FactorLibrary() {
           <div key={fac.id} className="qf-mcard" style={{ alignItems: 'stretch' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
               <div className="qf-mcard-label">{fac.category}</div>
-              <div className="qf-run-pill" style={{ fontSize: 10 }}>{fac.id.slice(0, 10)}</div>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                {fac.owner_id ? (
+                  <span className="qf-run-pill" style={{ fontSize: 10, background: '#e0f2fe', color: '#0369a1' }}>自定义</span>
+                ) : (
+                  <span className="qf-run-pill" style={{ fontSize: 10, background: '#dcfce7', color: '#15803d' }}>内置</span>
+                )}
+                <div className="qf-run-pill" style={{ fontSize: 10 }}>{fac.id.slice(0, 10)}</div>
+              </div>
             </div>
             <div className="qf-mcard-value" style={{ fontSize: 14 }}>{fac.name}</div>
             <div className="qf-hint" style={{ wordBreak: 'break-all' }}>{fac.expression}</div>

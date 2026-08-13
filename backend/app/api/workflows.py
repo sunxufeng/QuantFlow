@@ -11,7 +11,7 @@ from ..core.dag import WorkflowValidationError, validate_workflow
 from ..core.projects import PROJECT_REPOSITORY
 from ..core.registry import REGISTRY
 from ..core import runs as run_module
-from ..core.workflow_repository import WORKFLOW_REPOSITORY, WorkflowNotFoundError
+from ..core.workflow_repository import WORKFLOW_REPOSITORY, WorkflowNotFoundError, VersionNotFoundError
 from ..models.schemas import (
     NodeSpecOut,
     ValidateOut,
@@ -20,6 +20,8 @@ from ..models.schemas import (
     WorkflowOut,
     WorkflowSaveIn,
     WorkflowSummaryOut,
+    WorkflowVersionCreateIn,
+    WorkflowVersionOut,
 )
 
 router = APIRouter()
@@ -181,6 +183,52 @@ def delete_workflow(
     except WorkflowNotFoundError:
         raise HTTPException(status_code=404, detail="工作流不存在") from None
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/workflows/{workflow_id}/versions", response_model=list[WorkflowVersionOut], summary="版本历史列表")
+def list_workflow_versions(
+    workflow_id: str,
+    user: Optional[dict] = Depends(get_current_user_optional),
+) -> list[dict]:
+    get_workflow_inner(workflow_id, user)
+    return WORKFLOW_REPOSITORY.list_versions(workflow_id)
+
+
+@router.post(
+    "/workflows/{workflow_id}/versions",
+    response_model=WorkflowVersionOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="创建版本快照",
+)
+def create_workflow_version(
+    workflow_id: str,
+    body: WorkflowVersionCreateIn,
+    user: Optional[dict] = Depends(get_current_user_optional),
+) -> dict:
+    get_workflow_inner(workflow_id, user)
+    try:
+        return WORKFLOW_REPOSITORY.snapshot(workflow_id, label=body.label)
+    except WorkflowNotFoundError:
+        raise HTTPException(status_code=404, detail="工作流不存在") from None
+
+
+@router.post(
+    "/workflows/{workflow_id}/versions/{version}/restore",
+    response_model=WorkflowOut,
+    summary="恢复到指定版本",
+)
+def restore_workflow_version(
+    workflow_id: str,
+    version: int,
+    user: Optional[dict] = Depends(get_current_user_optional),
+) -> dict:
+    get_workflow_inner(workflow_id, user)
+    try:
+        return WORKFLOW_REPOSITORY.restore(workflow_id, version)
+    except WorkflowNotFoundError:
+        raise HTTPException(status_code=404, detail="工作流不存在") from None
+    except VersionNotFoundError:
+        raise HTTPException(status_code=404, detail="指定版本不存在") from None
 
 
 @router.post("/workflows/validate", response_model=ValidateOut, summary="校验工作流图")

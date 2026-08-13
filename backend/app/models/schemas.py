@@ -62,6 +62,22 @@ class WorkflowImportIn(WorkflowIn):
     project_id: Optional[str] = Field(default=None, description="所属项目（M4，可选）")
 
 
+class WorkflowVersionCreateIn(BaseModel):
+    label: Optional[str] = Field(default=None, max_length=120, description="版本备注（可选）")
+
+
+class WorkflowVersionOut(BaseModel):
+    id: str
+    version: int
+    label: Optional[str] = None
+    saved_at: str
+    workflow_version: int
+    name: str
+    description: str = ""
+    node_count: int = 0
+    edge_count: int = 0
+
+
 class NodeSpecOut(BaseModel):
     node_type: str
     label: str

@@ -116,18 +116,27 @@ def delete_factor(factor_id: str) -> bool:
 
 
 def seed_defaults() -> int:
-    """首次启动时写入若干内置因子（动量 / 反转 / 波动率），便于演示。
+    """首次启动时写入内置因子库（动量 / 反转 / 波动率 / 风险 / 技术 / 量价 等）。
 
-    已存在因子库则跳过，避免重复写入。
+    按 ``name`` 幂等：仅补充缺失的内置因子，已存在则跳过，便于版本升级时增量扩充。
     """
-    if list_factors():
-        return 0
+    existing = {f["name"] for f in list_factors()}
     presets = [
         ("动量因子(20日)", "动量", "close.pct_change(20)", "近 20 日收益率", {"period": 20}),
         ("反转因子(5日)", "反转", "close.pct_change(5) * -1", "近 5 日收益取反", {"period": 5}),
         ("波动率因子", "风险", "close.pct_change().rolling(20).std()", "20 日收益率标准差", {"window": 20}),
-        ("市值因子(收盘价)", "基本面", "close", "以收盘价代理市值排序", {}),
+        ("市值因子(成交额)", "基本面", "close * volume", "收盘价×成交量，代理规模/流动性", {}),
+        ("RSI因子(14日)", "技术", "close.pct_change().clip(lower=0).rolling(14).mean() / (close.pct_change().abs().rolling(14).mean()+1e-9)", "相对强弱，越接近 1 越超买", {"period": 14}),
+        ("MACD柱因子", "技术", "close.ewm(span=12).mean() - close.ewm(span=26).mean()", "快慢 EMA 差值，动量强弱", {"fast": 12, "slow": 26}),
+        ("换手率因子", "量价", "volume / volume.rolling(20).mean()", "成交量相对 20 日均量，放量程度", {"window": 20}),
+        ("低波因子", "风险", "-close.pct_change().rolling(20).std()", "20 日波动取反，越低波越好", {"window": 20}),
+        ("乖离率因子", "技术", "(close - close.rolling(20).mean())/close.rolling(20).mean()", "价格相对 20 日均线偏离", {"window": 20}),
+        ("量价共振因子", "量价", "close.pct_change(5) * (volume / volume.rolling(20).mean())", "近 5 日收益与放量程度乘积", {"period": 5, "window": 20}),
     ]
+    added = 0
     for name, cat, expr, desc, params in presets:
+        if name in existing:
+            continue
         create_factor(name, expr, cat, desc, params)
-    return len(presets)
+        added += 1
+    return added

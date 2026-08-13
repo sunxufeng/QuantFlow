@@ -2,7 +2,7 @@
 
 对标 PandaAI QuantFlow 的**自主实现方案**（全部代码自研，避开上游 GPL 传染）。
 
-**里程碑进度**：M1 最小闭环 ✅ → M2 数据/回测/执行引擎 ✅ → M3 节点库与前端编辑器 ✅ → M4 业务能力（用户/RBAC/项目/日志/监控/Docker）✅ → M5 测试与发布 ✅ → **V1.3 核心引擎补完 ✅**（期货回测 + 示例工作流模板库，版本 1.3.0）→ **V1.4 LLM 配置页 ✅**（自定义大模型持久化 + 连通性测试，版本 1.4.0）
+**里程碑进度**：M1 最小闭环 ✅ → M2 数据/回测/执行引擎 ✅ → M3 节点库与前端编辑器 ✅ → M4 业务能力（用户/RBAC/项目/日志/监控/Docker）✅ → M5 测试与发布 ✅ → **V1.3 核心引擎补完 ✅**（期货回测 + 示例工作流模板库，版本 1.3.0）→ **V1.4 LLM 配置页 ✅**（自定义大模型持久化 + 连通性测试，版本 1.4.0）→ **V1.5 自包含增强包 ✅**（绩效归因增强 + 因子库扩展 + 工作流版本管理 + 移动端适配，版本 1.5.0）
 
 ## 已实现能力
 
@@ -19,9 +19,13 @@
 | 业务能力（M4） | 用户注册/登录（PBKDF2 + JWT）、RBAC（admin/user/viewer）、项目与成员管理（owner/admin/member/viewer）、结构化日志查询、监控指标（Prometheus 格式） |
 | 模板库（V1.3） | 内置示例工作流模板（股票均线 / 股票动量 / 期货均线多空），前端「模板库」页一键加载到画布 |
 | LLM 配置页（V1.4） | 顶部导航「LLM 配置」图形化添加自定义大模型（OpenAI 兼容：base_url / key / model / system prompt / 温度 / max_tokens / 超时），持久化到数据库（API Key 脱敏），支持一键连通性测试；「LLM 助手」对话使用生效配置 |
+| 因子库扩展（V1.5） | 内置因子预设扩充至 10 个（动量 / 反转 / 波动率 / 市值 / RSI / MACD柱 / 换手率 / 低波 / 乖离率 / 量价共振），支持按类别筛选；seed 按名称幂等补齐，不重复写入 |
 | 实盘前哨（V1.3） | 执行网关抽象：模拟盘 `PaperExecutionGateway`（按最新价即时成交、套用 A 股/期货成本、支持空头）+ 实盘桩 `LiveExecutionGateway`（未配 `QF_BROKER_API_KEY` 时下单抛 `GatewayNotConfigured`，凭证就绪后接入真实券商）。切换由 `QF_EXECUTION_GATEWAY`（paper/live，默认 paper）控制。REST：`/api/execution/{mode,order,account}` |
 | 前端 | React + Vite + React Flow：节点面板（搜索/分组）、属性面板（schema 表单校验）、画布（类型校验/撤销重做）、运行可视化（WS 实时着色）、K线图表页、模板库、工作流管理（列表/重命名/JSON 导入导出）、登录/项目切换/监控页 |
-| 测试 | 362 个 pytest 用例 + 前端生产构建，GitHub Actions CI（backend 单测 / frontend 构建 / Docker 构建） |
+| 绩效归因增强（V1.5） | 回测节点新增「绩效归因」输出：交易层面（盈亏比 / 平均盈亏损 / 连胜连亏）、曲线层面（月度收益 / 回撤区间 / 最大回撤天数 / 持仓暴露比）、基准对比（买入持有收益 / 超额收益 / 年化 Alpha / Beta）；运行结果页图形化展示（净值曲线 + 指标卡 + 回撤/月度/基准） |
+| 工作流版本管理（V1.5） | 后端内存仓库支持版本快照（snapshot / list / restore），新增 API `GET/POST /workflows/{id}/versions` 与 `POST /workflows/{id}/versions/{v}/restore`；前端工具栏「版本历史」弹窗可保存带备注的快照并一键恢复 |
+| 移动端适配（V1.5） | 窄屏（≤860px）下顶栏导航横向滚动、三栏编辑器纵向堆叠满宽、组件面板转为网格条，画布与侧栏各自占屏并整页可滚动 |
+| 测试 | 369 个 pytest 用例 + 前端生产构建，GitHub Actions CI（backend 单测 / frontend 构建 / Docker 构建） |
 
 ## 快速启动
 

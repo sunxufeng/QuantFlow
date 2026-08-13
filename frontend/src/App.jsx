@@ -21,6 +21,7 @@ import LLMAssistant from './LLMAssistant.jsx'
 import LLMSettings from './LLMSettings.jsx'
 import Templates from './Templates.jsx'
 import AuthModal from './AuthModal.jsx'
+import BacktestResultView from './BacktestResultView.jsx'
 import { useGraphHistory } from './useHistory.js'
 import {
   clearToken,
@@ -33,6 +34,9 @@ import {
   fetchProjects,
   fetchWorkflow,
   fetchWorkflows,
+  fetchWorkflowVersions,
+  createWorkflowVersion,
+  restoreWorkflowVersion,
   getMe,
   getToken,
   importWorkflow,
@@ -70,9 +74,15 @@ function ResultPanel({ result, error, busy, runStatus, onClose }) {
                 <td>{n.node_id}</td>
                 <td className={`qf-run-${n.status}`}>{n.status}</td>
                 <td>{n.duration_ms}</td>
-                <td className="qf-cell-out">{n.outputs ? Object.entries(n.outputs).map(([k, v]) => (
-                  <div key={k}>{k} = {v && v.__type__ === 'table' ? `table(${v.rows.length}行)` : JSON.stringify(v)}</div>
-                )) : ''}</td>
+                <td className="qf-cell-out">
+                  {n.outputs && n.outputs.attribution ? (
+                    <BacktestResultView outputs={n.outputs} />
+                  ) : n.outputs ? (
+                    Object.entries(n.outputs).map(([k, v]) => (
+                      <div key={k}>{k} = {v && v.__type__ === 'table' ? `table(${v.rows.length}行)` : JSON.stringify(v)}</div>
+                    ))
+                  ) : ''}
+                </td>
                 <td>{n.error || ''}</td>
               </tr>
             ))}
@@ -112,6 +122,95 @@ function RunsPanel({ runs, activeRunId, onSelectRun, onRefresh }) {
   )
 }
 
+function VersionHistoryModal({ workflowId, onClose, onRestore, setError }) {
+  const [versions, setVersions] = useState([])
+  const [busy, setBusy] = useState(false)
+  const [label, setLabel] = useState('')
+  const [error, setLocalError] = useState('')
+
+  const load = useCallback(() => {
+    setBusy(true)
+    setLocalError('')
+    fetchWorkflowVersions(workflowId)
+      .then(setVersions)
+      .catch((e) => setLocalError(`加载版本历史失败: ${e.message}`))
+      .finally(() => setBusy(false))
+  }, [workflowId])
+
+  useEffect(() => { load() }, [load])
+
+  const onSnapshot = useCallback(async () => {
+    setBusy(true)
+    setLocalError('')
+    try {
+      await createWorkflowVersion(workflowId, label.trim() || undefined)
+      setLabel('')
+      await load()
+    } catch (e) {
+      setLocalError(`保存版本失败: ${e.message}`)
+    } finally {
+      setBusy(false)
+    }
+  }, [workflowId, label, load])
+
+  const onDoRestore = useCallback(async (version) => {
+    if (!window.confirm(`恢复到版本 v${version}？当前画布与工作流将被该版本覆盖。`)) return
+    setBusy(true)
+    setLocalError('')
+    try {
+      const restored = await restoreWorkflowVersion(workflowId, version)
+      onRestore(restored)
+      onClose()
+    } catch (e) {
+      setLocalError(`恢复失败: ${e.message}`)
+    } finally {
+      setBusy(false)
+    }
+  }, [workflowId, onClose, onRestore])
+
+  return (
+    <div className="qf-modal-mask" onClick={onClose}>
+      <div className="qf-modal" onClick={(e) => e.stopPropagation()} style={{ width: 460 }}>
+        <div className="qf-modal-head">
+          <h3>版本历史</h3>
+          <button className="qf-btn qf-btn-sm" onClick={onClose}>×</button>
+        </div>
+        <div className="qf-modal-body">
+          {error && <div className="qf-error">{error}</div>}
+          {localError && <div className="qf-error">{localError}</div>}
+          {busy && versions.length === 0 && <div className="qf-busy">加载中…</div>}
+          {!busy && versions.length === 0 && (
+            <div className="qf-prop-hint">暂无版本快照。编辑后点击「保存当前为新版本」即可创建。</div>
+          )}
+          <div className="qf-ver-list">
+            {versions.map((v) => (
+              <div className="qf-ver-item" key={v.id}>
+                <div className="qf-ver-main">
+                  <span className="qf-ver-label">{v.label}</span>
+                  <span className="qf-ver-meta">
+                    v{v.version} · {v.node_count} 节点 / {v.edge_count} 连线 · {new Date(v.saved_at).toLocaleString()}
+                  </span>
+                </div>
+                <button className="qf-btn qf-btn-sm" disabled={busy} onClick={() => onDoRestore(v.version)}>恢复</button>
+              </div>
+            ))}
+          </div>
+          <div className="qf-ver-save">
+            <input
+              className="qf-name-input"
+              placeholder="版本备注（可选）"
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+              style={{ flex: 1 }}
+            />
+            <button className="qf-btn qf-btn-primary" disabled={busy} onClick={onSnapshot}>保存当前为新版本</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function Canvas({ projectId, pendingTemplate, onTemplateConsumed }) {
   const [specs, setSpecs] = useState([])
   const [nodes, setNodes, onNodesChange] = useNodesState([])
@@ -128,6 +227,7 @@ function Canvas({ projectId, pendingTemplate, onTemplateConsumed }) {
   const [runStatus, setRunStatus] = useState('')
   const [runs, setRuns] = useState([])
   const [rightTab, setRightTab] = useState('props')
+  const [versionsOpen, setVersionsOpen] = useState(false)
   const rf = useReactFlow()
   const idRef = useRef(0)
   const importRef = useRef(null)
@@ -390,6 +490,13 @@ function Canvas({ projectId, pendingTemplate, onTemplateConsumed }) {
     }
   }, [applyWorkflow, refreshWorkflows])
 
+  const onRestoreVersion = useCallback(async (restored) => {
+    applyWorkflow(restored)
+    setWorkflowId(restored.id)
+    setWorkflowName(restored.name)
+    await refreshWorkflows()
+  }, [applyWorkflow, refreshWorkflows])
+
   const onNew = useCallback(() => {
     setNodes([])
     setEdges([])
@@ -553,6 +660,7 @@ function Canvas({ projectId, pendingTemplate, onTemplateConsumed }) {
           <button className="qf-btn" onClick={() => onDeleteWorkflow(workflowId)} disabled={busy || !workflowId} title="删除当前工作流">删除</button>
           <button className="qf-btn" onClick={() => importRef.current?.click()} disabled={busy}>导入 JSON</button>
           <button className="qf-btn" onClick={onExport} disabled={busy || !workflowId}>导出 JSON</button>
+          <button className="qf-btn" onClick={() => setVersionsOpen(true)} disabled={busy || !workflowId} title="工作流版本历史">版本历史</button>
           <span className="qf-toolbar-sep" />
           <button className="qf-btn" onClick={undo} disabled={!canUndo} title="撤销 (Ctrl+Z)">↶</button>
           <button className="qf-btn" onClick={redo} disabled={!canRedo} title="重做 (Ctrl+Shift+Z)">↷</button>
@@ -622,6 +730,14 @@ function Canvas({ projectId, pendingTemplate, onTemplateConsumed }) {
           )}
         </div>
       </div>
+      {versionsOpen && (
+        <VersionHistoryModal
+          workflowId={workflowId}
+          onClose={() => setVersionsOpen(false)}
+          onRestore={onRestoreVersion}
+          setError={setError}
+        />
+      )}
     </div>
   )
 }

@@ -80,6 +80,15 @@ export const importWorkflow = (workflow) => request('/workflows/import', {
   body: JSON.stringify(workflow),
 })
 export const exportWorkflow = (id) => request(`/workflows/${id}/export`)
+export const fetchWorkflowVersions = (id) => request(`/workflows/${id}/versions`)
+export const createWorkflowVersion = (id, label) => request(`/workflows/${id}/versions`, {
+  method: 'POST',
+  body: JSON.stringify(label ? { label } : {}),
+})
+export const restoreWorkflowVersion = (id, version) => request(
+  `/workflows/${id}/versions/${version}/restore`,
+  { method: 'POST' },
+)
 export const validateWorkflow = (workflow) => request('/workflows/validate', {
   method: 'POST',
   body: JSON.stringify(workflow),
