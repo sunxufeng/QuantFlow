@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-import json
 import logging
 from typing import List, Optional
 
 from .cache import CacheBackend, default_cache
-from .models import Bar, Instrument, INTERVAL_DAILY, INTERVAL_MINUTE
+from .models import Bar, Instrument, INTERVAL_MINUTE
 from .repository import (
-    InMemoryMarketDataRepository,
     MarketDataRepository,
     SQLiteMarketDataRepository,
 )

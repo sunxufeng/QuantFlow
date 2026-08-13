@@ -37,7 +37,7 @@ from .events import (
 )
 from .executor import WorkflowExecutor
 from .jobs import JOB_QUEUE, JobQueue
-from .runstore import DatabaseRunRepository, RUN_REPOSITORY, RunNotFoundError
+from .runstore import RUN_REPOSITORY, RunNotFoundError
 
 
 class RunStatus:

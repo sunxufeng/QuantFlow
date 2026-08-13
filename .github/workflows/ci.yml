@@ -7,6 +7,26 @@ on:
     branches: [main]
 
 jobs:
+  backend-lint:
+    name: Backend lint (ruff, dead-code guard)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install ruff
+        run: pip install "ruff==0.16.0"
+
+      - name: Run ruff (unused imports / redefinitions / unused locals)
+        run: ruff check app tests --select F401,F811,F841,F403,F405
+
   backend-test:
     name: Backend tests
     runs-on: ubuntu-latest

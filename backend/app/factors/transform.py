@@ -6,7 +6,7 @@ V1.1 N3 计算层。横向标准化默认使用全局 ddof=0，与既有 factor.
 from __future__ import annotations
 
 import math
-from typing import Dict, List, Optional, Sequence
+from typing import Optional, Sequence
 
 import numpy as np
 import pandas as pd

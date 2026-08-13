@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 import pytest
 
@@ -117,9 +117,6 @@ class TestPortfolioMerge:
     def test_allocation_sums_to_one(self):
         legs = [{**FUND_LEG, "weight": 1.0}, {**STOCK_LEG, "weight": 1.0}]
         report = PortfolioBacktest(legs, initial_cash=200_000, start=START, end=END).run()
-        for pt in report["equity_curve"]:
-            alloc = pt.get("allocation")
-            # allocation 在 equity_curve 点中由 API 层补充；此处校验 legs 汇总权重
         total_w = sum(l["weight"] for l in report["legs"])
         assert total_w == pytest.approx(1.0)
 

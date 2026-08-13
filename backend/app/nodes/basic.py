@@ -4,7 +4,6 @@
 量化节点库（行情/特征/ML/因子/回测）在 M3 节点库阶段实现。
 """
 
-from typing import Any, Dict
 
 from ..core.data import DataTable
 from ..core.node import BaseWorkNode, ParamSpec, PortSpec, work_node
@@ -40,7 +39,6 @@ class ConstantNode(BaseWorkNode):
 )
 class SequenceNode(BaseWorkNode):
     def execute(self, ctx, inputs):
-        import math
 
         start, end, step = self.params["start"], self.params["end"], self.params["step"]
         values = []

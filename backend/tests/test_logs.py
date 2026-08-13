@@ -36,7 +36,7 @@ def test_admin_sees_all_logs():
 
 
 def test_regular_user_hides_others_request_logs():
-    admin = _register("admin")
+    _register("admin")
     bob = _register("bob")
     carol = _register("carol")
     # 模拟一次 carol 的请求日志（其 user_id 已写入）

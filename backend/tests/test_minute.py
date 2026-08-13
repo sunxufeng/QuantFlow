@@ -9,7 +9,6 @@
 
 from __future__ import annotations
 
-from collections import defaultdict
 
 import pytest
 from fastapi.testclient import TestClient

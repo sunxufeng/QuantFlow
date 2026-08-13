@@ -12,7 +12,7 @@ import abc
 import hashlib
 import logging
 import random
-from typing import List, Optional, Tuple
+from typing import List, Optional
 
 from .models import Bar, Instrument, INTERVAL_MINUTE
 

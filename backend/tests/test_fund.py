@@ -19,7 +19,7 @@ from app.backtest import (
     Strategy,
     build_report,
 )
-from app.backtest.fund import FundPosition, FundTrade
+from app.backtest.fund import FundTrade
 from app.market import Bar, Instrument
 
 

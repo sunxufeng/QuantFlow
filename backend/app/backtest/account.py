@@ -8,11 +8,10 @@
 
 from __future__ import annotations
 
-import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Dict, List, Optional
 
-from .costs import CostCalculator, CostRates
+from .costs import CostCalculator
 
 # 涨跌停幅度（A 股主板）
 LIMIT_PCT = 0.10

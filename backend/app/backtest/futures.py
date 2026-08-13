@@ -15,7 +15,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Dict, List, Optional
 
 from .account import OrderRejected
@@ -224,7 +224,6 @@ class FuturesAccount:
         commission = self._commission(contracts)
         self.cash -= commission
 
-        multiplier = self._multiplier(symbol)
         pos = self.positions.get(symbol)
         if pos is not None and pos.direction == direction:
             total = pos.contracts + contracts

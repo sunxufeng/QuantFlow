@@ -78,7 +78,6 @@ class DataSyncService:
         symbols = [i.symbol for i in self.service.instruments()]
         status = "success"
         error: Optional[str] = None
-        bars_written = 0
         started_at = _utc_now()
         try:
             if start <= end:
@@ -99,7 +98,7 @@ class DataSyncService:
             "source": self.service.primary.name,
             "status": status,
             "symbols": ",".join(symbols),
-            "bars_written": max(0, after - before),
+            "bars_written": bars_written,
             "error": error,
             "started_at": started_at,
             "finished_at": finished_at,

@@ -198,7 +198,7 @@ def validate(workflow: WorkflowIn) -> ValidateOut:
 @router.post("/workflows/run", summary="执行工作流（同步返回运行结果）")
 def run(workflow: WorkflowIn) -> dict:
     try:
-        graph = validate_workflow(
+        validate_workflow(
             [n.model_dump() for n in workflow.nodes],
             [e.model_dump() for e in workflow.edges],
         )

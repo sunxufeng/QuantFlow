@@ -12,11 +12,11 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Dict, List
+from typing import Any, List
 
 from ..core.data import DataTable
 from ..core.node import BaseWorkNode, ParamSpec, PortSpec, work_node
-from ._utils import df_to_table, require_table, table_to_df
+from ._utils import require_table, table_to_df
 
 
 def _table_to_bars(table: DataTable) -> List[Any]:

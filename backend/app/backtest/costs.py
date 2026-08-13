@@ -49,10 +49,6 @@ class CostRates:
     futures_commission_per_lot: float = 3.0       # 每手固定手续费（元/手）
     futures_margin_rate: float = 0.10             # 初始保证金比例
     futures_maintenance_ratio: float = 0.75       # 维持保证金 / 初始保证金
-    # 期货（V1.3）：按手手续费、保证金比例、维持保证金比例（相对初始保证金）
-    futures_commission_per_lot: float = 3.0       # 每手固定手续费（元/手）
-    futures_margin_rate: float = 0.10             # 初始保证金比例
-    futures_maintenance_ratio: float = 0.75       # 维持保证金 / 初始保证金
 
     @classmethod
     def from_dict(cls, data: dict) -> "CostRates":

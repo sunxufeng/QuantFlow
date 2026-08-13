@@ -118,7 +118,7 @@ def test_event_log_order(components):
 def test_worker_executes_success(components):
     q, repo, log = components
     payload = {"nodes": [{"id": "c", "node_type": "data.constant", "params": {"value": 7}}], "edges": []}
-    job_id = q.enqueue(payload, job_id="run1", workflow_name="demo")
+    q.enqueue(payload, job_id="run1", workflow_name="demo")
     worker = Worker(job_queue=q, repository=repo, event_log=log, worker_id="w-test")
     assert worker.run_once() is True
     rec = repo.get("run1")

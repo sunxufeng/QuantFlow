@@ -3,7 +3,6 @@
 覆盖与既有 factor.ic / factor.composite 节点一致的口径（IC=0.4、ICIR=0.7071）。
 """
 
-import math
 
 import pandas as pd
 import pytest

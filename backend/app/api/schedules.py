@@ -10,7 +10,7 @@ POST   /api/schedules/{id}/toggle  启用/停用
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field

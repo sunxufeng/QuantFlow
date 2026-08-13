@@ -4,7 +4,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.market.repository import SQLiteMarketDataRepository
-from app.market.scheduler import DataSyncService, data_sync_service
+from app.market.scheduler import DataSyncService
 
 client = TestClient(app)
 

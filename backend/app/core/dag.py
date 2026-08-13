@@ -13,7 +13,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Dict, List, Set
 
-from .node import BaseWorkNode, WorkflowValidationError
+from .node import WorkflowValidationError
 from .registry import REGISTRY
 
 

@@ -270,7 +270,6 @@ class TestFactorNodes:
         assert out["table"].rows[0]["date"] == "__summary__"
 
     def test_composite_equal_weight(self):
-        import math
 
         rows = [{"f1": float(x), "f2": float(x * 10)} for x in range(1, 6)]
         t = make_table(["f1", "f2"], rows)

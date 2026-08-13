@@ -6,7 +6,7 @@ V1.0 只做日线（Q-06 决策）；结构上为分钟线预留字段
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
 from ..core.data import DataTable

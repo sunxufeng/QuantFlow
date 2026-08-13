@@ -6,7 +6,6 @@ V1.1 N3 起，核心计算统一委托给独立模块 ``app.factors``（stats / 
 
 from __future__ import annotations
 
-from typing import Any, Dict
 
 from ..core.data import DataTable
 from ..core.node import BaseWorkNode, ParamSpec, PortSpec, work_node

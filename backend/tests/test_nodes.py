@@ -38,7 +38,6 @@ def test_param_resolution_default():
 
 
 def test_required_param_missing():
-    from app.core.node import WorkNodeContext
 
     with pytest.raises(NodeConfigError):
         instantiate_node("data.constant", "n1", {})  # value 必填

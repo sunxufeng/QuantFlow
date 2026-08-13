@@ -16,7 +16,6 @@ import base64
 import os
 import pickle
 import uuid
-from typing import Any, Dict
 
 from ..core.data import DataTable
 from ..core.node import BaseWorkNode, ParamSpec, PortSpec, work_node
@@ -91,7 +90,6 @@ def _build_model(model_type: str, **kwargs):
 class TrainNode(BaseWorkNode):
     def execute(self, ctx, inputs):
         from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
-        from sklearn.model_selection import train_test_split
 
         df = table_to_df(require_table(inputs["table"])).dropna()
         target = str(self.params["target_column"]).strip()

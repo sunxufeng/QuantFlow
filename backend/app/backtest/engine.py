@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 from ..market.models import Bar, Instrument, INTERVAL_DAILY, INTERVAL_MINUTE
-from .account import Account, OrderRejected
+from .account import Account
 from .costs import CostCalculator, CostRates, load_cost_rates
 from .fund import FundAccount
 from .futures import FuturesAccount

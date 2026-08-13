@@ -13,7 +13,7 @@ import uuid
 from typing import Dict, List, Optional
 
 from ..core.db import db
-from .base import NotificationChannel, NotificationMessage
+from .base import NotificationMessage
 from .channels import build_channel
 
 logger = logging.getLogger("quantflow.notifications")

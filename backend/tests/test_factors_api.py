@@ -1,6 +1,5 @@
 """N3 因子分析 API 测试：鉴权 / 表格分析 / 行情构建分析。"""
 
-import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 

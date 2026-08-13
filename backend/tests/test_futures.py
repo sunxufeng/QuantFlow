@@ -10,8 +10,8 @@ from typing import List
 
 import pytest
 
-from app.backtest import BacktestEngine, BacktestError, CostRates, Strategy
-from app.backtest.futures import FuturesAccount, FuturesPosition, FuturesTrade
+from app.backtest import BacktestEngine
+from app.backtest.futures import FuturesAccount
 from app.market import Bar
 
 

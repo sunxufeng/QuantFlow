@@ -17,8 +17,8 @@ CostCalculator + Account），仅费率配置不同。
 from __future__ import annotations
 
 import datetime as dt
-from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
+from dataclasses import dataclass
+from typing import Dict, List, Optional
 
 from .costs import CostRates, resolve_redemption_fee_rate
 

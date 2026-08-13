@@ -48,7 +48,7 @@ def test_token_authenticates_requests():
 
 
 def test_jwt_still_works_alongside_token():
-    headers = _auth_headers("tok_user3")
+    _auth_headers("tok_user3")
     jwt = client.post("/api/auth/login", json={"username": "tok_user3", "password": "secret123"}).json()["token"]
     resp = client.get("/api/auth/me", headers={"Authorization": f"Bearer {jwt}"})
     assert resp.status_code == 200

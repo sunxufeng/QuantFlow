@@ -2,7 +2,6 @@
 
 from fastapi.testclient import TestClient
 
-from app.core.workflow_repository import WORKFLOW_REPOSITORY
 from app.main import app
 
 client = TestClient(app)
