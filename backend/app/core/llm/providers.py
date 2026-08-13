@@ -92,7 +92,7 @@ class OpenAIProvider(LLMProvider):
         api_key: str,
         base_url: str,
         model: str,
-        timeout: float = 30.0,
+        timeout: float = 90.0,
     ) -> None:
         if not api_key:
             raise ValueError("OpenAIProvider 需要 QF_LLM_API_KEY")

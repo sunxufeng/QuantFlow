@@ -17,6 +17,13 @@ from ..core.llm import LLMMessage, get_provider
 
 router = APIRouter()
 
+# 未显式传入 system 时使用的默认量化领域系统提示（让用户开箱即用获得专业建议）
+DEFAULT_LLM_SYSTEM = (
+    "你是一名资深的量化投资策略研究员，熟悉 A 股与期货市场的回测、因子、"
+    "均线/动量等技术指标。请用简洁、结构化的中文回答用户的策略问题，"
+    "必要时给出可落地的节点组合建议（数据 → 指标/因子 → 回测）。"
+)
+
 
 class ChatMessage(BaseModel):
     role: str = "user"
@@ -45,6 +52,8 @@ def assist(
     messages: List[LLMMessage] = []
     if req.system:
         messages.append(LLMMessage(role="system", content=req.system))
+    else:
+        messages.append(LLMMessage(role="system", content=DEFAULT_LLM_SYSTEM))
     for m in req.history:
         messages.append(LLMMessage(role=m.role, content=m.content))
     messages.append(LLMMessage(role="user", content=req.prompt))
