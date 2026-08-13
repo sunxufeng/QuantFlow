@@ -17,6 +17,7 @@ from typing import Any, Dict, List, Optional
 
 from .engine import BacktestResult
 from .metrics import PerformanceMetrics
+from ..market.models import INTERVAL_DAILY, INTERVAL_MINUTE
 
 # 默认报告存储目录（相对 backend 根目录）
 DEFAULT_REPORT_DIR = os.path.join(
@@ -51,6 +52,7 @@ def build_report(
         "strategy_config": strategy_config or {},
         "benchmark_symbol": benchmark_symbol,
         "symbols": result.engine.symbols,
+        "interval": INTERVAL_MINUTE if result.engine.is_minute else INTERVAL_DAILY,
         "start_date": result.engine.calendar[0] if result.engine.calendar else "",
         "end_date": result.engine.calendar[-1] if result.engine.calendar else "",
         "metrics": metrics.to_dict(),

@@ -359,6 +359,7 @@ class BacktestResult:
         """序列化结果（不含绩效指标，指标由 metrics 模块计算）。"""
         out = {
             "symbols": self.engine.symbols,
+            "interval": INTERVAL_MINUTE if self.engine.is_minute else INTERVAL_DAILY,
             "calendar": self.engine.calendar,
             "initial_cash": self.engine.initial_cash,
             "account": self.account.to_dict(),
