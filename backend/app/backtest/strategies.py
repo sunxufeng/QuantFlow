@@ -151,35 +151,38 @@ class FundValueAvgStrategy(Strategy):
     def handle_data(self, ctx: BacktestContext) -> None:
         sym = self.symbol or ctx.symbols()[0]
         month = ctx.date[:7]
-        if month == self.last_month:
-            return
-        self.last_month = month
-        self.period += 1
+        is_last = ctx.date == ctx.calendar[-1]
 
-        fa = ctx.fund_account
-        if fa is None:
-            return
-        bar = ctx.bar(sym)
-        nav = bar.close if bar else 0.0
-        if nav <= 0:
-            return
+        # 月度调仓（仅跨月时执行一次）
+        if month != self.last_month:
+            self.last_month = month
+            self.period += 1
 
-        # 已投入市值（不含现金蓄水池）
-        invested = (fa.positions[sym].shares if sym in fa.positions else 0.0) * nav
-        target = self.amount * self.period
-        delta = target - invested
-        if delta > 0:
-            # 补足：申购差额（受可用现金约束）
-            avail = fa.cash
-            if avail > 0:
-                ctx.subscribe(sym, min(delta, avail))
-        else:
-            # 赎回超出部分（受可用份额约束）
-            pos = fa.positions.get(sym)
-            if pos and pos.shares > 0:
-                ctx.redeem(sym, min(-delta / nav, pos.shares))
+            fa = ctx.fund_account
+            if fa is None:
+                return
+            bar = ctx.bar(sym)
+            nav = bar.close if bar else 0.0
+            if nav <= 0:
+                return
 
-        if self.redeem_on_last_day and ctx.date == ctx.calendar[-1]:
+            # 已投入市值（不含现金蓄水池）
+            invested = (fa.positions[sym].shares if sym in fa.positions else 0.0) * nav
+            target = self.amount * self.period
+            delta = target - invested
+            if delta > 0:
+                # 补足：申购差额（受可用现金约束）
+                avail = fa.cash
+                if avail > 0:
+                    ctx.subscribe(sym, min(delta, avail))
+            else:
+                # 赎回超出部分（受可用份额约束）
+                pos = fa.positions.get(sym)
+                if pos and pos.shares > 0:
+                    ctx.redeem(sym, min(-delta / nav, pos.shares))
+
+        # 末日强制赎回（不受月度守卫影响，单月回测也能清仓）
+        if self.redeem_on_last_day and is_last:
             fa2 = ctx.fund_account
             if fa2 and sym in fa2.positions:
                 ctx.redeem(sym, fa2.positions[sym].shares)
