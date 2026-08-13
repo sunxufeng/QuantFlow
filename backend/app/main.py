@@ -13,7 +13,7 @@ import time
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .api import auth, backtest, factors, logs, llm, market, monitoring, notifications, projects, runs, schedules, tokens, workflows
+from .api import auth, backtest, execution, factors, logs, llm, market, monitoring, notifications, projects, runs, schedules, tokens, workflows
 from .config import settings
 from .core import runs as run_module
 from .core.logging_store import RequestContextMiddleware, install as install_logging
@@ -75,6 +75,7 @@ app.include_router(schedules.router, prefix="/api")
 app.include_router(projects.router, prefix="/api")
 app.include_router(logs.router, prefix="/api")
 app.include_router(monitoring.router, prefix="/api")
+app.include_router(execution.router, prefix="/api")
 
 _START_TIME = time.time()
 

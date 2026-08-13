@@ -18,8 +18,9 @@
 | 定时调度（V1.2） | APScheduler 定时全量行情同步 + 更新状态监控；`QF_DISABLE_SCHEDULER` 可关 |
 | 业务能力（M4） | 用户注册/登录（PBKDF2 + JWT）、RBAC（admin/user/viewer）、项目与成员管理（owner/admin/member/viewer）、结构化日志查询、监控指标（Prometheus 格式） |
 | 模板库（V1.3） | 内置示例工作流模板（股票均线 / 股票动量 / 期货均线多空），前端「模板库」页一键加载到画布 |
+| 实盘前哨（V1.3） | 执行网关抽象：模拟盘 `PaperExecutionGateway`（按最新价即时成交、套用 A 股/期货成本、支持空头）+ 实盘桩 `LiveExecutionGateway`（未配 `QF_BROKER_API_KEY` 时下单抛 `GatewayNotConfigured`，凭证就绪后接入真实券商）。切换由 `QF_EXECUTION_GATEWAY`（paper/live，默认 paper）控制。REST：`/api/execution/{mode,order,account}` |
 | 前端 | React + Vite + React Flow：节点面板（搜索/分组）、属性面板（schema 表单校验）、画布（类型校验/撤销重做）、运行可视化（WS 实时着色）、K线图表页、模板库、工作流管理（列表/重命名/JSON 导入导出）、登录/项目切换/监控页 |
-| 测试 | 344 个 pytest 用例 + 前端生产构建，GitHub Actions CI（backend 单测 / frontend 构建 / Docker 构建） |
+| 测试 | 355 个 pytest 用例 + 前端生产构建，GitHub Actions CI（backend 单测 / frontend 构建 / Docker 构建） |
 
 ## 快速启动
 
@@ -72,10 +73,10 @@ systemd 单元（`deploy/systemd/`）：
 ## 测试
 
 ```bash
-cd backend && .venv/bin/python -m pytest tests/ -q   # 344 个用例
+cd backend && .venv/bin/python -m pytest tests/ -q   # 355 个用例
 ```
 
-覆盖：节点注册/规格/参数解析、DAG 拓扑/环检测/端口校验、执行引擎（线性/菱形并行/失败传播/序列化）、回测引擎（股票 T+1/涨跌停/停牌 + 基金 T+1 确认/费用/定投 + **期货保证金/强平/多空净仓** + 组合回测）、数据层、REST API、用户/JWT/RBAC（test_auth）、项目与成员权限（test_projects）、结构化日志（test_logs）、监控接口（test_monitoring）。
+覆盖：节点注册/规格/参数解析、DAG 拓扑/环检测/端口校验、执行引擎（线性/菱形并行/失败传播/序列化）、回测引擎（股票 T+1/涨跌停/停牌 + 基金 T+1 确认/费用/定投 + **期货保证金/强平/多空净仓** + 组合回测）、**执行网关（模拟盘 Paper / 实盘桩 Live，需券商凭证）**、数据层、REST API、用户/JWT/RBAC（test_auth）、项目与成员权限（test_projects）、结构化日志（test_logs）、监控接口（test_monitoring）。
 
 ## API 文档
 
