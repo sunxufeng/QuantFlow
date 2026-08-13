@@ -43,6 +43,10 @@ class BacktestRunRequest(BaseModel):
         default_factory=dict,
         description="标的资产类型覆盖（symbol -> stock/fund；market=fund 且无交易所视为场外基金）",
     )
+    interval: str = Field(
+        default="daily",
+        description="行情频率：daily（日线）或 minute（分钟线，V1.2）",
+    )
     strategy_name: str = Field(default="", description="报告显示用策略名（默认取 strategy）")
     benchmark_symbol: Optional[str] = Field(default=None, description="基准标的（预留）")
 
@@ -82,12 +86,18 @@ def run_backtest(payload: BacktestRunRequest) -> dict:
             status_code=422,
             detail=f"未知策略 {payload.strategy!r}，可选: {sorted(STRATEGY_REGISTRY)}",
         )
+    if payload.interval not in ("daily", "minute"):
+        raise HTTPException(
+            status_code=422, detail=f"不支持的行情频率 {payload.interval!r}"
+        )
 
     # 1. 拉取行情（data_source 无数据时抛 503/404）
     data: Dict[str, List[Bar]] = {}
     for symbol in payload.symbols:
         try:
-            bars = market_service.bars(symbol, payload.start, payload.end)
+            bars = market_service.bars(
+                symbol, payload.start, payload.end, interval=payload.interval
+            )
         except Exception as exc:  # 行情源失败统一转 503
             logger.warning("backtest fetch %s failed: %s", symbol, exc)
             raise HTTPException(status_code=503, detail=f"行情获取失败: {symbol}") from exc
@@ -154,6 +164,9 @@ class PortfolioLegRequest(BaseModel):
     symbols: List[str] = Field(..., min_length=1, description="回测标的")
     asset_types: Dict[str, str] = Field(
         default_factory=dict, description="标的资产类型覆盖（symbol -> stock/fund）"
+    )
+    interval: str = Field(
+        default="daily", description="行情频率：daily 或 minute（V1.2）"
     )
     weight: float = Field(default=1.0, gt=0, description="组合权重（自动归一化）")
 

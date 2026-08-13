@@ -65,6 +65,7 @@ class PortfolioBacktest:
                     "params": leg.get("params", {}) or {},
                     "symbols": symbols,
                     "asset_types": leg.get("asset_types", {}) or {},
+                    "interval": leg.get("interval", "daily"),
                     "weight": w / total_w,
                 }
             )
@@ -76,7 +77,9 @@ class PortfolioBacktest:
             # 1. 拉取行情
             data: Dict[str, Any] = {}
             for sym in leg["symbols"]:
-                bars = market_service.bars(sym, self.start, self.end)
+                bars = market_service.bars(
+                    sym, self.start, self.end, interval=leg.get("interval", "daily")
+                )
                 if not bars:
                     raise BacktestError(
                         f"标的 {sym} 在 {self.start}~{self.end} 无行情数据"

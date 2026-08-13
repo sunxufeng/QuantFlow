@@ -11,9 +11,10 @@ from __future__ import annotations
 import abc
 import hashlib
 import logging
+import random
 from typing import List, Optional, Tuple
 
-from .models import Bar, Instrument
+from .models import Bar, Instrument, INTERVAL_MINUTE
 
 logger = logging.getLogger("quantflow.market")
 
@@ -31,6 +32,13 @@ class MarketDataSource(abc.ABC):
     @abc.abstractmethod
     def fetch_daily(self, symbol: str, start: str, end: str) -> List[Bar]:
         """拉取日线，区间闭区间 [start, end]（YYYY-MM-DD）。"""
+
+    def fetch_minute(self, symbol: str, start: str, end: str) -> List[Bar]:
+        """拉取分钟线（V1.2）。
+
+        默认实现不支持；具体数据源按需覆盖。区间闭区间 [start, end]。
+        """
+        raise DataSourceError(f"数据源 {self.name} 不支持分钟级行情")
 
     @abc.abstractmethod
     def symbols(self) -> List[Instrument]:
@@ -140,6 +148,59 @@ class LocalDataSource(MarketDataSource):
                         low=l,
                         close=c,
                         volume=float(vol),
+                        source=self.name,
+                        adjustment=self.adjustment,
+                    )
+                )
+        return bars
+
+    # 日内交易时段（30 分钟一根，共 10 根/日）
+    MINUTE_SESSION = [
+        "09:30", "10:00", "10:30", "11:00", "11:30",
+        "13:00", "13:30", "14:00", "14:30", "15:00",
+    ]
+
+    def fetch_minute(self, symbol: str, start: str, end: str) -> List[Bar]:
+        """由日线合成确定性的分钟线（V1.2 离线演示用）。
+
+        - 以日线 OHLC 为锚：首根开盘=日开盘，末根收盘=日收盘，高低包围路径；
+        - 用 ``(symbol, date)`` 派生种子，保证可复现；
+        - 仅对股票标的合成（基金按日 NAV，无分钟线）。
+        """
+        if symbol not in _FIXTURE_DAILY:
+            return []
+        bars: List[Bar] = []
+        n = len(self.MINUTE_SESSION)
+        for date, o, h, l, c, vol in _FIXTURE_DAILY[symbol]:
+            if not (start <= date <= end):
+                continue
+            seed = int(hashlib.sha1(f"{symbol}:{date}".encode()).hexdigest(), 16) % (2 ** 31)
+            rng = random.Random(seed)
+            span = max(h - l, 1e-6)
+            closes: List[float] = []
+            for i in range(n):
+                t = (i + 1) / n
+                base = o + (c - o) * t
+                noise = rng.uniform(-1, 1) * span * 0.15
+                closes.append(base + noise)
+            closes[-1] = c  # 末根收盘锁定为日线收盘
+            opens = [o] + closes[:-1]
+            for i, tm in enumerate(self.MINUTE_SESSION):
+                dt = f"{date} {tm}:00"
+                hi = max(opens[i], closes[i]) * (1 + rng.uniform(0, 0.004))
+                lo = min(opens[i], closes[i]) * (1 - rng.uniform(0, 0.004))
+                v = (vol / n) * rng.uniform(0.6, 1.4)
+                bars.append(
+                    Bar(
+                        symbol=symbol,
+                        date=date,
+                        datetime=dt,
+                        open=round(opens[i], 4),
+                        high=round(hi, 4),
+                        low=round(lo, 4),
+                        close=round(closes[i], 4),
+                        volume=round(v, 2),
+                        interval=INTERVAL_MINUTE,
                         source=self.name,
                         adjustment=self.adjustment,
                     )

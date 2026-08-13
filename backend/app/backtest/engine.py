@@ -18,7 +18,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-from ..market.models import Bar, Instrument
+from ..market.models import Bar, Instrument, INTERVAL_DAILY, INTERVAL_MINUTE
 from .account import Account, OrderRejected
 from .costs import CostCalculator, CostRates, load_cost_rates
 from .fund import FundAccount
@@ -76,11 +76,9 @@ class BacktestContext:
         return bars[-n:] if n > 0 else []
 
     def prev_close(self, symbol: str) -> Optional[float]:
-        """该标的前一交易日收盘价（用于判断涨跌停）。"""
+        """该标的前一根 K 线收盘价（用于判断涨跌停；日线=前一日，分钟线=前一分钟）。"""
         bars = self._history.get(symbol, [])
-        if len(bars) < 2:
-            return None
-        return bars[-2].close
+        return bars[-2].close if len(bars) >= 2 else None
 
     def symbols(self) -> List[str]:
         return sorted(self.bars.keys())
@@ -191,6 +189,12 @@ class BacktestEngine:
         self.symbols = sorted(data.keys())
         self._validate(data)
 
+        # 频率检测（V1.2）：日线 / 分钟线，要求数据同频
+        intervals = {b.interval for bars in data.values() for b in bars}
+        if len(intervals) > 1:
+            raise BacktestError("回测数据混合了多种频率，请保持同一频率")
+        self.is_minute = INTERVAL_MINUTE in intervals
+
         # 资产分类：market="fund" 且无交易所 -> 场外基金（NAV 计价）
         self._fund_symbols: set = set()
         if instruments:
@@ -203,15 +207,19 @@ class BacktestEngine:
                 self.initial_cash, cost_rates=rates, dividend_policy="cash"
             )
 
-        # 按日期索引：{date: {symbol: Bar}}
-        self.by_date: Dict[str, Dict[str, Bar]] = {}
+        # 时间轴索引：日线按 date、分钟线按 datetime 聚合为 step
+        # {step: {symbol: Bar}}；同一频率下每个 step 至多一根同标的 K 线
+        if self.is_minute and self._fund_symbols:
+            raise BacktestError("V1.2 不支持场外基金的分钟级回测（基金按日 NAV 计价）")
+        self.by_step: Dict[str, Dict[str, Bar]] = {}
         self._history: Dict[str, List[Bar]] = {s: [] for s in self.symbols}
         for symbol, bars in data.items():
-            for b in sorted(bars, key=lambda x: x.date):
-                self.by_date.setdefault(b.date, {})[symbol] = b
-        if not self.by_date:
+            for b in sorted(bars, key=lambda x: (x.date, x.datetime or "")):
+                step = b.datetime if self.is_minute else b.date
+                self.by_step.setdefault(step, {})[symbol] = b
+        if not self.by_step:
             raise BacktestError("回测数据为空")
-        self.calendar = sorted(self.by_date.keys())
+        self.calendar = sorted(self.by_step.keys())
 
     @staticmethod
     def _validate(data: Dict[str, List[Bar]]) -> None:
@@ -236,8 +244,12 @@ class BacktestEngine:
         prev_total = self.initial_cash
 
         self.strategy.initialize(ctx)
-        for date in self.calendar:
-            today = self.by_date[date]
+        for step_key in self.calendar:
+            today = self.by_step[step_key]
+
+            # 历史序列：截至当日/当分钟（含）— 先追加，供涨跌停判定与策略历史读取
+            for symbol, bar in today.items():
+                self._history[symbol].append(bar)
 
             # 开盘前：基金 T+1 确认（昨日申购/赎回），重置限购计数
             if self.fund_account:
@@ -248,14 +260,11 @@ class BacktestEngine:
                     bar = today.get(sym)
                     div = getattr(bar, "dividend", 0) if bar is not None else 0
                     if div and div > 0:
-                        self.fund_account.apply_dividend(sym, div, bar.close, date)
+                        self.fund_account.apply_dividend(sym, div, bar.close, step_key)
             # 股票：当日停牌 / 涨停 / 跌停状态
-            account.set_daily_states(*self._daily_states(date))
-            ctx.date = date
+            account.set_daily_states(*self._daily_states(step_key))
+            ctx.date = step_key
             ctx.bars = today
-            # 历史序列：截至当日（含）
-            for symbol, bar in today.items():
-                self._history[symbol].append(bar)
 
             self.strategy.before_trading(ctx)
             self.strategy.handle_data(ctx)
@@ -278,7 +287,7 @@ class BacktestEngine:
                 total = account.total_value(prices)
             equity.append(
                 EquityPoint(
-                    date=date,
+                    date=step_key,
                     cash=cash,
                     market_value=market_value,
                     total_value=total,
@@ -302,26 +311,27 @@ class BacktestEngine:
     # ------------------------------------------------------------------ #
     # 状态判定
     # ------------------------------------------------------------------ #
-    def _prev_close(self, symbol: str, date: str) -> Optional[float]:
-        """date 之前最近一个交易日的收盘价。"""
-        bars = self._history[symbol]
-        for b in reversed(bars):
-            if b.date < date:
-                return b.close
-        return None
+    def _prev_close(self, symbol: str) -> Optional[float]:
+        """当前 step 之前最近一根 K 线的收盘价（日线=前一日，分钟线=前一分钟）。
 
-    def _daily_states(self, date: str) -> tuple:
+        历史序列在 handle_data 前已追加当日/当分钟 K 线，故取 [-2]。
+        """
+        bars = self._history[symbol]
+        return bars[-2].close if len(bars) >= 2 else None
+
+    def _daily_states(self, step_key: str) -> tuple:
         suspended: set = set()
         limit_up: set = set()
         limit_down: set = set()
+        step = self.by_step.get(step_key, {})
         for symbol in self.symbols:
             if symbol in self._fund_symbols:
                 continue  # 场外基金按 NAV 计价，无涨跌停/停牌
-            bar = self.by_date.get(date, {}).get(symbol)
+            bar = step.get(symbol)
             if bar is None or bar.volume == 0:
                 suspended.add(symbol)
                 continue
-            prev = self._prev_close(symbol, date)
+            prev = self._prev_close(symbol)
             if prev is None or prev <= 0:
                 continue
             from .account import LIMIT_PCT

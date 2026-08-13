@@ -7,7 +7,7 @@ import logging
 from typing import List, Optional
 
 from .cache import CacheBackend, default_cache
-from .models import Bar, Instrument
+from .models import Bar, Instrument, INTERVAL_DAILY, INTERVAL_MINUTE
 from .repository import (
     InMemoryMarketDataRepository,
     MarketDataRepository,
@@ -56,15 +56,26 @@ class MarketService:
             if cached is not None:
                 return [Bar.from_dict(b) for b in cached]
 
-        bars = self.repository.read_daily(symbol, start, end)
-        if not bars:
-            bars = self._fetch(self.primary, symbol, start, end)
-            if bars:
-                self.repository.upsert_daily(bars)
+        if interval == INTERVAL_MINUTE:
+            bars = self._fetch_minute(self.primary, symbol, start, end)
+        else:
+            bars = self.repository.read_daily(symbol, start, end)
+            if not bars:
+                bars = self._fetch(self.primary, symbol, start, end)
+                if bars:
+                    self.repository.upsert_daily(bars)
 
         if bars and use_cache:
             self.cache.set(key, [b.to_dict() for b in bars], CACHE_TTL)
         return bars
+
+    def _fetch_minute(self, source: MarketDataSource, symbol: str, start: str, end: str) -> List[Bar]:
+        try:
+            return source.fetch_minute(symbol, start, end)
+        except DataSourceError:
+            raise
+        except Exception as exc:  # pragma: no cover - provider failure
+            raise DataSourceError(f"{source.name} failed to fetch minute {symbol}: {exc}") from exc
 
     def instruments(self) -> List[Instrument]:
         return self.primary.symbols()
