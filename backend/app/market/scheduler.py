@@ -42,27 +42,57 @@ class DataSyncService:
         self._latest: Optional[Dict] = None
 
     def _window(self) -> tuple[str, str]:
-        start = os.getenv("QF_DATA_SYNC_START") or DEFAULT_START
+        """增量窗口：
+
+        - 若显式设置了 ``QF_DATA_SYNC_START`` / ``QF_DATA_SYNC_END``，优先使用（全量/回补场景）；
+        - 否则走增量：``start`` 取「已落库最新日 + 1 天」，避免每次重拉整段历史，
+          仅拉取上次同步之后产生的新行情；``end`` 缺省回退到内置数据可用区间上界。
+        """
         end = os.getenv("QF_DATA_SYNC_END") or DEFAULT_END
+        explicit_start = os.getenv("QF_DATA_SYNC_START")
+        if explicit_start:
+            return explicit_start, end
+        latest = self.service.repository.latest_date("daily")
+        if latest:
+            # 仅续拉最新日之后的新数据（日期字符串可比较：YYYY-MM-DD）
+            start = self._next_day(latest)
+        else:
+            start = DEFAULT_START
         return start, end
 
+    @staticmethod
+    def _next_day(date_str: str) -> str:
+        from datetime import timedelta
+
+        d = datetime.strptime(date_str, "%Y-%m-%d") + timedelta(days=1)
+        return d.strftime("%Y-%m-%d")
+
     def run_once(self) -> Dict:
-        """手动/定时触发一次全量同步，返回本次运行记录。"""
+        """手动/定时触发一次同步，返回本次运行记录。
+
+        增量语义：窗口内若无新数据（start > end），直接记 success 且
+        ``bars_written=0``，不回源、不重复写入。
+        """
         start, end = self._window()
         before = self.service.repository.count()
         symbols = [i.symbol for i in self.service.instruments()]
         status = "success"
         error: Optional[str] = None
+        bars_written = 0
         started_at = _utc_now()
         try:
-            for sym in symbols:
-                # use_cache=False 强制回源，确保增量更新生效
-                self.service.bars(sym, start=start, end=end, use_cache=False)
+            if start <= end:
+                for sym in symbols:
+                    # use_cache=False 强制回源，确保增量更新生效
+                    self.service.bars(sym, start=start, end=end, use_cache=False)
+            else:
+                logger.info("增量窗口无新数据（start=%s > end=%s），跳过回源", start, end)
         except Exception as exc:  # pragma: no cover - 取决于数据源可用性
             status = "failed"
             error = str(exc)
             logger.exception("行情同步失败：%s", exc)
         after = self.service.repository.count()
+        bars_written = max(0, after - before)
         finished_at = _utc_now()
         rec = {
             "id": f"du_{uuid.uuid4().hex[:12]}",

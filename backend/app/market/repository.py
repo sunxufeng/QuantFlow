@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import threading
 from abc import ABC, abstractmethod
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from ..core.db import db
 from .models import Bar
@@ -20,6 +20,10 @@ class MarketDataRepository(ABC):
     @abstractmethod
     def upsert_daily(self, bars: List[Bar]) -> int:
         """Insert or replace bars and return the number processed."""
+
+    @abstractmethod
+    def latest_date(self, interval: str = "daily") -> Optional[str]:
+        """Return the latest stored bar date (inclusive) for the interval, or None."""
 
 
 class InMemoryMarketDataRepository(MarketDataRepository):
@@ -43,6 +47,15 @@ class InMemoryMarketDataRepository(MarketDataRepository):
             for bar in bars:
                 self._items[(bar.symbol, bar.date, bar.interval)] = Bar.from_dict(bar.to_dict())
         return len(bars)
+
+    def latest_date(self, interval: str = "daily") -> Optional[str]:
+        with self._lock:
+            dates = [
+                date
+                for (item_symbol, date, item_interval), _ in self._items.items()
+                if item_interval == interval
+            ]
+        return max(dates) if dates else None
 
     def clear(self) -> None:
         with self._lock:
@@ -116,6 +129,12 @@ class SQLiteMarketDataRepository(MarketDataRepository):
             )
             db._ensure().commit()
         return len(bars)
+
+    def latest_date(self, interval: str = "daily") -> Optional[str]:
+        row = db.query_one(
+            "SELECT MAX(date) AS d FROM market_bars WHERE interval = ?", (interval,)
+        )
+        return row["d"] if row and row["d"] is not None else None
 
     def count(self) -> int:
         row = db.query_one("SELECT COUNT(*) AS n FROM market_bars")

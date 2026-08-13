@@ -1,9 +1,10 @@
-"""N4 行情落库与数据自动更新测试：SQLite 仓库 + 同步状态/触发。"""
+"""N4 行情落库与数据自动更新测试：SQLite 仓库 + 同步状态/触发 + 增量语义。"""
 
 from fastapi.testclient import TestClient
 
 from app.main import app
 from app.market.repository import SQLiteMarketDataRepository
+from app.market.scheduler import DataSyncService, data_sync_service
 
 client = TestClient(app)
 
@@ -56,3 +57,28 @@ def test_manual_sync_writes_bars_and_records_status():
 def test_sync_requires_auth():
     resp = client.post("/api/market/sync")
     assert resp.status_code == 401
+
+
+def test_incremental_sync_only_fetches_new_bars():
+    """第二次同步应走增量窗口（上次落库最新日之后），无新数据时 bars_written=0。"""
+    repo = SQLiteMarketDataRepository()
+    repo.clear()
+    svc = DataSyncService()
+    first = svc.run_once()
+    assert first["status"] == "success"
+    assert first["bars_written"] > 0
+    # 增量窗口起点 = 已落库最新日 + 1 天，落在 fixture 数据范围之外
+    second = svc.run_once()
+    assert second["status"] == "success"
+    assert second["bars_written"] == 0
+
+
+def test_latest_date_across_repo():
+    repo = SQLiteMarketDataRepository()
+    repo.clear()
+    assert repo.latest_date("daily") is None
+    svc = DataSyncService()
+    svc.run_once()
+    latest = repo.latest_date("daily")
+    assert latest is not None
+    assert latest <= "2024-02-01"
