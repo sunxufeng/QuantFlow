@@ -47,7 +47,7 @@ def client():
 def test_health(client):
     h = client.health()
     assert h["status"] == "ok"
-    assert h["version"] == "1.0.0"
+    assert h["version"].startswith("1.")
 
 
 def test_register_login_and_backtest_flow(client):

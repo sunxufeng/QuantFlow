@@ -26,7 +26,7 @@ def _default_rates() -> dict:
         "transfer_fee_rate": 0.00001, # 过户费（双边）
         "slippage": 0.0,              # 滑点比例（双边方向）
         "subscription_fee_rate": 0.0015,  # 场外基金申购费（前端，默认 0.15% 一折）
-        "redemption_fee_rate": 0.005,     # 场外基金赎回费（默认 0.5%）
+        "redemption_fee_rate": 0.005,     # 场外基金赎回费（默认 0.5%，阶梯为空时回退）
     }
 
 
@@ -39,12 +39,32 @@ class CostRates:
     slippage: float = 0.0
     subscription_fee_rate: float = 0.0015
     redemption_fee_rate: float = 0.005
+    # 赎回费阶梯：(最短持有天数, 费率) 升序；持有期 >= 该天数适用对应费率。
+    # 默认等效于统一 0.5%（任何持有期均命中 (0, 0.005)），保证向后兼容。
+    redemption_fee_tiers: tuple = ((0, 0.005),)
 
     @classmethod
     def from_dict(cls, data: dict) -> "CostRates":
         base = _default_rates()
         base.update({k: float(v) for k, v in data.items() if k in base})
-        return cls(**base)
+        tiers = cls._default_tiers()
+        if "redemption_fee_tiers" in data:
+            raw = data["redemption_fee_tiers"]
+            tiers = tuple((int(t[0]), float(t[1])) for t in raw)
+        return cls(
+            commission_rate=base["commission_rate"],
+            commission_min=base["commission_min"],
+            stamp_tax_rate=base["stamp_tax_rate"],
+            transfer_fee_rate=base["transfer_fee_rate"],
+            slippage=base["slippage"],
+            subscription_fee_rate=base["subscription_fee_rate"],
+            redemption_fee_rate=base["redemption_fee_rate"],
+            redemption_fee_tiers=tiers,
+        )
+
+    @staticmethod
+    def _default_tiers() -> tuple:
+        return ((0, 0.005),)
 
     def to_dict(self) -> dict:
         return {
@@ -55,7 +75,24 @@ class CostRates:
             "slippage": self.slippage,
             "subscription_fee_rate": self.subscription_fee_rate,
             "redemption_fee_rate": self.redemption_fee_rate,
+            "redemption_fee_tiers": [list(t) for t in self.redemption_fee_tiers],
         }
+
+
+def resolve_redemption_fee_rate(tiers: tuple, holding_days: int) -> float:
+    """按持有期（自然日）从阶梯中解析赎回费率；空阶梯回退 0。
+
+    ``tiers`` 须按 (min_holding_days, rate) 升序；取满足条件的最大档。
+    """
+    if not tiers:
+        return 0.0
+    rate = tiers[0][1]
+    for min_days, r in tiers:
+        if holding_days >= min_days:
+            rate = r
+        else:
+            break
+    return rate
 
 
 def load_cost_rates(path: Optional[str] = None) -> CostRates:

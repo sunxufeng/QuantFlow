@@ -126,6 +126,65 @@ class FundDingTouStrategy(Strategy):
                 ctx.redeem(sym, fa.positions[sym].shares)
 
 
+class FundValueAvgStrategy(Strategy):
+    """价值平均定投（基金）：目标市值线性增长，每月首个交易日补足/赎回差额。
+
+    与 ``fund_dingtou``（每期固定金额）不同，价值平均以「目标市值」为锚：
+    目标 = amount * 期数；当期基金市值低于目标则申购差额（受现金约束），
+    高于目标则赎回超出部分（受持仓约束）。现金作为蓄水池不被赎回。
+    """
+
+    def __init__(
+        self,
+        amount: float = 1000.0,
+        symbol: str = "",
+        redeem_on_last_day: bool = True,
+    ) -> None:
+        self.amount = float(amount)
+        self.symbol = symbol
+        self.redeem_on_last_day = bool(redeem_on_last_day)
+
+    def initialize(self, ctx: BacktestContext) -> None:
+        self.last_month = ""
+        self.period = 0
+
+    def handle_data(self, ctx: BacktestContext) -> None:
+        sym = self.symbol or ctx.symbols()[0]
+        month = ctx.date[:7]
+        if month == self.last_month:
+            return
+        self.last_month = month
+        self.period += 1
+
+        fa = ctx.fund_account
+        if fa is None:
+            return
+        bar = ctx.bar(sym)
+        nav = bar.close if bar else 0.0
+        if nav <= 0:
+            return
+
+        # 已投入市值（不含现金蓄水池）
+        invested = (fa.positions[sym].shares if sym in fa.positions else 0.0) * nav
+        target = self.amount * self.period
+        delta = target - invested
+        if delta > 0:
+            # 补足：申购差额（受可用现金约束）
+            avail = fa.cash
+            if avail > 0:
+                ctx.subscribe(sym, min(delta, avail))
+        else:
+            # 赎回超出部分（受可用份额约束）
+            pos = fa.positions.get(sym)
+            if pos and pos.shares > 0:
+                ctx.redeem(sym, min(-delta / nav, pos.shares))
+
+        if self.redeem_on_last_day and ctx.date == ctx.calendar[-1]:
+            fa2 = ctx.fund_account
+            if fa2 and sym in fa2.positions:
+                ctx.redeem(sym, fa2.positions[sym].shares)
+
+
 def _buy_hold_factory(params: Dict[str, Any]) -> Strategy:
     return BuyHoldStrategy(
         shares=int(params.get("shares", 0)),
@@ -149,11 +208,20 @@ def _fund_dingtou_factory(params: Dict[str, Any]) -> Strategy:
     )
 
 
+def _fund_value_avg_factory(params: Dict[str, Any]) -> Strategy:
+    return FundValueAvgStrategy(
+        amount=float(params.get("amount", 1000.0)),
+        symbol=str(params.get("symbol", "")),
+        redeem_on_last_day=bool(params.get("redeem_on_last_day", True)),
+    )
+
+
 # 策略注册表：名称 -> 工厂（由 params 构建策略实例）
 STRATEGY_REGISTRY: Dict[str, Callable[[Dict[str, Any]], Strategy]] = {
     "buy_hold": _buy_hold_factory,
     "ma_cross": _ma_cross_factory,
     "fund_dingtou": _fund_dingtou_factory,
+    "fund_value_avg": _fund_value_avg_factory,
 }
 
 

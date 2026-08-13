@@ -53,7 +53,7 @@ def test_bars_to_table():
     ]
     table = bars_to_table(bars)
     assert table.columns == [
-        "symbol", "date", "open", "high", "low", "close", "volume", "amount", "source", "adjustment"
+        "symbol", "date", "open", "high", "low", "close", "volume", "amount", "source", "adjustment", "dividend"
     ]
     assert len(table) == 2
     assert table.rows[0]["close"] == 1.5

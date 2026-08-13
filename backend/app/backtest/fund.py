@@ -6,7 +6,9 @@
 - T 日下单按 T 日净值确认，T+1 确认（申购份额到账 / 赎回资金到账）
 - 无涨跌停、无整手限制（份额可为小数）
 - 支持单日单只基金限购（暂停大额申购），0 表示不限
-- 赎回费率按持有期限分档为 V1.3 预留，当前按统一费率简化
+- 赎回费按持有期分档（V1.2）：默认等效统一 0.5%，可配阶梯（如 7 日内 1.5%）
+- 分笔成本（FIFO）：多次申购按批次记录成本与确认日，赎回按先进先出计算
+- 基金分红（V1.2）：现金分红（入现金）/ 红利再投（按除息净值增份），默认现金
 
 V1.0 只实现场外开放式基金；场内 ETF/LOF 与股票同机制（
 CostCalculator + Account），仅费率配置不同。
@@ -14,10 +16,11 @@ CostCalculator + Account），仅费率配置不同。
 
 from __future__ import annotations
 
+import datetime as dt
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
-from .costs import CostRates
+from .costs import CostRates, resolve_redemption_fee_rate
 
 
 @dataclass
@@ -37,6 +40,24 @@ class FundPosition:
 
 
 @dataclass
+class _FundLot:
+    """一只基金的一笔确认份额批次（FIFO 成本基础）。"""
+
+    symbol: str
+    shares: float
+    cost_per_share: float  # 含申购费的单份成本（元/份）
+    acquire_date: str      # 确认日（T+1）
+
+    def to_dict(self) -> dict:
+        return {
+            "symbol": self.symbol,
+            "shares": round(self.shares, 4),
+            "cost_per_share": round(self.cost_per_share, 6),
+            "acquire_date": self.acquire_date,
+        }
+
+
+@dataclass
 class FundTrade:
     """一笔基金申购/赎回成交记录。"""
 
@@ -48,7 +69,9 @@ class FundTrade:
     fee: float          # 手续费
     date: str           # 下单日（T 日）
     confirm_date: str   # 确认日（T+1）
-    pnl: Optional[float] = None  # 赎回时已实现盈亏（扣手续费）
+    pnl: Optional[float] = None      # 赎回时已实现盈亏（扣手续费）
+    holding_days: Optional[int] = None   # 赎回时持有天数（首笔批次口径）
+    fee_rate: Optional[float] = None     # 赎回时实际综合费率
 
     def to_dict(self) -> dict:
         d = {
@@ -63,6 +86,10 @@ class FundTrade:
         }
         if self.pnl is not None:
             d["pnl"] = round(self.pnl, 4)
+        if self.holding_days is not None:
+            d["holding_days"] = self.holding_days
+        if self.fee_rate is not None:
+            d["fee_rate"] = round(self.fee_rate, 6)
         return d
 
 
@@ -77,6 +104,7 @@ class _PendingSubscription:
     nav: float
     amount: float  # 申购总金额（含手续费，用于成本摊薄）
     date: str
+    confirm_date: str = ""
 
 
 @dataclass
@@ -88,8 +116,20 @@ class _PendingRedemption:
     date: str
 
 
+def _holding_days(a: Optional[str], b: Optional[str]) -> int:
+    """两个日期字符串（YYYY-MM-DD）之间的自然日差；非 ISO 格式回退 0。"""
+    if not a or not b:
+        return 0
+    try:
+        da = dt.date.fromisoformat(a)
+        db = dt.date.fromisoformat(b)
+        return (db - da).days
+    except (ValueError, TypeError):
+        return 0
+
+
 class FundAccount:
-    """场外基金账户：现金 + 份额持仓 + T+1 确认的申购/赎回队列。"""
+    """场外基金账户：现金 + 分笔份额持仓 + T+1 确认的申购/赎回队列。"""
 
     def __init__(
         self,
@@ -97,20 +137,41 @@ class FundAccount:
         *,
         cost_rates: Optional[CostRates] = None,
         max_subscription_amount: float = 0.0,
+        dividend_policy: str = "cash",
     ) -> None:
         self.initial_cash = float(initial_cash)
         self.cash = self.initial_cash
         rates = cost_rates or CostRates()
         self.subscription_fee_rate = rates.subscription_fee_rate
         self.redemption_fee_rate = rates.redemption_fee_rate
+        self.redemption_fee_tiers = rates.redemption_fee_tiers
+        self.dividend_policy = dividend_policy
         self.max_subscription_amount = float(max_subscription_amount)
 
-        self.positions: Dict[str, FundPosition] = {}
+        self._lots: Dict[str, List[_FundLot]] = {}  # 分笔持仓（FIFO）
         self.trades: List[FundTrade] = []
         self.realized_pnl: float = 0.0
         self._pending_subs: List[_PendingSubscription] = []
         self._pending_reds: List[_PendingRedemption] = []
         self._today_sub_amount: Dict[str, float] = {}  # 当日已申购金额（限购校验）
+
+    # ------------------------------------------------------------------ #
+    # 持仓视图（由分笔批次聚合，向后兼容 positions 接口）
+    # ------------------------------------------------------------------ #
+    @property
+    def positions(self) -> Dict[str, FundPosition]:
+        out: Dict[str, FundPosition] = {}
+        for sym, lots in self._lots.items():
+            total_shares = sum(l.shares for l in lots)
+            if total_shares <= 1e-9:
+                continue
+            total_cost = sum(l.cost_per_share * l.shares for l in lots)
+            out[sym] = FundPosition(
+                symbol=sym,
+                shares=total_shares,
+                cost=total_cost / total_shares if total_shares else 0.0,
+            )
+        return out
 
     # ------------------------------------------------------------------ #
     # 交易
@@ -147,7 +208,8 @@ class FundAccount:
         self._today_sub_amount[symbol] = self._today_sub_amount.get(symbol, 0.0) + amount
         self._pending_subs.append(
             _PendingSubscription(
-                symbol=symbol, shares=shares, nav=nav, amount=amount, date=date
+                symbol=symbol, shares=shares, nav=nav, amount=amount, date=date,
+                confirm_date=confirm_date or date,
             )
         )
         trade = FundTrade(
@@ -171,56 +233,115 @@ class FundAccount:
         date: str,
         confirm_date: str = "",
     ) -> Optional[FundTrade]:
-        """按份额赎回。返回成交记录；被拒绝（无持仓/净值无效）返回 None。"""
-        pos = self.positions.get(symbol)
-        if pos is None or pos.shares <= 0:
+        """按份额赎回（FIFO）。返回成交记录；被拒绝（无持仓/净值无效）返回 None。"""
+        lots = self._lots.get(symbol)
+        if not lots:
             return None
         if not nav or nav <= 0:
             return None
 
-        shares = min(shares, pos.shares)
+        available = sum(l.shares for l in lots)
+        shares = min(shares, available)
         if shares <= 1e-9:
             return None
 
-        proceeds_gross = shares * nav
-        fee = proceeds_gross * self.redemption_fee_rate
-        proceeds = proceeds_gross - fee
-        # 已实现盈亏 = 到账金额 - 持仓成本（含申购费摊薄）
-        realized = proceeds - pos.cost * shares
-        self.realized_pnl += realized
+        remaining = shares
+        realized_total = 0.0
+        fee_total = 0.0
+        redeemed_shares = 0.0
+        first_acquire: Optional[str] = None
+        for lot in lots:
+            if remaining <= 1e-12:
+                break
+            take = min(lot.shares, remaining)
+            if take <= 1e-12:
+                continue
+            gross = take * nav
+            hd = _holding_days(lot.acquire_date, date)
+            rate = resolve_redemption_fee_rate(self.redemption_fee_tiers, hd)
+            fee = gross * rate
+            proceeds = gross - fee
+            realized = proceeds - lot.cost_per_share * take
+            realized_total += realized
+            fee_total += fee
+            redeemed_shares += take
+            lot.shares -= take
+            remaining -= take
+            if first_acquire is None:
+                first_acquire = lot.acquire_date
 
-        pos.shares -= shares  # 当日锁定，T+1 资金到账
+        self._lots[symbol] = [l for l in lots if l.shares > 1e-9]
+        if not self._lots[symbol]:
+            self._lots.pop(symbol, None)
+
+        self.realized_pnl += realized_total
+        proceeds_total = shares * nav - fee_total
         self._pending_reds.append(
-            _PendingRedemption(symbol=symbol, shares=shares, proceeds=proceeds, nav=nav, date=date)
+            _PendingRedemption(symbol=symbol, shares=redeemed_shares, proceeds=proceeds_total, nav=nav, date=date)
         )
-        if pos.shares <= 1e-9:
-            self.positions.pop(symbol, None)
-
+        eff_rate = (fee_total / (shares * nav)) if shares * nav > 0 else 0.0
         trade = FundTrade(
             symbol=symbol,
             side="redeem",
             amount=0.0,
-            shares=shares,
+            shares=redeemed_shares,
             nav=nav,
-            fee=fee,
+            fee=fee_total,
             date=date,
             confirm_date=confirm_date or date,
-            pnl=realized,
+            pnl=realized_total,
+            holding_days=_holding_days(first_acquire, date) if first_acquire else 0,
+            fee_rate=eff_rate,
         )
         self.trades.append(trade)
         return trade
 
     # ------------------------------------------------------------------ #
+    # 分红（V1.2）
+    # ------------------------------------------------------------------ #
+    def apply_dividend(
+        self,
+        symbol: str,
+        per_share: float,
+        nav: float,
+        date: str,
+        policy: Optional[str] = None,
+    ) -> float:
+        """除息日分红处理。返回分红金额（元）。
+
+        - cash（默认）：分红计入现金，份额不变（净值已除息，总资产不重复计）
+        - reinvest：按除息净值增配份额，单份成本 = 除息净值
+        """
+        policy = policy or self.dividend_policy
+        lots = self._lots.get(symbol)
+        if not lots:
+            return 0.0
+        shares = sum(l.shares for l in lots)
+        if shares <= 1e-9 or per_share <= 0:
+            return 0.0
+        amount = shares * per_share
+        if policy == "reinvest" and nav > 0:
+            new_shares = amount / nav
+            self._lots[symbol].append(
+                _FundLot(symbol=symbol, shares=new_shares, cost_per_share=nav, acquire_date=date)
+            )
+        else:
+            self.cash += amount
+        return amount
+
+    # ------------------------------------------------------------------ #
     # 状态维护（由回测引擎按交易日驱动）
     # ------------------------------------------------------------------ #
     def confirm_pending(self) -> None:
-        """T+1 确认：申购份额入账、赎回资金到账。"""
+        """T+1 确认：申购份额入账（分笔批次）、赎回资金到账。"""
         for p in self._pending_subs:
-            pos = self.positions.setdefault(p.symbol, FundPosition(symbol=p.symbol))
-            # 成本摊薄：按申购总金额（含申购费），与股票账户口径一致
-            new_cost_total = pos.cost * pos.shares + p.amount
-            pos.shares += p.shares
-            pos.cost = new_cost_total / pos.shares if pos.shares else 0.0
+            lot = _FundLot(
+                symbol=p.symbol,
+                shares=p.shares,
+                cost_per_share=(p.amount / p.shares) if p.shares else 0.0,
+                acquire_date=p.confirm_date or p.date,
+            )
+            self._lots.setdefault(p.symbol, []).append(lot)
         self._pending_subs.clear()
 
         for p in self._pending_reds:
@@ -256,6 +377,10 @@ class FundAccount:
             d["market_value"] = round(pos.shares * nav, 4)
             d["unrealized_pnl"] = round(pos.shares * (nav - pos.cost), 4)
             positions.append(d)
+        lots = []
+        for symbol, ls in self._lots.items():
+            for l in ls:
+                lots.append(l.to_dict())
         return {
             "initial_cash": self.initial_cash,
             "cash": round(self.cash, 4),
@@ -265,5 +390,8 @@ class FundAccount:
             "realized_pnl": round(self.realized_pnl, 4),
             "subscription_fee_rate": self.subscription_fee_rate,
             "redemption_fee_rate": self.redemption_fee_rate,
+            "redemption_fee_tiers": [list(t) for t in self.redemption_fee_tiers],
+            "dividend_policy": self.dividend_policy,
             "positions": positions,
+            "lots": lots,
         }

@@ -67,6 +67,7 @@ def _strategy_description(name: str) -> str:
         "buy_hold": "买入持有：首日买入、末日卖出（股票）",
         "ma_cross": "均线金叉/死叉：MA5 上穿 MA20 买入、下穿卖出（股票）",
         "fund_dingtou": "场外基金定投：每月首个交易日申购固定金额（基金）",
+        "fund_value_avg": "价值平均定投：目标市值线性增长，每月补足/赎回差额（基金）",
     }
     return docs.get(name, "")
 

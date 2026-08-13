@@ -36,6 +36,7 @@ class Bar:
     datetime: Optional[str] = None  # 分钟级预留
     source: str = ""  # provider / fixture，保证数据可追溯
     adjustment: str = "none"  # none / qfq / hfq
+    dividend: float = 0.0  # 每份分红（除息日 >0；默认 0，无分红）
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -51,6 +52,7 @@ class Bar:
             "interval": self.interval,
             "source": self.source,
             "adjustment": self.adjustment,
+            "dividend": self.dividend,
         }
 
     @classmethod
@@ -68,6 +70,7 @@ class Bar:
             datetime=data.get("datetime"),
             source=data.get("source", ""),
             adjustment=data.get("adjustment", "none"),
+            dividend=float(data.get("dividend", 0.0)),
         )
 
 
@@ -124,6 +127,7 @@ def bars_to_table(bars: List[Bar]) -> DataTable:
         "amount",
         "source",
         "adjustment",
+        "dividend",
     ]
     if any(b.datetime for b in bars):
         columns.insert(2, "datetime")

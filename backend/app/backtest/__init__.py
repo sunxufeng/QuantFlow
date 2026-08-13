@@ -27,6 +27,7 @@ from .strategies import (
     STRATEGY_REGISTRY,
     BuyHoldStrategy,
     FundDingTouStrategy,
+    FundValueAvgStrategy,
     MaCrossStrategy,
     get_strategy,
 )
@@ -44,6 +45,7 @@ __all__ = [
     "EquityPoint",
     "FundAccount",
     "FundDingTouStrategy",
+    "FundValueAvgStrategy",
     "FundOrderRejected",
     "FundPosition",
     "FundTrade",

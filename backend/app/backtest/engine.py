@@ -199,7 +199,9 @@ class BacktestEngine:
                     self._fund_symbols.add(sym)
         self.fund_account: Optional[FundAccount] = None
         if self._fund_symbols:
-            self.fund_account = FundAccount(self.initial_cash, cost_rates=rates)
+            self.fund_account = FundAccount(
+                self.initial_cash, cost_rates=rates, dividend_policy="cash"
+            )
 
         # 按日期索引：{date: {symbol: Bar}}
         self.by_date: Dict[str, Dict[str, Bar]] = {}
@@ -241,6 +243,12 @@ class BacktestEngine:
             if self.fund_account:
                 self.fund_account.confirm_pending()
                 self.fund_account.start_new_day()
+                # 基金分红（除息日）：bar 携带 dividend>0 时按政策计入现金或红利再投
+                for sym in self._fund_symbols:
+                    bar = today.get(sym)
+                    div = getattr(bar, "dividend", 0) if bar is not None else 0
+                    if div and div > 0:
+                        self.fund_account.apply_dividend(sym, div, bar.close, date)
             # 股票：当日停牌 / 涨停 / 跌停状态
             account.set_daily_states(*self._daily_states(date))
             ctx.date = date
