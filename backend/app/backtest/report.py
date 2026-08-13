@@ -94,7 +94,11 @@ class BacktestReportStore:
         """已保存报告 run_id 列表（按修改时间倒序）。"""
         if not os.path.isdir(self.report_dir):
             return []
-        files = [f for f in os.listdir(self.report_dir) if f.endswith(".json")]
+        files = [
+            f
+            for f in os.listdir(self.report_dir)
+            if f.endswith(".json") and not f.startswith("._")
+        ]
         files.sort(
             key=lambda f: os.path.getmtime(os.path.join(self.report_dir, f)), reverse=True
         )
