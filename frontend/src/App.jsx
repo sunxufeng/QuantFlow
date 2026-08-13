@@ -234,6 +234,43 @@ function Canvas({ projectId, pendingTemplate, onTemplateConsumed }) {
 
   const { canUndo, canRedo, undo, redo, clearHistory } = useGraphHistory(nodes, edges, setNodes, setEdges)
 
+  const specOf = useCallback(
+    (type) => specs.find((s) => s.node_type === type),
+    [specs],
+  )
+
+  const applyWorkflow = useCallback((workflow) => {
+    const restoredNodes = workflow.nodes.map((node, index) => {
+      const spec = specOf(node.node_type)
+      if (!spec) throw new Error(`节点类型不可用: ${node.node_type}`)
+      return {
+        id: node.id,
+        type: 'qf',
+        position: node.position || { x: 80 + index * 220, y: 120 },
+        data: { nodeType: node.node_type, spec, params: node.params || {} },
+      }
+    })
+    setNodes(restoredNodes)
+    setEdges(workflow.edges.map((edge) => ({
+      id: edge.id || `${edge.source}-${edge.source_port}-${edge.target}-${edge.target_port}`,
+      source: edge.source,
+      sourceHandle: edge.source_port,
+      target: edge.target,
+      targetHandle: edge.target_port,
+    })))
+    const maxSuffix = restoredNodes.reduce((max, node) => {
+      const m = node.id.match(/-(\d+)$/)
+      return m ? Math.max(max, Number(m[1])) : max
+    }, restoredNodes.length)
+    idRef.current = Math.max(idRef.current, maxSuffix)
+    setRunNodeStates({})
+    setRunId('')
+    setRunStatus('')
+    setResult(null)
+    setError('')
+    clearHistory()
+  }, [clearHistory, setEdges, setNodes, specOf])
+
   const refreshWorkflows = useCallback(() => {
     return fetchWorkflows(projectId).then(setSavedWorkflows)
   }, [projectId])
@@ -270,11 +307,6 @@ function Canvas({ projectId, pendingTemplate, onTemplateConsumed }) {
       onTemplateConsumed?.()
     }
   }, [pendingTemplate, specs, applyWorkflow, onTemplateConsumed, setSelectedId])
-
-  const specOf = useCallback(
-    (type) => specs.find((s) => s.node_type === type),
-    [specs],
-  )
 
   const addNode = useCallback((spec, position) => {
     const id = `${spec.node_type}-${++idRef.current}`
@@ -364,38 +396,6 @@ function Canvas({ projectId, pendingTemplate, onTemplateConsumed }) {
       target_port: e.targetHandle,
     })),
   }), [nodes, edges])
-
-  const applyWorkflow = useCallback((workflow) => {
-    const restoredNodes = workflow.nodes.map((node, index) => {
-      const spec = specOf(node.node_type)
-      if (!spec) throw new Error(`节点类型不可用: ${node.node_type}`)
-      return {
-        id: node.id,
-        type: 'qf',
-        position: node.position || { x: 80 + index * 220, y: 120 },
-        data: { nodeType: node.node_type, spec, params: node.params || {} },
-      }
-    })
-    setNodes(restoredNodes)
-    setEdges(workflow.edges.map((edge) => ({
-      id: edge.id || `${edge.source}-${edge.source_port}-${edge.target}-${edge.target_port}`,
-      source: edge.source,
-      sourceHandle: edge.source_port,
-      target: edge.target,
-      targetHandle: edge.target_port,
-    })))
-    const maxSuffix = restoredNodes.reduce((max, node) => {
-      const m = node.id.match(/-(\d+)$/)
-      return m ? Math.max(max, Number(m[1])) : max
-    }, restoredNodes.length)
-    idRef.current = Math.max(idRef.current, maxSuffix)
-    setRunNodeStates({})
-    setRunId('')
-    setRunStatus('')
-    setResult(null)
-    setError('')
-    clearHistory()
-  }, [clearHistory, setEdges, setNodes, specOf])
 
   const onSave = useCallback(async () => {
     const payload = {
