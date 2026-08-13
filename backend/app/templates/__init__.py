@@ -1,8 +1,8 @@
-"""内置示例工作流模板库（V1.1 遗留项）。
+"""内置示例工作流模板库（V1.1 遗留项，V1.3 扩展）。
 
-提供 2 个可直接加载运行的内置策略模板：均线交叉、动量因子。
-模板为纯 dict（nodes + edges），可被前端「模板库」加载到画布，也可经 API 读取。
-所有模板均通过 validate_workflow 校验，并使用 fixture 行情可端到端运行。
+提供 3 个可直接加载运行的内置策略模板：均线交叉（股票）、动量因子（股票）、
+期货均线多空（期货）。模板为纯 dict（nodes + edges），可被前端「模板库」加载到画布，
+也可经 API 读取。所有模板均通过 validate_workflow 校验，并使用 fixture 行情端到端运行。
 """
 
 from __future__ import annotations
@@ -81,6 +81,39 @@ BUILTIN_TEMPLATES: List[Dict] = [
         "edges": [
             {"source": "quotes", "source_port": "table", "target": "mom", "target_port": "table"},
             {"source": "mom", "source_port": "table", "target": "bt", "target_port": "table"},
+        ],
+    },
+    {
+        "id": "futures_ma_cross",
+        "name": "期货均线多空策略",
+        "description": (
+            "拉取股指期货行情（TEST.FUTURE，合约乘数 10）→ 用 futures_ma_cross 策略："
+            "均线金叉做多、死叉做空（多空净仓 + 保证金 + 强平）。演示 V1.3 期货回测链路。"
+        ),
+        "tags": ["期货", "均线", "多空", "保证金"],
+        "nodes": [
+            {
+                "id": "quotes",
+                "node_type": "data.quotes",
+                "params": {
+                    "symbol": "TEST.FUTURE",
+                    "start": "2024-01-01",
+                    "end": "2024-04-01",
+                },
+            },
+            {
+                "id": "bt",
+                "node_type": "backtest.run",
+                "params": {
+                    "strategy": "futures_ma_cross",
+                    "asset_type": "future",
+                    "contracts": 1,
+                    "multiplier": 10.0,
+                },
+            },
+        ],
+        "edges": [
+            {"source": "quotes", "source_port": "table", "target": "bt", "target_port": "table"},
         ],
     },
 ]

@@ -27,6 +27,9 @@ def _default_rates() -> dict:
         "slippage": 0.0,              # 滑点比例（双边方向）
         "subscription_fee_rate": 0.0015,  # 场外基金申购费（前端，默认 0.15% 一折）
         "redemption_fee_rate": 0.005,     # 场外基金赎回费（默认 0.5%，阶梯为空时回退）
+        "futures_commission_per_lot": 3.0,  # 期货每手手续费（元/手）
+        "futures_margin_rate": 0.10,        # 期货初始保证金比例
+        "futures_maintenance_ratio": 0.75,  # 期货维持保证金 / 初始保证金
     }
 
 
@@ -42,6 +45,14 @@ class CostRates:
     # 赎回费阶梯：(最短持有天数, 费率) 升序；持有期 >= 该天数适用对应费率。
     # 默认等效于统一 0.5%（任何持有期均命中 (0, 0.005)），保证向后兼容。
     redemption_fee_tiers: tuple = ((0, 0.005),)
+    # 期货（V1.3）：按手手续费、保证金比例、维持保证金比例（相对初始保证金）
+    futures_commission_per_lot: float = 3.0       # 每手固定手续费（元/手）
+    futures_margin_rate: float = 0.10             # 初始保证金比例
+    futures_maintenance_ratio: float = 0.75       # 维持保证金 / 初始保证金
+    # 期货（V1.3）：按手手续费、保证金比例、维持保证金比例（相对初始保证金）
+    futures_commission_per_lot: float = 3.0       # 每手固定手续费（元/手）
+    futures_margin_rate: float = 0.10             # 初始保证金比例
+    futures_maintenance_ratio: float = 0.75       # 维持保证金 / 初始保证金
 
     @classmethod
     def from_dict(cls, data: dict) -> "CostRates":
@@ -60,6 +71,9 @@ class CostRates:
             subscription_fee_rate=base["subscription_fee_rate"],
             redemption_fee_rate=base["redemption_fee_rate"],
             redemption_fee_tiers=tiers,
+            futures_commission_per_lot=base["futures_commission_per_lot"],
+            futures_margin_rate=base["futures_margin_rate"],
+            futures_maintenance_ratio=base["futures_maintenance_ratio"],
         )
 
     @staticmethod
@@ -76,6 +90,9 @@ class CostRates:
             "subscription_fee_rate": self.subscription_fee_rate,
             "redemption_fee_rate": self.redemption_fee_rate,
             "redemption_fee_tiers": [list(t) for t in self.redemption_fee_tiers],
+            "futures_commission_per_lot": self.futures_commission_per_lot,
+            "futures_margin_rate": self.futures_margin_rate,
+            "futures_maintenance_ratio": self.futures_maintenance_ratio,
         }
 
 

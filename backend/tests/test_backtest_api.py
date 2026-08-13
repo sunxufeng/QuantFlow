@@ -45,7 +45,7 @@ class TestStrategiesEndpoint:
         resp = client.get("/api/backtest/strategies")
         assert resp.status_code == 200
         names = {i["name"] for i in resp.json()["items"]}
-        assert names == {"buy_hold", "ma_cross", "fund_dingtou", "fund_value_avg"}
+        assert names == {"buy_hold", "ma_cross", "fund_dingtou", "fund_value_avg", "futures_ma_cross"}
 
 
 class TestRunBacktest:
@@ -86,6 +86,23 @@ class TestRunBacktest:
             "start": "2024-01-01", "end": "2024-02-01",
         })
         assert resp.status_code == 422
+
+    def test_futures_backtest_report(self):
+        # 期货回测：futures_ma_cross + asset_type future，应返回含 futures_account 的报告
+        resp = client.post("/api/backtest/run", json={
+            "strategy": "futures_ma_cross",
+            "params": {"contracts": 1},
+            "symbols": ["TEST.FUT"],
+            "start": "2024-01-01",
+            "end": "2024-02-01",
+            "asset_types": {"TEST.FUT": "future"},
+            "multipliers": {"TEST.FUT": 10.0},
+        })
+        assert resp.status_code == 200
+        report = resp.json()
+        assert report["type"] == "backtest_report"
+        assert "futures_account" in report
+        assert report["futures_account"]["initial_cash"] == pytest.approx(1_000_000)
 
     def test_no_data_422(self):
         resp = client.post("/api/backtest/run", json={

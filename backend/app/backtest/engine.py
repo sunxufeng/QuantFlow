@@ -22,6 +22,7 @@ from ..market.models import Bar, Instrument, INTERVAL_DAILY, INTERVAL_MINUTE
 from .account import Account, OrderRejected
 from .costs import CostCalculator, CostRates, load_cost_rates
 from .fund import FundAccount
+from .futures import FuturesAccount
 
 TRADING_DAYS_PER_YEAR = 252
 
@@ -99,12 +100,52 @@ class BacktestContext:
         limit_price: Optional[float] = None,
     ) -> Optional[Any]:
         """委托下单（整手）；被拒绝（涨跌停/停牌/资金不足）时返回 None。"""
+        # 期货标的必须使用 order_future（多空/保证金语义不同）
+        if symbol in self.engine._future_symbols:
+            return None
         if limit_price is None:
             bar = self.bar(symbol)
             if bar is None:
                 return None
             limit_price = bar.close
         return self.account.order(symbol, side, shares, limit_price, date=self.date)
+
+    # ------------------------------------------------------------------ #
+    # 期货下单（多空净仓 / 保证金 / 强平）
+    # ------------------------------------------------------------------ #
+    def order_future(
+        self,
+        symbol: str,
+        contracts: int,
+        side: str,
+        limit_price: Optional[float] = None,
+    ) -> Optional[Any]:
+        """期货委托（净仓）：买入平空/开多，卖出平多/开空。
+
+        非期货标的或期货账户未启用时返回 None。
+        """
+        if self.engine.futures_account is None or symbol not in self.engine._future_symbols:
+            return None
+        return self.engine.futures_account.order_future(
+            symbol, contracts, side, limit_price, date=self.date
+        )
+
+    def close_future_all(self, symbol: Optional[str] = None) -> int:
+        """平掉全部或部分期货持仓（策略主动清仓）。返回平仓手数。"""
+        if self.engine.futures_account is None:
+            return 0
+        prices = self.engine.futures_account._prices
+        if symbol is None:
+            closed = self.engine.futures_account.close_all(prices, date=self.date)
+            return closed
+        if symbol not in self.engine._future_symbols:
+            return 0
+        pos = self.engine.futures_account.positions.get(symbol)
+        if pos is None:
+            return 0
+        p = prices.get(symbol) or pos.avg_entry
+        self.engine.futures_account._close(symbol, pos.contracts, p, self.date, forced=False)
+        return pos.contracts
 
     # ------------------------------------------------------------------ #
     # 场外基金交易（按 NAV）
@@ -207,6 +248,21 @@ class BacktestEngine:
                 self.initial_cash, cost_rates=rates, dividend_policy="cash"
             )
 
+        # 期货标的（V1.3）：多空/保证金/强平；合约乘数取自 Instrument
+        self._future_symbols: set = set()
+        self._multipliers: Dict[str, float] = {}
+        if instruments:
+            for sym, inst in instruments.items():
+                if inst.market == "future":
+                    self._future_symbols.add(sym)
+                    self._multipliers[sym] = inst.contract_multiplier
+        self.futures_account: Optional[FuturesAccount] = None
+        if self._future_symbols:
+            self.futures_account = FuturesAccount(
+                self.initial_cash, cost_calculator=self.cost_calculator,
+                multipliers=self._multipliers,
+            )
+
         # 时间轴索引：日线按 date、分钟线按 datetime 聚合为 step
         # {step: {symbol: Bar}}；同一频率下每个 step 至多一根同标的 K 线
         if self.is_minute and self._fund_symbols:
@@ -232,6 +288,7 @@ class BacktestEngine:
     # ------------------------------------------------------------------ #
     def run(self) -> "BacktestResult":
         account = Account(self.initial_cash, self.cost_calculator)
+        self.account = account
         ctx = BacktestContext(
             engine=self,
             date="",
@@ -244,12 +301,17 @@ class BacktestEngine:
         prev_total = self.initial_cash
 
         self.strategy.initialize(ctx)
+        last_prices: Dict[str, float] = {}
         for step_key in self.calendar:
             today = self.by_step[step_key]
 
             # 历史序列：截至当日/当分钟（含）— 先追加，供涨跌停判定与策略历史读取
             for symbol, bar in today.items():
                 self._history[symbol].append(bar)
+
+            # 当日市价（期货盯市/保证金与权益计算需要，提至策略前）
+            prices = {s: b.close for s, b in today.items()}
+            last_prices = prices
 
             # 开盘前：基金 T+1 确认（昨日申购/赎回），重置限购计数
             if self.fund_account:
@@ -261,6 +323,9 @@ class BacktestEngine:
                     div = getattr(bar, "dividend", 0) if bar is not None else 0
                     if div and div > 0:
                         self.fund_account.apply_dividend(sym, div, bar.close, step_key)
+            # 期货：更新当日市价（保证金/权益/强平判定基准）
+            if self.futures_account:
+                self.futures_account.update_prices(prices)
             # 股票：当日停牌 / 涨停 / 跌停状态
             account.set_daily_states(*self._daily_states(step_key))
             ctx.date = step_key
@@ -272,19 +337,11 @@ class BacktestEngine:
 
             # 收盘：股票 T+1 结算（当日买入下一交易日可卖）
             account.settle()
+            # 期货：逐日盯市 + 保证金不足强平
+            if self.futures_account:
+                self.futures_account.settle(prices)
 
-            prices = {s: b.close for s, b in today.items()}
-            if self.fund_account:
-                # 股票与基金两个账户各自持有 initial_cash，合并净值时
-                # 扣除重复计入的一次初始资金（仅出现一次重复，减一次即可）
-                navs = {s: b.close for s, b in today.items() if s in self._fund_symbols}
-                cash = account.cash + self.fund_account.cash - self.initial_cash
-                market_value = account.market_value(prices) + self.fund_account.market_value(navs)
-                total = cash + market_value + self.fund_account.pending_value(navs)
-            else:
-                cash = account.cash
-                market_value = account.market_value(prices)
-                total = account.total_value(prices)
+            cash, market_value, total = self._aggregate_equity(prices)
             equity.append(
                 EquityPoint(
                     date=step_key,
@@ -299,6 +356,8 @@ class BacktestEngine:
         trades = account.trades
         if self.fund_account:
             trades = trades + self.fund_account.trades
+        if self.futures_account:
+            trades = trades + self.futures_account.trades
         return BacktestResult(
             engine=self,
             account=account,
@@ -306,6 +365,8 @@ class BacktestEngine:
             trades=trades,
             strategy=self.strategy,
             fund_account=self.fund_account,
+            futures_account=self.futures_account,
+            last_prices=last_prices,
         )
 
     # ------------------------------------------------------------------ #
@@ -327,6 +388,8 @@ class BacktestEngine:
         for symbol in self.symbols:
             if symbol in self._fund_symbols:
                 continue  # 场外基金按 NAV 计价，无涨跌停/停牌
+            if symbol in self._future_symbols:
+                continue  # 期货无涨跌停/停牌限制（可当日开平）
             bar = step.get(symbol)
             if bar is None or bar.volume == 0:
                 suspended.add(symbol)
@@ -342,6 +405,41 @@ class BacktestEngine:
                 limit_down.add(symbol)
         return suspended, limit_up, limit_down
 
+    # ------------------------------------------------------------------ #
+    # 多账户净值聚合（股票 + 基金 + 期货，统一口径避免重复计入初始资金）
+    # ------------------------------------------------------------------ #
+    def _aggregate_equity(self, prices: Dict[str, float]) -> tuple:
+        """返回 (cash, market_value, total) 三个聚合净值分量。
+
+        各账户各自持有 initial_cash；组合净值 = initial_cash + Σ各账户净值贡献
+        （账户权益 - initial_cash），避免多账户重复计入初始资金。
+        """
+        accounts = [self.account]  # 股票账户始终存在（可为空仓）
+        if self.fund_account:
+            accounts.append(self.fund_account)
+        if self.futures_account:
+            accounts.append(self.futures_account)
+        n = len(accounts)
+
+        # 累计净值贡献
+        net = self.account.total_value(prices) - self.initial_cash
+        if self.fund_account:
+            navs = {s: prices[s] for s in self._fund_symbols if s in prices}
+            fund_total = (
+                self.fund_account.cash
+                + self.fund_account.market_value(navs)
+                + self.fund_account.pending_value(navs)
+            )
+            net += fund_total - self.initial_cash
+        if self.futures_account:
+            net += self.futures_account.equity(prices) - self.initial_cash
+        total = self.initial_cash + net
+
+        # 现金分量：Σ各账户现金，扣除 (n-1) 份重复的初始资金
+        cash = sum(a.cash for a in accounts) - (n - 1) * self.initial_cash
+        market_value = total - cash
+        return cash, market_value, total
+
 
 # --------------------------------------------------------------------------- #
 # 回测结果
@@ -354,6 +452,8 @@ class BacktestResult:
     trades: List[Any]
     strategy: Strategy
     fund_account: Optional[FundAccount] = None
+    futures_account: Optional[FuturesAccount] = None
+    last_prices: Dict[str, float] = field(default_factory=dict)
 
     def to_dict(self, include_curve: bool = True) -> dict:
         """序列化结果（不含绩效指标，指标由 metrics 模块计算）。"""
@@ -367,6 +467,8 @@ class BacktestResult:
         }
         if self.fund_account is not None:
             out["fund_account"] = self.fund_account.to_dict()
+        if self.futures_account is not None:
+            out["futures_account"] = self.futures_account.to_dict(self.last_prices)
         if include_curve:
             out["equity_curve"] = [p.to_dict() for p in self.equity_curve]
         return out

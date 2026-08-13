@@ -7,6 +7,7 @@
 - ``buy_hold``：首日按份额/全仓买入，末日卖出（股票）
 - ``ma_cross``：MA5 上穿 MA20 买入、下穿卖出（股票）
 - ``fund_dingtou``：场外基金定投（每月首个交易日申购固定金额）
+- ``futures_ma_cross``：期货均线金叉做多、死叉做空（多空净仓，V1.3）
 """
 
 from __future__ import annotations
@@ -219,12 +220,62 @@ def _fund_value_avg_factory(params: Dict[str, Any]) -> Strategy:
     )
 
 
+class FuturesMaCrossStrategy(Strategy):
+    """期货均线金叉/死叉：金叉做多、死叉做空（多空净仓切换）。
+
+    与股票 ``MaCrossStrategy`` 不同：使用 ``ctx.order_future``（多空/保证金语义），
+    金叉平空开多、死叉平多开空；权益与强平由 FuturesAccount 管理。
+    """
+
+    def __init__(
+        self, fast: int = 5, slow: int = 20, symbol: str = "", contracts: int = 1
+    ) -> None:
+        self.fast = int(fast)
+        self.slow = int(slow)
+        self.symbol = symbol
+        self.contracts = max(int(contracts or 1), 1)
+
+    def initialize(self, ctx: BacktestContext) -> None:
+        self.prev_diff: float = 0.0
+        self.have_prev = False
+
+    def handle_data(self, ctx: BacktestContext) -> None:
+        sym = self.symbol or ctx.symbols()[0]
+        bars = ctx.history(sym, self.slow)
+        if len(bars) < self.slow:
+            return
+        fast_ma = _ma(bars, self.fast)
+        slow_ma = _ma(bars, self.slow)
+        if fast_ma != fast_ma or slow_ma != slow_ma:  # NaN
+            return
+        diff = fast_ma - slow_ma
+        if self.have_prev:
+            if self.prev_diff <= 0 and diff > 0:
+                # 金叉：平空开多
+                ctx.order_future(sym, self.contracts, "buy")
+            elif self.prev_diff >= 0 and diff < 0:
+                # 死叉：平多开空
+                ctx.order_future(sym, self.contracts, "sell")
+        self.prev_diff = diff
+        self.have_prev = True
+
+
+def _futures_ma_cross_factory(params: Dict[str, Any]) -> Strategy:
+    return FuturesMaCrossStrategy(
+        fast=int(params.get("fast", 5)),
+        slow=int(params.get("slow", 20)),
+        symbol=str(params.get("symbol", "")),
+        contracts=int(params.get("contracts", 1)),
+    )
+
+
 # 策略注册表：名称 -> 工厂（由 params 构建策略实例）
 STRATEGY_REGISTRY: Dict[str, Callable[[Dict[str, Any]], Strategy]] = {
     "buy_hold": _buy_hold_factory,
     "ma_cross": _ma_cross_factory,
     "fund_dingtou": _fund_dingtou_factory,
     "fund_value_avg": _fund_value_avg_factory,
+    "futures_ma_cross": _futures_ma_cross_factory,
 }
 
 

@@ -55,10 +55,12 @@ def _table_to_bars(table: DataTable) -> List[Any]:
     ],
     params=[
         ParamSpec("strategy", "string", default="buy_hold", label="策略",
-                  options=["buy_hold", "ma_cross", "fund_dingtou"]),
+                  options=["buy_hold", "ma_cross", "fund_dingtou", "futures_ma_cross"]),
         ParamSpec("initial_cash", "number", default=1_000_000.0, label="初始资金"),
         ParamSpec("symbol", "string", default="", label="标的（空=取行情表首行 symbol）"),
-        ParamSpec("asset_type", "string", default="stock", label="资产类型", options=["stock", "fund"]),
+        ParamSpec("asset_type", "string", default="stock", label="资产类型", options=["stock", "fund", "future"]),
+        ParamSpec("contracts", "number", default=1, label="期货手数（仅期货策略）"),
+        ParamSpec("multiplier", "number", default=10.0, label="合约乘数（仅期货）"),
     ],
 )
 class BacktestRunNode(BaseWorkNode):
@@ -73,25 +75,33 @@ class BacktestRunNode(BaseWorkNode):
             raise ValueError("行情表为空，无法回测")
         symbol = str(self.params.get("symbol") or "").strip() or bars[0].symbol
         asset_type = str(self.params.get("asset_type") or "stock").strip()
+        if asset_type == "fund":
+            exchange = ""
+        elif asset_type == "future":
+            exchange = "CFFEX"
+        else:
+            exchange = "SH"
         instrument = Instrument(
             symbol=symbol,
             name=symbol,
-            exchange="" if asset_type == "fund" else "SH",
-            market="fund" if asset_type == "fund" else "stock",
+            exchange=exchange,
+            market=asset_type,
+            contract_multiplier=float(self.params.get("multiplier") or 10.0)
+            if asset_type == "future" else 1.0,
         )
         data = {symbol: sorted(bars, key=lambda b: b.date)}
         strategy_name = str(self.params.get("strategy") or "buy_hold")
         try:
             factory = STRATEGY_REGISTRY[strategy_name]
         except KeyError:
-            raise ValueError(f"未知策略: {strategy_name}（支持 buy_hold/ma_cross/fund_dingtou）") from None
+            raise ValueError(
+                f"未知策略: {strategy_name}（支持 buy_hold/ma_cross/fund_dingtou/futures_ma_cross）"
+            ) from None
         params = {}
-        if strategy_name == "ma_cross":
+        if strategy_name in ("ma_cross", "fund_dingtou", "buy_hold"):
             params = {"symbol": symbol}
-        elif strategy_name == "fund_dingtou":
-            params = {"symbol": symbol}
-        elif strategy_name == "buy_hold":
-            params = {"symbol": symbol}
+        elif strategy_name == "futures_ma_cross":
+            params = {"symbol": symbol, "contracts": int(self.params.get("contracts") or 1)}
         strategy = factory(params)
         engine = BacktestEngine(
             strategy,

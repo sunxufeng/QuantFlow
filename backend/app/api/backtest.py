@@ -41,7 +41,11 @@ class BacktestRunRequest(BaseModel):
     initial_cash: float = Field(default=1_000_000.0, gt=0, description="初始资金")
     asset_types: Dict[str, str] = Field(
         default_factory=dict,
-        description="标的资产类型覆盖（symbol -> stock/fund；market=fund 且无交易所视为场外基金）",
+        description="标的资产类型覆盖（symbol -> stock/fund/future；market=fund 无交易所=场外基金，future=期货）",
+    )
+    multipliers: Dict[str, float] = Field(
+        default_factory=dict,
+        description="期货合约乘数覆盖（symbol -> 乘数；future 标的默认 10）",
     )
     interval: str = Field(
         default="daily",
@@ -73,6 +77,7 @@ def _strategy_description(name: str) -> str:
         "ma_cross": "均线金叉/死叉：MA5 上穿 MA20 买入、下穿卖出（股票）",
         "fund_dingtou": "场外基金定投：每月首个交易日申购固定金额（基金）",
         "fund_value_avg": "价值平均定投：目标市值线性增长，每月补足/赎回差额（基金）",
+        "futures_ma_cross": "期货均线金叉做多、死叉做空（多空净仓，V1.3）",
     }
     return docs.get(name, "")
 
@@ -112,11 +117,20 @@ def run_backtest(payload: BacktestRunRequest) -> dict:
     instruments: Dict[str, Instrument] = {}
     for symbol in payload.symbols:
         asset_type = payload.asset_types.get(symbol, "stock")
+        if asset_type == "fund":
+            exchange = ""
+        elif asset_type == "future":
+            exchange = "CFFEX"
+        else:
+            exchange = "SH"
         instruments[symbol] = Instrument(
             symbol=symbol,
-            name=f"标的自定义",
+            name="标的自定义",
             market=asset_type,
-            exchange="" if asset_type == "fund" else "SH",
+            exchange=exchange,
+            contract_multiplier=float(payload.multipliers.get(symbol, 10.0))
+            if asset_type == "future"
+            else 1.0,
         )
 
     # 3. 构建策略并运行
@@ -163,7 +177,10 @@ class PortfolioLegRequest(BaseModel):
     params: Dict[str, object] = Field(default_factory=dict, description="策略参数")
     symbols: List[str] = Field(..., min_length=1, description="回测标的")
     asset_types: Dict[str, str] = Field(
-        default_factory=dict, description="标的资产类型覆盖（symbol -> stock/fund）"
+        default_factory=dict, description="标的资产类型覆盖（symbol -> stock/fund/future）"
+    )
+    multipliers: Dict[str, float] = Field(
+        default_factory=dict, description="期货合约乘数覆盖（symbol -> 乘数；future 默认 10）"
     )
     interval: str = Field(
         default="daily", description="行情频率：daily 或 minute（V1.2）"

@@ -310,3 +310,34 @@
 .qf-log-logger { color: #818cf8; flex-shrink: 0; }
 .qf-log-msg { color: #e2e8f0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .qf-log-rid { margin-left: auto; color: #475569; flex-shrink: 0; }
+
+/* ---------- 模板库 ---------- */
+.qf-templates { padding: 20px 24px; overflow-y: auto; height: 100%; }
+.qf-templates-head { display: flex; align-items: center; gap: 12px; }
+.qf-templates-head h2 { margin: 0; font-size: 18px; color: var(--text); }
+.qf-templates-sub { color: var(--text-dim); font-size: 13px; margin: 6px 0 18px; }
+.qf-template-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+.qf-template-card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .04);
+}
+.qf-template-card-head { display: flex; flex-direction: column; gap: 8px; }
+.qf-template-card-head h3 { margin: 0; font-size: 15px; color: var(--text); }
+.qf-template-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.qf-tag {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--bg-soft);
+  color: var(--primary-dark);
+  border: 1px solid var(--border);
+}
+.qf-template-desc { margin: 0; font-size: 12px; color: var(--text-dim); line-height: 1.6; flex: 1; }
+.qf-template-meta { font-size: 11px; color: #94a3b8; }
+.qf-template-actions { display: flex; justify-content: flex-end; }

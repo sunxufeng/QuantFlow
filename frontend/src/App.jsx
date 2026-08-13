@@ -18,6 +18,7 @@ import Monitoring from './Monitoring.jsx'
 import FactorLibrary from './FactorLibrary.jsx'
 import Notifications from './Notifications.jsx'
 import LLMAssistant from './LLMAssistant.jsx'
+import Templates from './Templates.jsx'
 import AuthModal from './AuthModal.jsx'
 import { useGraphHistory } from './useHistory.js'
 import {
@@ -110,7 +111,7 @@ function RunsPanel({ runs, activeRunId, onSelectRun, onRefresh }) {
   )
 }
 
-function Canvas({ projectId }) {
+function Canvas({ projectId, pendingTemplate, onTemplateConsumed }) {
   const [specs, setSpecs] = useState([])
   const [nodes, setNodes, onNodesChange] = useNodesState([])
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
@@ -153,6 +154,21 @@ function Canvas({ projectId }) {
   useEffect(() => {
     refreshWorkflows().catch(() => {})
   }, [projectId, refreshWorkflows])
+
+  // 模板库加载：节点规格就绪后再 apply，避免「节点类型不可用」
+  useEffect(() => {
+    if (!pendingTemplate) return
+    if (!specs.length) return
+    try {
+      applyWorkflow(pendingTemplate)
+      setSelectedId(null)
+      setError('')
+    } catch (e) {
+      setError(`模板加载失败: ${e.message}`)
+    } finally {
+      onTemplateConsumed?.()
+    }
+  }, [pendingTemplate, specs, applyWorkflow, onTemplateConsumed, setSelectedId])
 
   const specOf = useCallback(
     (type) => specs.find((s) => s.node_type === type),
@@ -615,6 +631,7 @@ export default function App() {
   const [authOpen, setAuthOpen] = useState(false)
   const [projects, setProjects] = useState([])
   const [projectId, setProjectId] = useState('')
+  const [pendingTemplate, setPendingTemplate] = useState(null)
 
   // 启动时若已有令牌则恢复会话
   useEffect(() => {
@@ -720,6 +737,12 @@ export default function App() {
           >
             LLM 助手
           </button>
+          <button
+            className={`qf-nav-btn ${view === 'templates' ? 'qf-nav-active' : ''}`}
+            onClick={() => setView('templates')}
+          >
+            模板库
+          </button>
         </nav>
         <div className="qf-topbar-right">
           {user && (
@@ -752,12 +775,26 @@ export default function App() {
           )}
         </div>
       </div>
-      {view === 'editor' && <Canvas projectId={projectId} />}
+      {view === 'editor' && (
+        <Canvas
+          projectId={projectId}
+          pendingTemplate={pendingTemplate}
+          onTemplateConsumed={() => setPendingTemplate(null)}
+        />
+      )}
       {view === 'chart' && <ChartView />}
       {view === 'monitor' && <Monitoring />}
       {view === 'factor' && <FactorLibrary />}
       {view === 'notify' && <Notifications />}
       {view === 'llm' && <LLMAssistant />}
+      {view === 'templates' && (
+        <Templates
+          onApply={(tpl) => {
+            setPendingTemplate(tpl)
+            setView('editor')
+          }}
+        />
+      )}
       {authOpen && (
         <AuthModal onClose={() => setAuthOpen(false)} onAuthed={handleAuthed} />
       )}

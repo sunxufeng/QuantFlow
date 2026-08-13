@@ -89,6 +89,9 @@ export const runWorkflow = (workflow) => request('/workflows/run', {
   body: JSON.stringify(workflow),
 })
 
+// ---- 内置示例工作流模板库（V1.1 遗留项 / V1.3 扩展）----
+export const listTemplates = () => request('/workflows/templates')
+
 // ---- M2 异步运行 + WebSocket ----
 export const submitRun = (payload) => request('/runs', {
   method: 'POST',

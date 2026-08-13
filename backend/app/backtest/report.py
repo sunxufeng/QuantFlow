@@ -63,6 +63,8 @@ def build_report(
     }
     if result.fund_account is not None:
         report["fund_account"] = result.fund_account.to_dict()
+    if result.futures_account is not None:
+        report["futures_account"] = result.futures_account.to_dict(result.last_prices)
     return report
 
 

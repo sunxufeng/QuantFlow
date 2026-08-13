@@ -21,6 +21,7 @@ from .engine import (
     Strategy,
 )
 from .fund import FundAccount, FundOrderRejected, FundPosition, FundTrade
+from .futures import FuturesAccount, FuturesPosition, FuturesTrade
 from .metrics import PerformanceMetrics
 from .portfolio import PortfolioBacktest
 from .report import BacktestReportStore, build_report
@@ -29,6 +30,7 @@ from .strategies import (
     BuyHoldStrategy,
     FundDingTouStrategy,
     FundValueAvgStrategy,
+    FuturesMaCrossStrategy,
     MaCrossStrategy,
     get_strategy,
 )
@@ -50,6 +52,10 @@ __all__ = [
     "FundOrderRejected",
     "FundPosition",
     "FundTrade",
+    "FuturesAccount",
+    "FuturesMaCrossStrategy",
+    "FuturesPosition",
+    "FuturesTrade",
     "MaCrossStrategy",
     "Order",
     "OrderRejected",

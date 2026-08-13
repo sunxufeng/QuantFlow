@@ -88,9 +88,17 @@ class PortfolioBacktest:
             instruments: Dict[str, Instrument] = {}
             for sym in leg["symbols"]:
                 at = leg["asset_types"].get(sym, "stock")
+                if at == "fund":
+                    exchange = ""
+                elif at == "future":
+                    exchange = "CFFEX"
+                else:
+                    exchange = "SH"
                 instruments[sym] = Instrument(
-                    symbol=sym, name=f"标的自定义",
-                    market=at, exchange="" if at == "fund" else "SH",
+                    symbol=sym, name="标的自定义",
+                    market=at, exchange=exchange,
+                    contract_multiplier=float((leg.get("multipliers") or {}).get(sym, 10.0))
+                    if at == "future" else 1.0,
                 )
             allocated = self.initial_cash * leg["weight"]
             strategy = STRATEGY_REGISTRY[leg["strategy"]](leg["params"])
