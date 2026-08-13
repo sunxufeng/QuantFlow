@@ -150,3 +150,15 @@ export const llmAssist = (payload) => request('/llm/assist', {
   method: 'POST',
   body: JSON.stringify(payload),
 })
+
+// ---- LLM 自定义配置（V1.4 配置页）----
+export const llmGetConfig = () => request('/llm/config')
+export const llmSaveConfig = (cfg) => request('/llm/config', {
+  method: 'PUT',
+  body: JSON.stringify(cfg),
+})
+export const llmTestConfig = (cfg) => request('/llm/config/test', {
+  // cfg 可选：不传则测当前已保存配置
+  method: 'POST',
+  body: JSON.stringify(cfg || {}),
+})

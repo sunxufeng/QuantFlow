@@ -18,6 +18,7 @@ import Monitoring from './Monitoring.jsx'
 import FactorLibrary from './FactorLibrary.jsx'
 import Notifications from './Notifications.jsx'
 import LLMAssistant from './LLMAssistant.jsx'
+import LLMSettings from './LLMSettings.jsx'
 import Templates from './Templates.jsx'
 import AuthModal from './AuthModal.jsx'
 import { useGraphHistory } from './useHistory.js'
@@ -738,6 +739,12 @@ export default function App() {
             LLM 助手
           </button>
           <button
+            className={`qf-nav-btn ${view === 'settings' ? 'qf-nav-active' : ''}`}
+            onClick={() => setView('settings')}
+          >
+            LLM 配置
+          </button>
+          <button
             className={`qf-nav-btn ${view === 'templates' ? 'qf-nav-active' : ''}`}
             onClick={() => setView('templates')}
           >
@@ -787,6 +794,7 @@ export default function App() {
       {view === 'factor' && <FactorLibrary />}
       {view === 'notify' && <Notifications />}
       {view === 'llm' && <LLMAssistant />}
+      {view === 'settings' && <LLMSettings />}
       {view === 'templates' && (
         <Templates
           onApply={(tpl) => {

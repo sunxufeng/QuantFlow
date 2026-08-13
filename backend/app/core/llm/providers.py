@@ -145,8 +145,29 @@ class OpenAIProvider(LLMProvider):
 _PROVIDER: Optional[LLMProvider] = None
 
 
+def provider_from_config(cfg: dict) -> LLMProvider:
+    """按配置字典构造 provider（V1.4）。
+
+    - provider=mock 或 enabled=False → MockProvider；
+    - provider=openai 且 enabled=True → 需要 api_key，否则抛 ValueError（交由调用方回退 mock）。
+    """
+    provider = (cfg.get("provider") or "mock").lower()
+    enabled = bool(cfg.get("enabled", True))
+    if provider == "openai" and enabled:
+        api_key = cfg.get("api_key") or ""
+        if not api_key:
+            raise ValueError("OpenAI 兼容模式需要 API Key")
+        return OpenAIProvider(
+            api_key=api_key,
+            base_url=cfg.get("base_url") or "https://api.openai.com/v1",
+            model=cfg.get("model") or "gpt-4o-mini",
+            timeout=float(cfg.get("timeout", 90.0)),
+        )
+    return MockProvider(model=cfg.get("model") or "mock-1")
+
+
 def get_provider() -> LLMProvider:
-    """按 settings 返回单例 provider。
+    """按配置（settings store 优先，环境变量兜底）返回单例 provider。
 
     provider=mock 或无 key 时回退 mock；openai 且配置了 key 时返回真实 provider。
     """
@@ -154,15 +175,14 @@ def get_provider() -> LLMProvider:
     if _PROVIDER is not None:
         return _PROVIDER
 
-    provider = settings.LLM_PROVIDER.lower()
-    if provider == "openai" and settings.LLM_API_KEY:
-        _PROVIDER = OpenAIProvider(
-            api_key=settings.LLM_API_KEY,
-            base_url=settings.LLM_BASE_URL,
-            model=settings.LLM_MODEL,
-        )
-    else:
-        _PROVIDER = MockProvider(model=settings.LLM_MODEL)
+    from .config import load_llm_config
+
+    cfg = load_llm_config()
+    try:
+        _PROVIDER = provider_from_config(cfg)
+    except ValueError:
+        # 配置不完整（如缺 key）时安全回退 mock，避免 500
+        _PROVIDER = MockProvider(model=cfg.get("model") or "mock-1")
     return _PROVIDER
 
 

@@ -14,7 +14,14 @@ from .providers import (
     MockProvider,
     OpenAIProvider,
     get_provider,
+    provider_from_config,
     reset_provider,
+)
+from .config import (
+    default_llm_config,
+    load_llm_config,
+    mask_api_key,
+    save_llm_config,
 )
 
 __all__ = [
@@ -23,5 +30,10 @@ __all__ = [
     "MockProvider",
     "OpenAIProvider",
     "get_provider",
+    "provider_from_config",
     "reset_provider",
+    "default_llm_config",
+    "load_llm_config",
+    "mask_api_key",
+    "save_llm_config",
 ]

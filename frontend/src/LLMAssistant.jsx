@@ -60,9 +60,8 @@ export default function LLMAssistant() {
       </div>
       {status && !status.configured && (
         <div className="qf-hint" style={{ marginBottom: 8 }}>
-          当前为 Mock 演示模式。启用真实大模型：部署环境设置
-          <code> QF_LLM_PROVIDER=openai</code> 与 <code>QF_LLM_API_KEY</code>（可选
-          <code> QF_LLM_BASE_URL / QF_LLM_MODEL</code>）。
+          当前为 Mock 演示模式。启用真实大模型：前往顶部导航
+          <b>「LLM 配置」</b> 填写 Base URL / API Key / 模型后保存并测试即可，无需改环境变量。
         </div>
       )}
       {error && <div className="qf-error">{error}</div>}

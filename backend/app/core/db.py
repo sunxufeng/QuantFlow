@@ -165,6 +165,13 @@ CREATE TABLE IF NOT EXISTS factor_library (
 );
 CREATE INDEX IF NOT EXISTS idx_factor_library_owner ON factor_library(owner_id);
 
+-- V1.4 通用键值设置（用户可配置项持久化，如自定义 LLM 配置）
+CREATE TABLE IF NOT EXISTS app_settings (
+    key        TEXT PRIMARY KEY,
+    value      TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
 """
 
 
@@ -227,6 +234,7 @@ class Database:
             conn.execute("DELETE FROM run_events")
             conn.execute("DELETE FROM run_jobs")
             conn.execute("DELETE FROM runs")
+            conn.execute("DELETE FROM app_settings")
             conn.commit()
 
 
