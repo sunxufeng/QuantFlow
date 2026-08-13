@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: quantflow-frontend
+  namespace: quantflow
+  labels:
+    app: quantflow-frontend
+    app.kubernetes.io/part-of: quantflow
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: quantflow-frontend
+  template:
+    metadata:
+      labels:
+        app: quantflow-frontend
+    spec:
+      containers:
+        - name: frontend
+          image: quantflow-frontend:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 80
+              name: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 3
+            periodSeconds: 10
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "128Mi"

@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: quantflow
+  labels:
+    app: quantflow-frontend
+spec:
+  # 裸金属 / 任意集群均可用的 NodePort 暴露方式；
+  # 云环境也可改为 type: LoadBalancer 走 SLB/ELB。不指定 nodePort 由集群自动分配。
+  type: NodePort
+  selector:
+    app: quantflow-frontend
+  ports:
+    - port: 80
+      targetPort: 80
+      name: http
+      # nodePort: 30808   # 如需固定宿主机端口可取消注释（范围 30000-32767）

@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: quantflow-config
+  namespace: quantflow
+data:
+  # 演示环境使用内置 fixture 行情（无网络 / 无 tushare token 依赖）；
+  # 接入真实行情改为 tushare 并配置 QF_TUSHARE_TOKEN（建议放 Secret）。
+  QF_MARKET_PROVIDER: "fixture"
+  # SQLite 落盘路径（挂载 PVC 持久化）
+  QF_DB_PATH: "/srv/app/data/quantflow.db"
+  # Worker N6 运行参数
+  QF_WORKER_POLL_INTERVAL: "1"
+  QF_WORKER_STALE_TIMEOUT: "300"
+  QF_WORKER_EXECUTOR_WORKERS: "4"
+  # 跨域（按需放开前端来源）
+  QF_CORS_ORIGINS: "http://localhost:8080"
+  QF_DEBUG: "0"

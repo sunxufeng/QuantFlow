@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: quantflow-data
+  namespace: quantflow
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  # 生产集群可指定 storageClassName（如云厂商 SSD 类）；不指定则用集群默认 SC。
+  # storageClassName: ""

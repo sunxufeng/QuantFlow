@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: quantflow-worker
+  namespace: quantflow
+  labels:
+    app: quantflow-worker
+    app.kubernetes.io/part-of: quantflow
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: quantflow-worker
+  template:
+    metadata:
+      labels:
+        app: quantflow-worker
+    spec:
+      # 说明：worker 与 backend 共享同一 SQLite PVC（ReadWriteOnce）。
+      # 单节点集群或二者被调度到同一节点时正常；多节点生产环境建议改用
+      # 网络数据库（Postgres/云数据库）或各自独立存储，避免 RWO 卷跨节点冲突。
+      containers:
+        - name: worker
+          image: quantflow-backend:latest
+          imagePullPolicy: IfNotPresent
+          command: ["python", "-m", "app.core.worker"]
+          envFrom:
+            - configMapRef:
+                name: quantflow-config
+            - secretRef:
+                name: quantflow-secret
+          volumeMounts:
+            - name: data
+              mountPath: /srv/app/data
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: quantflow-data
