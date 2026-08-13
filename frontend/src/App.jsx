@@ -22,6 +22,7 @@ import LLMSettings from './LLMSettings.jsx'
 import Templates from './Templates.jsx'
 import AuthModal from './AuthModal.jsx'
 import BacktestResultView from './BacktestResultView.jsx'
+import BacktestReports from './BacktestReports.jsx'
 import { useGraphHistory } from './useHistory.js'
 import {
   clearToken,
@@ -866,6 +867,12 @@ export default function App() {
           >
             模板库
           </button>
+          <button
+            className={`qf-nav-btn ${view === 'reports' ? 'qf-nav-active' : ''}`}
+            onClick={() => setView('reports')}
+          >
+            回测报告
+          </button>
         </nav>
         <div className="qf-topbar-right">
           {user && (
@@ -919,6 +926,7 @@ export default function App() {
           }}
         />
       )}
+      {view === 'reports' && <BacktestReports />}
       {authOpen && (
         <AuthModal onClose={() => setAuthOpen(false)} onAuthed={handleAuthed} />
       )}

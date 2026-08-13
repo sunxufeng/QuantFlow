@@ -158,7 +158,29 @@ def run_backtest(payload: BacktestRunRequest) -> dict:
 
 @router.get("/reports", summary="回测报告列表")
 def list_reports() -> dict:
-    return {"items": report_store.list()}
+    ids = report_store.list()
+    summaries = []
+    for rid in ids:
+        try:
+            r = report_store.load(rid)
+        except Exception:
+            continue
+        m = r.get("metrics", {}) or {}
+        summaries.append(
+            {
+                "run_id": rid,
+                "strategy": r.get("strategy"),
+                "symbols": r.get("symbols"),
+                "start_date": r.get("start_date"),
+                "end_date": r.get("end_date"),
+                "total_return": m.get("total_return"),
+                "annual_return": m.get("annual_return"),
+                "sharpe": m.get("sharpe"),
+                "max_drawdown": m.get("max_drawdown"),
+                "win_rate": m.get("win_rate"),
+            }
+        )
+    return {"items": ids, "summaries": summaries}
 
 
 @router.get("/reports/{run_id}", summary="回测报告详情")

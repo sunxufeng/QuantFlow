@@ -120,6 +120,10 @@ export const fetchBars = (symbol, start, end) => request(
   `/market/bars?symbol=${encodeURIComponent(symbol)}&as_table=false${start ? `&start=${start}` : ''}${end ? `&end=${end}` : ''}`,
 )
 
+// ---- 回测报告中心（V1.6）----
+export const backtestReports = () => request('/backtest/reports')
+export const backtestReport = (runId) => request(`/backtest/reports/${runId}`)
+
 // ---- 因子库 CRUD（V1.1 N3）----
 export const factorLibraryList = (category) => request(
   `/factors/library${category ? `?category=${encodeURIComponent(category)}` : ''}`,

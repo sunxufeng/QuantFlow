@@ -95,6 +95,68 @@ function FactorForm({ initial, onSubmit, onCancel, busy }) {
   )
 }
 
+function IcChart({ series }) {
+  const W = 560
+  const H = 130
+  const pad = 8
+  const vals = series.map((p) => Number(p.ic) || 0)
+  const lo = Math.min(-0.05, ...vals)
+  const hi = Math.max(0.05, ...vals)
+  const span = hi - lo || 1
+  const stepX = series.length > 1 ? (W - pad * 2) / (series.length - 1) : 0
+  const y = (v) => H - pad - ((v - lo) / span) * (H - pad * 2)
+  const zeroY = y(0)
+  const path = series
+    .map((p, i) => `${i === 0 ? 'M' : 'L'}${(pad + i * stepX).toFixed(1)},${y(Number(p.ic) || 0).toFixed(1)}`)
+    .join(' ')
+  const mean = vals.reduce((a, b) => a + b, 0) / (vals.length || 1)
+  return (
+    <div className="qf-an-block">
+      <div className="qf-an-title">IC 时间序列（共 {series.length} 期）</div>
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ width: '100%', height: 130 }}>
+        <line x1={pad} y1={zeroY} x2={W - pad} y2={zeroY} stroke="#cbd5e1" strokeWidth="1" strokeDasharray="3 3" />
+        <path d={path} fill="none" stroke="#2563eb" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
+        <line x1={pad} y1={y(mean)} x2={W - pad} y2={y(mean)} stroke="#dc2626" strokeWidth="1" strokeDasharray="4 2" />
+      </svg>
+      <div className="qf-hint">红线为 IC 均值 {mean.toFixed(4)}</div>
+    </div>
+  )
+}
+
+function DecayChart({ decay }) {
+  const W = 560
+  const H = 120
+  const pad = 8
+  const items = decay.filter((d) => d.ic != null)
+  if (!items.length) return null
+  const vals = items.map((d) => Number(d.ic))
+  const lo = Math.min(0, ...vals)
+  const hi = Math.max(0, ...vals)
+  const span = hi - lo || 1
+  const bw = (W - pad * 2) / items.length
+  const y = (v) => H - pad - ((v - lo) / span) * (H - pad * 2)
+  return (
+    <div className="qf-an-block">
+      <div className="qf-an-title">IC 衰减（滞后 L 期）</div>
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ width: '100%', height: 120 }}>
+        {items.map((d, i) => {
+          const v = Number(d.ic)
+          const x = pad + i * bw
+          const top = y(Math.max(v, 0))
+          const bottom = y(Math.min(v, 0))
+          return (
+            <g key={d.lag}>
+              <rect x={x + 2} y={top} width={bw - 4} height={Math.max(1, bottom - top)} fill={v >= 0 ? '#15803d' : '#dc2626'} />
+              <text x={x + bw / 2} y={H - 1} fill="#64748b" fontSize="9" textAnchor="middle">L{d.lag}</text>
+            </g>
+          )
+        })}
+        <line x1={pad} y1={y(0)} x2={W - pad} y2={y(0)} stroke="#cbd5e1" strokeWidth="1" />
+      </svg>
+    </div>
+  )
+}
+
 function AnalyzePanel({ factor, onClose }) {
   const [symbols, setSymbols] = useState('TEST.STOCK,TEST.BANK')
   const [start, setStart] = useState('2024-01-01')
@@ -161,21 +223,39 @@ function AnalyzePanel({ factor, onClose }) {
               <div className="qf-mcards">
                 <div className="qf-mcard">
                   <div className="qf-mcard-label">IC 均值</div>
-                  <div className="qf-mcard-value">{report.ic_mean?.toFixed?.(4) ?? '-'}</div>
+                  <div className="qf-mcard-value">{report.ic?.mean?.toFixed?.(4) ?? '-'}</div>
                 </div>
                 <div className="qf-mcard">
                   <div className="qf-mcard-label">ICIR</div>
-                  <div className="qf-mcard-value">{report.icir?.toFixed?.(4) ?? '-'}</div>
+                  <div className="qf-mcard-value">{report.ic?.ir?.toFixed?.(4) ?? '-'}</div>
                 </div>
                 <div className="qf-mcard">
                   <div className="qf-mcard-label">IC&gt;0 占比</div>
-                  <div className="qf-mcard-value">{report.ic_positive_ratio?.toFixed?.(3) ?? '-'}</div>
+                  <div className="qf-mcard-value">{((report.ic?.pct_positive ?? 0) * 100).toFixed?.(1) ?? '-'}%</div>
+                </div>
+                <div className="qf-mcard">
+                  <div className="qf-mcard-label">多空收益</div>
+                  <div className="qf-mcard-value">
+                    {report.quantile_returns?.long_short?.toFixed?.(4) ?? '-'}
+                  </div>
                 </div>
               </div>
-              {report.top_quantile_return != null && (
+
+              {report.ic?.series?.length > 1 && (
+                <IcChart series={report.ic.series} />
+              )}
+              {report.ic_decay?.length > 0 && (
+                <DecayChart decay={report.ic_decay} />
+              )}
+
+              {report.quantile_returns?.by_quantile && (
                 <div className="qf-hint" style={{ marginTop: 8 }}>
-                  最高分组平均收益：{report.top_quantile_return.toFixed?.(4) ?? '-'}；
-                  最低分组：{report.bottom_quantile_return?.toFixed?.(4) ?? '-'}
+                  分层收益（q1 最低 → q{report.n_quantiles} 最高）：
+                  {Object.entries(report.quantile_returns.by_quantile).map(([q, v]) => (
+                    <span key={q} style={{ marginLeft: 6 }}>
+                      {q}: {v != null ? v.toFixed(4) : '-'}
+                    </span>
+                  ))}
                 </div>
               )}
             </div>
