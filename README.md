@@ -70,6 +70,20 @@ systemd 单元（`deploy/systemd/`）：
 
 对外域名建议用 Nginx Proxy Manager 反代 443（HTTPS 证书 acme.sh DNS-01 + 自动续期），示例：`acqw.areteailab.com → http://172.17.0.1:8080`。
 
+### 环境变量（常用）
+
+| 变量 | 默认 | 说明 |
+|---|---|---|
+| `QF_SECRET_KEY` | 占位符 | 生产务必覆盖为强随机值（`openssl rand -hex 32`） |
+| `QF_MARKET_PROVIDER` | `fixture` | 行情数据源；接入真实行情改 `tushare` 并配 `QF_TUSHARE_TOKEN` |
+| `QF_LLM_PROVIDER` | `mock` | LLM provider；激活真实模型设 `openai` |
+| `QF_LLM_BASE_URL` | `https://api.openai.com/v1` | OpenAI 兼容 base，`/chat/completions` 由代码追加 |
+| `QF_LLM_API_KEY` | 空 | 真实模型密钥（**仅经生产环境变量注入，勿写入仓库**） |
+| `QF_LLM_MODEL` | `gpt-4o-mini` | 模型名，如 `gpt-5.6-sol` |
+| `QF_EXECUTION_GATEWAY` | `paper` | 执行网关：`paper`（模拟盘）/ `live`（实盘桩，需 `QF_BROKER_API_KEY`） |
+| `QF_BROKER_API_KEY` | 空 | 实盘券商凭证，配置后 `LiveExecutionGateway` 启用 |
+| `QF_DISABLE_SCHEDULER` | 无 | 设 `1` 关闭定时行情同步 |
+
 ## 测试
 
 ```bash
