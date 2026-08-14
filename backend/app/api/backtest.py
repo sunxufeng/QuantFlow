@@ -17,6 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from ..backtest import BacktestEngine, BacktestError, BacktestReportStore, build_report
+from ..backtest.optimizer import OptimizeConfigError, optimize
 from ..backtest.portfolio import PortfolioBacktest
 from ..backtest.strategies import STRATEGY_REGISTRY
 from ..core.auth import get_current_user
@@ -159,6 +160,70 @@ def run_backtest(payload: BacktestRunRequest) -> dict:
     report_store.save(report)
     logger.info("backtest report %s generated (%s)", report["run_id"], payload.strategy)
     return report
+
+
+# --------------------------------------------------------------------------- #
+# 参数优化（V2.1）
+# --------------------------------------------------------------------------- #
+class OptimizeRequest(BaseModel):
+    strategy: str = Field(..., description="策略名称（见 /strategies）")
+    fixed_params: Dict[str, object] = Field(
+        default_factory=dict, description="固定参数（不参与网格，如 symbol 映射到标的）"
+    )
+    grid: Dict[str, List[object]] = Field(
+        default_factory=dict,
+        description="待搜索参数网格（param -> 候选值列表），将做笛卡尔积遍历",
+    )
+    symbols: List[str] = Field(..., min_length=1, description="回测标的（与 run 一致）")
+    start: str = Field(..., description="起始日期 YYYY-MM-DD")
+    end: str = Field(..., description="结束日期 YYYY-MM-DD")
+    initial_cash: float = Field(default=1_000_000.0, gt=0, description="初始资金")
+    asset_types: Dict[str, str] = Field(
+        default_factory=dict, description="标的资产类型覆盖（symbol -> stock/fund/future）"
+    )
+    multipliers: Dict[str, float] = Field(
+        default_factory=dict, description="期货合约乘数覆盖（future 默认 10）"
+    )
+    interval: str = Field(default="daily", description="行情频率：daily / minute")
+    objective: str = Field(
+        default="sharpe",
+        description="排序目标：sharpe / total_return / annual_return / max_drawdown / win_rate",
+    )
+    top_n: int = Field(default=10, gt=0, le=100, description="返回 Top-N 组参数")
+    max_combos: int = Field(
+        default=200, gt=0, le=2000, description="网格组合上限（防止笛卡尔积爆炸）"
+    )
+
+
+@router.post("/optimize", summary="回测参数优化（网格搜索 + 排序）")
+def optimize_backtest(payload: OptimizeRequest) -> dict:
+    if payload.end < payload.start:
+        raise HTTPException(status_code=422, detail="end 不得早于 start")
+    if payload.interval not in ("daily", "minute"):
+        raise HTTPException(
+            status_code=422, detail=f"不支持的行情频率 {payload.interval!r}"
+        )
+    try:
+        result = optimize(
+            strategy=payload.strategy,
+            fixed_params=payload.fixed_params,
+            grid=payload.grid,
+            symbols=payload.symbols,
+            start=payload.start,
+            end=payload.end,
+            initial_cash=payload.initial_cash,
+            asset_types=payload.asset_types,
+            multipliers=payload.multipliers,
+            interval=payload.interval,
+            objective=payload.objective,
+            top_n=payload.top_n,
+            max_combos=payload.max_combos,
+        )
+    except OptimizeConfigError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except BacktestError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return result
 
 
 def _normalize_report(r: dict) -> dict:
