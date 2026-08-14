@@ -299,17 +299,16 @@ def factor_ranking(
             }
         )
 
-    def _sort_key(r):
-        v = r.get(metric)
-        # 缺失值始终排末尾，与排序方向无关
-        return (v is None, v if v is not None else 0.0)
-
-    rows.sort(key=_sort_key, reverse=descending)
+    # 缺失 IC 的因子永远排在末尾（与排序方向无关）
+    non_null = [r for r in rows if r.get(metric) is not None]
+    null_rows = [r for r in rows if r.get(metric) is None]
+    non_null.sort(key=lambda r: r.get(metric), reverse=descending)
+    ranked_rows = non_null + null_rows
 
     return {
         "metric": metric,
         "order": order,
-        "ranked": rows,
+        "ranked": ranked_rows,
         "forward_days": forward,
         "symbols": ic["symbols"],
         "dates_count": ic["dates_count"],

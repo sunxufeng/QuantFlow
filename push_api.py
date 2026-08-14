@@ -11,7 +11,7 @@ if PROXY:
 
 REPO_ROOT = "/Users/sunxufeng/WorkBuddy/2026-08-12-14-19-17/quantflow"
 BASE = "18fbbe8"
-MESSAGE = "feat(v3.2): 因子排行榜——按 IC/IR 对所有内置因子排序（打通 V2.8 排行与 V2.9 因子研究），前端排行榜 tab (3.2.0)"
+MESSAGE = "fix(v3.2): 因子排行榜缺失 IC 的因子（样本不足）永远排末尾，与排序方向无关；补充断言"
 
 
 def api(method, path, data=None, retries=6):
