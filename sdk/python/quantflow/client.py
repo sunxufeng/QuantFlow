@@ -402,6 +402,11 @@ class QuantFlowClient:
     def trigger_alert_scheduler(self) -> Dict:
         return self._request("POST", "/alerts/scheduler/trigger")
 
+    # ---- V3.3 多 LLM 路由 ----
+    def get_llm_status(self) -> Dict:
+        """LLM provider 状态（含多模型路由链 chain）。"""
+        return self._request("GET", "/llm/status")
+
     # ------------------------------------------------------------------ #
     # 工作流与运行（M3 / V1.1 N2）
     # ------------------------------------------------------------------ #

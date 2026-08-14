@@ -11,7 +11,7 @@ if PROXY:
 
 REPO_ROOT = "/Users/sunxufeng/WorkBuddy/2026-08-12-14-19-17/quantflow"
 BASE = "18fbbe8"
-MESSAGE = "fix(v3.2): 因子排行榜缺失 IC 的因子（样本不足）永远排末尾，与排序方向无关；补充断言"
+MESSAGE = "feat(v3.3): 多 LLM 路由——providers 列表按序 fallback + 模型选择，保持单配置路径不变 (3.3.0)"
 
 
 def api(method, path, data=None, retries=6):
