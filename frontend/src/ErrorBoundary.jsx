@@ -1,22 +1,11 @@
 import { Component } from 'react'
 
 // 带「缓存破坏」整页刷新的错误边界。
-// 根因：前端由 node server.mjs 托管，域名前还有阿里云 CDN，会把 index.html 与 bundle 缓存起来。
-// 一旦浏览器/CDN 保留了「发版前的旧 bundle」，点击某些视图就会执行旧代码（如历史 setView is not defined），
-// 且普通刷新仍请求同一个被缓存的 index.html，导致错误复发。
-// 解决：捕获到渲染错误时，直接跳转到「最新构建号专属入口 /<build>/」（每次发版路径都不同，
-// 浏览器/CDN 永远无法命中旧缓存），从而彻底拉取最新 index.html + 最新 bundle。
-// 防死循环：同一构建号只自动跳转一次（用 sessionStorage 记录），若仍报错说明是新代码真实 bug。
+// 捕获到渲染错误时，直接强制刷新当前路径（追加 _cb 时间戳，确保拉到最新 index.html + bundle）。
+// 现已不再使用「构建号路径隔离」：index.html 走 no-store、bundle 文件名带内容哈希，天然防陈旧缓存。
+// 防死循环：同一构建号只自动刷新一次（用 sessionStorage 记录），若仍报错说明是新代码真实 bug。
 
 async function goFreshEntry() {
-  try {
-    const res = await fetch('/version.json', { cache: 'no-store' })
-    const v = await res.json()
-    if (v && v.build) {
-      window.location.replace('/' + v.build + '/')
-      return
-    }
-  } catch { /* ignore，落到下面的兜底 */ }
   try {
     const url = new URL(window.location.href)
     url.searchParams.set('_cb', String(Date.now()))

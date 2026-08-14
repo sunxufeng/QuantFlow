@@ -47,13 +47,13 @@ if [[ "$SKIP_BACKEND" != "1" ]]; then
 fi
 
 if [[ "$SKIP_FRONTEND" != "1" ]]; then
-  echo "==> [2] 本地构建前端（按构建号隔离产物路径，根治陈旧 bundle 缓存）"
+  echo "==> [2] 本地构建前端（产物落 assets/，文件名带内容哈希，天然防陈旧缓存）"
   APP_VER="$(grep -m1 'APP_VERSION' "$REPO_DIR/backend/app/config.py" | sed -E 's/.*"([0-9.]+)".*/\1/')"
   BUILD_ID="$(date +%s)"
   export QF_BUILD_ID="$BUILD_ID"
   (cd "$REPO_DIR/frontend" && npm run build)
   printf '{"build":"%s","version":"%s"}\n' "$BUILD_ID" "$APP_VER" > "$REPO_DIR/frontend/dist/version.json"
-  echo "   构建号=$BUILD_ID  版本=$APP_VER  产物路径=assets/$BUILD_ID/"
+  echo "   构建号=$BUILD_ID  版本=$APP_VER  产物路径=assets/（内容哈希文件名）"
 
   echo "==> [3] 同步前端 src/ + dist/ + server.mjs 到 $QF_DIR/frontend"
   tar czf - --exclude='node_modules' -C "$REPO_DIR/frontend" src dist server.mjs \

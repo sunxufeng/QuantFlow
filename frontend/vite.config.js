@@ -12,9 +12,9 @@ export default defineConfig({
     __QF_BUILD_ID__: JSON.stringify(buildId),
   },
   build: {
-    // 把打包产物放到按构建号隔离的目录：每次发版产物路径都不同，
-    // 浏览器/CDN 永远无法命中旧缓存（即使 index.html 被陈旧缓存也能靠新路径拿到新 bundle）。
-    assetsDir: 'assets/' + String(buildId).replace(/[^A-Za-z0-9_-]/g, '_'),
+    // 产物放到默认 assets/ 目录，文件名带 Vite 内容哈希（如 index-DcndtQGp.js），
+    // 自带缓存破坏能力（内容一变文件名就变），不再使用「构建号路径隔离」。
+    assetsDir: 'assets',
     chunkSizeWarningLimit: 2000,
   },
   server: {

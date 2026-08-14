@@ -898,27 +898,20 @@ export default function App() {
   // 版本看门狗：部署新版本后自动刷新页面，避免长期打开的标签页一直运行陈旧 bundle。
   // 两层保护：
   // 1) 后端 /api/health 的 version 变化 → 普通刷新即可；
-  // 2) 前端构建号（/version.json 的 build，每次发版不同）与当前 bundle 内嵌 __QF_BUILD_ID__ 不一致
-  //    → 说明 CDN/浏览器缓存了旧 index.html，直接跳转到「最新构建号专属入口 /<build>/」强制拉取最新代码
-  //      （该路径每次发版都不同，浏览器/CDN 永远无法命中旧缓存）。
+  // 2) 前端构建号（/version.json 的 build）与当前 bundle 内嵌 __QF_BUILD_ID__ 不一致
+  //    → 说明 CDN/浏览器缓存了旧 bundle，直接强制刷新当前路径（index.html 走 no-store + bundle 内容哈希，天然拉到最新）。
   useEffect(() => {
     let alive = true
     let latestBuild = null
     const goFresh = () => {
       try {
-        // 优先跳转到最新构建号入口（根治陈旧缓存）；否则退化为带 _cb 的当前路径刷新
-        if (latestBuild && typeof __QF_BUILD_ID__ !== 'undefined' && latestBuild !== __QF_BUILD_ID__) {
-          window.location.replace('/' + latestBuild + '/')
-          return
-        }
         const url = new URL(window.location.href)
-        if (!url.searchParams.has('_cb')) {
-          url.searchParams.set('_cb', String(Date.now()))
-          window.location.replace(url.pathname + url.search + url.hash)
-          return
-        }
-      } catch { /* ignore */ }
-      window.location.reload(true)
+        url.searchParams.set('_cb', String(Date.now()))
+        window.location.replace(url.pathname + url.search + url.hash)
+        return
+      } catch {
+        try { window.location.reload(true) } catch { /* ignore */ }
+      }
     }
     const probe = () => {
       fetch('/api/health')
