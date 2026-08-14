@@ -316,6 +316,55 @@
 .qf-mcard-value { font-size: 24px; font-weight: 700; color: var(--primary); }
 .qf-mcard-label { font-size: 11px; color: #94a3b8; margin-top: 2px; }
 .qf-monitor-section { display: flex; flex-direction: column; gap: 8px; }
+
+/* ---------- 回测报告中心（BacktestReports） ---------- */
+.qf-reports { display: flex; flex-direction: column; gap: 12px; }
+.qf-reports-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap;
+}
+.qf-reports-title {
+  margin: 0; font-size: 15px; font-weight: 700; color: var(--text);
+}
+.qf-reports-tabs { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.qf-reports-tab {
+  padding: 5px 12px; border-radius: 6px; border: 1px solid var(--border);
+  background: #fff; color: var(--text); font-size: 12px; cursor: pointer;
+  transition: background .12s, border-color .12s;
+}
+.qf-reports-tab:hover { border-color: var(--primary); color: var(--primary); }
+.qf-reports-tab-active { background: var(--primary); border-color: var(--primary); color: #fff; }
+.qf-reports-tab-active:hover { background: var(--primary-dark); border-color: var(--primary-dark); color: #fff; }
+
+.qf-table { width: 100%; border-collapse: collapse; background: #fff; font-size: 12px; }
+.qf-table th, .qf-table td {
+  border-bottom: 1px solid var(--border); padding: 8px 10px; text-align: left; vertical-align: middle;
+}
+.qf-table th {
+  background: #f8fafc; color: #475569; font-weight: 600; font-size: 11px;
+  text-transform: uppercase; letter-spacing: .02em; white-space: nowrap;
+}
+.qf-table td { color: var(--text); }
+.qf-table tbody tr:hover { background: #f8fafc; }
+.qf-table tbody tr.qf-row-active { background: rgba(99,102,241,.08); }
+.qf-table .qf-hint { font-size: 11px; }
+
+.qf-an-block {
+  background: #fff; border: 1px solid var(--border); border-radius: 10px;
+  padding: 12px; box-shadow: 0 1px 2px rgba(15,23,42,.04);
+}
+.qf-an-title {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 10px;
+}
+.qf-an-title + .qf-mcards { margin-top: 0; }
+
+/* 报告页指标卡更紧凑 */
+.qf-reports .qf-mcards { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; }
+.qf-reports .qf-mcard { padding: 10px; border-radius: 8px; }
+.qf-reports .qf-mcard-value { font-size: 17px; font-weight: 700; color: var(--primary); }
+.qf-reports .qf-mcard-label { font-size: 10px; color: #94a3b8; margin-top: 2px; }
+
 .qf-log-list {
   background: #0f172a; border-radius: 10px; padding: 8px 0; max-height: 420px;
   overflow-y: auto; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;

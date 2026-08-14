@@ -17,7 +17,7 @@ function fmtNum(v, d = 2) {
 function EquityChart({ curve }) {
   if (!curve || !curve.length) return null
   const W = 600
-  const H = 160
+  const H = 120
   const pad = 10
   const vals = curve.map((p) => Number(p.total_value) || 0)
   const lo = Math.min(...vals)
@@ -30,7 +30,7 @@ function EquityChart({ curve }) {
     .join(' ')
   const area = `0,${H - pad} ${path} ${W - pad},${H - pad}`
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ width: '100%', height: 160 }}>
+    <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ width: '100%', height: H }}>
       <polyline points={area} fill="#15803d" fillOpacity="0.08" stroke="none" />
       <polyline points={path} fill="none" stroke="#15803d" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
     </svg>
@@ -102,25 +102,17 @@ export default function BacktestReports() {
     <button
       type="button"
       onClick={() => setTab(key)}
-      style={{
-        padding: '6px 12px',
-        borderRadius: 6,
-        border: '1px solid var(--border)',
-        background: tab === key ? '#6366f1' : '#fff',
-        color: tab === key ? '#fff' : '#334155',
-        cursor: 'pointer',
-        fontSize: 13,
-      }}
+      className={tab === key ? 'qf-reports-tab qf-reports-tab-active' : 'qf-reports-tab'}
     >
       {label}
     </button>
   )
 
   return (
-    <div className="qf-monitor" style={{ padding: 16 }}>
-      <div className="qf-result-head">
-        <h3>回测报告中心（V1.6）</h3>
-        <div style={{ display: 'flex', gap: 8 }}>
+    <div className="qf-monitor qf-reports" style={{ padding: 14 }}>
+      <div className="qf-reports-head">
+        <h3 className="qf-reports-title">回测报告中心（V1.6）</h3>
+        <div className="qf-reports-tabs">
           {tabBtn('reports', '报告列表')}
           {tabBtn('futures', '期货回测')}
           {tabBtn('optimize', '参数优化')}
@@ -145,7 +137,7 @@ export default function BacktestReports() {
       )}
 
       {summaries.length > 0 && (
-        <div style={{ overflowX: 'auto', marginTop: 12 }}>
+        <div style={{ overflowX: 'auto' }}>
           <table className="qf-table">
             <thead>
               <tr>
@@ -157,7 +149,7 @@ export default function BacktestReports() {
                 <th>夏普</th>
                 <th>最大回撤</th>
                 <th>胜率</th>
-                <th>操作</th>
+                <th style={{ width: 110 }}>操作</th>
               </tr>
             </thead>
             <tbody>
@@ -174,7 +166,7 @@ export default function BacktestReports() {
                   <td>
                     <button className="qf-btn qf-btn-sm" onClick={() => openDetail(s.run_id)}>查看</button>
                     <button className="qf-btn qf-btn-sm" onClick={() => toggleCompare(s.run_id)}>
-                      {compareId === s.run_id ? '取消对比' : '对比'}
+                      {compareId === s.run_id ? '取消' : '对比'}
                     </button>
                   </td>
                 </tr>
@@ -185,16 +177,16 @@ export default function BacktestReports() {
       )}
 
       {detail && (
-        <div className="qf-an-block" style={{ marginTop: 16 }}>
-          <div className="qf-an-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div className="qf-an-block">
+          <div className="qf-an-title">
             <span>报告详情 · {detail.strategy} · {detail.run_id}</span>
             <span style={{ display: 'flex', gap: 6 }}>
-              <button className="qf-btn qf-btn-sm" onClick={() => exportBacktestReport(detail.run_id, 'csv').catch((e) => setError(`导出失败: ${e.message}`))}>导出 CSV</button>
-              <button className="qf-btn qf-btn-sm" onClick={() => exportBacktestReport(detail.run_id, 'json').catch((e) => setError(`导出失败: ${e.message}`))}>导出 JSON</button>
+              <button className="qf-btn qf-btn-sm" onClick={() => exportBacktestReport(detail.run_id, 'csv').catch((e) => setError(`导出失败: ${e.message}`))}>CSV</button>
+              <button className="qf-btn qf-btn-sm" onClick={() => exportBacktestReport(detail.run_id, 'json').catch((e) => setError(`导出失败: ${e.message}`))}>JSON</button>
             </span>
           </div>
           <MetricCards m={detail.metrics} />
-          <div className="qf-an-title" style={{ marginTop: 10 }}>净值曲线</div>
+          <div className="qf-an-title">净值曲线</div>
           <EquityChart curve={detail.equity_curve} />
           <div className="qf-hint">
             标的：{(detail.symbols || []).join(', ')} ｜ 区间：{detail.start_date} ~ {detail.end_date} ｜
@@ -204,7 +196,7 @@ export default function BacktestReports() {
       )}
 
       {compare && (
-        <div className="qf-an-block" style={{ marginTop: 16 }}>
+        <div className="qf-an-block">
           <div className="qf-an-title">对比基准 · {compare.strategy} · {compare.run_id}</div>
           <MetricCards m={compare.metrics} />
           <EquityChart curve={compare.equity_curve} />
