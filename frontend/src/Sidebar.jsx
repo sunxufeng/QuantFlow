@@ -1,6 +1,7 @@
 import { useState } from 'react'
 
 const navItems = [
+  { key: 'home', label: '概览', abbr: '览' },
   { key: 'editor', label: '工作流编辑器', abbr: '工' },
   { key: 'chart', label: '行情图表', abbr: '行' },
   { key: 'monitor', label: '系统监控', abbr: '系' },

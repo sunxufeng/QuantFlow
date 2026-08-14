@@ -21,6 +21,7 @@ import LLMAssistant from './LLMAssistant.jsx'
 import LLMSettings from './LLMSettings.jsx'
 import Templates from './Templates.jsx'
 import Sidebar from './Sidebar.jsx'
+import Dashboard from './Dashboard.jsx'
 import BacktestResultView from './BacktestResultView.jsx'
 import BacktestReports from './BacktestReports.jsx'
 import BrokerSettings from './BrokerSettings.jsx'
@@ -746,7 +747,7 @@ function Canvas({ projectId, pendingTemplate, onTemplateConsumed }) {
 }
 
 export default function App() {
-  const [view, setView] = useState('editor')
+  const [view, setView] = useState('home')
   const [user, setUser] = useState(null)
   const [projects, setProjects] = useState([])
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
@@ -849,6 +850,9 @@ export default function App() {
           onLogout={handleLogout}
         />
         <main className="qf-main">
+          {view === 'home' && (
+            <Dashboard onNavigate={setView} />
+          )}
           {view === 'editor' && (
             <Canvas
               projectId={projectId}
