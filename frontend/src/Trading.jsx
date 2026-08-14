@@ -12,6 +12,8 @@ export default function Trading({ onNavigate }) {
   const [summary, setSummary] = useState(null)
   const [positions, setPositions] = useState([])
   const [orders, setOrders] = useState([])
+  const [analytics, setAnalytics] = useState(null)
+  const [tab, setTab] = useState('trade')           // trade | analytics
   const [mode, setMode] = useState('paper')        // paper | live
   const [liveCapable, setLiveCapable] = useState(false)
   const [broker, setBroker] = useState(null)
@@ -24,10 +26,12 @@ export default function Trading({ onNavigate }) {
       fetch('/api/trading/summary', { headers: authHeaders() }).then(r => r.json()).catch(() => null),
       fetch('/api/trading/positions', { headers: authHeaders() }).then(r => r.json()).catch(() => []),
       fetch('/api/trading/orders', { headers: authHeaders() }).then(r => r.json()).catch(() => []),
-    ]).then(([s, p, o]) => {
+      fetch('/api/trading/analytics', { headers: authHeaders() }).then(r => r.json()).catch(() => null),
+    ]).then(([s, p, o, a]) => {
       setSummary(s)
       setPositions(p || [])
       setOrders(o || [])
+      setAnalytics(a)
     })
   }, [])
 
@@ -117,6 +121,13 @@ export default function Trading({ onNavigate }) {
     <div className="qf-templates" style={{ height: '100%', overflowY: 'auto' }}>
       <div className="qf-templates-head" style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <h2>交易</h2>
+        {/* 面板 / 分析 切换 */}
+        <div style={{ display: 'inline-flex', borderRadius: 8, overflow: 'hidden', border: '1px solid #cbd5e1' }}>
+          <button type="button" onClick={() => setTab('trade')}
+            style={toggleStyle(tab === 'trade', '#6366f1')}>面板</button>
+          <button type="button" onClick={() => setTab('analytics')}
+            style={toggleStyle(tab === 'analytics', '#0ea5e9')}>分析</button>
+        </div>
         {/* 模拟 / 实盘 切换 */}
         <div style={{ display: 'inline-flex', borderRadius: 8, overflow: 'hidden', border: '1px solid #cbd5e1' }}>
           <button type="button" onClick={() => setMode('paper')}
@@ -165,6 +176,7 @@ export default function Trading({ onNavigate }) {
         </div>
       )}
 
+      {tab === 'trade' && (<>
       <div style={{ display: 'flex', gap: 16, marginTop: 18, flexWrap: 'wrap' }}>
         {/* 下单 */}
         <form onSubmit={submit} style={{ flex: '1 1 300px', minWidth: 280, border: '1px solid var(--border)', borderRadius: 10, padding: 14, background: '#fff' }}>
@@ -256,6 +268,54 @@ export default function Trading({ onNavigate }) {
           )}
         </div>
       )}
+      </>
+      )}
+
+      {tab === 'analytics' && analytics && (
+        <AnalyticsPanel data={analytics} initial={analytics.equity_curve?.[0]?.equity || summary?.initial_cash || 1_000_000} />
+      )}
+    </div>
+  )
+}
+
+function AnalyticsPanel({ data, initial }) {
+  const pct = (v) => (v * 100).toFixed(1) + '%'
+  return (
+    <div style={{ marginTop: 18 }}>
+      <div className="qf-mcards" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))' }}>
+        <div className="qf-mcard"><div className="qf-mcard-value" style={{ color: data.max_drawdown < 0 ? '#e11d48' : '#16a34a' }}>{pct(data.max_drawdown)}</div><div className="qf-mcard-label">最大回撤</div></div>
+        <div className="qf-mcard"><div className="qf-mcard-value">{data.total_trades}</div><div className="qf-mcard-label">交易笔数</div></div>
+        <div className="qf-mcard"><div className="qf-mcard-value">{pct(data.win_rate)}</div><div className="qf-mcard-label">胜率</div></div>
+        <div className="qf-mcard"><div className="qf-mcard-value" style={{ color: '#0891b2' }}>{data.profit_factor}</div><div className="qf-mcard-label">盈利因子</div></div>
+        <div className="qf-mcard"><div className="qf-mcard-value" style={{ color: '#16a34a' }}>{data.avg_win.toLocaleString()}</div><div className="qf-mcard-label">平均盈利</div></div>
+        <div className="qf-mcard"><div className="qf-mcard-value" style={{ color: '#e11d48' }}>{data.avg_loss.toLocaleString()}</div><div className="qf-mcard-label">平均亏损</div></div>
+      </div>
+
+      {data.equity_curve && data.equity_curve.length > 1 && (
+        <div style={{ marginTop: 14, border: '1px solid var(--border)', borderRadius: 10, padding: 14, background: '#fff' }}>
+          <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text)', marginBottom: 8 }}>权益曲线</div>
+          <EquitySparkline data={data.equity_curve} initial={initial} />
+        </div>
+      )}
+
+      <div style={{ marginTop: 14, border: '1px solid var(--border)', borderRadius: 10, padding: 14, background: '#fff' }}>
+        <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text)', marginBottom: 10 }}>逐标的盈亏（已实现）</div>
+        {(!data.trades || data.trades.length === 0) && <div className="qf-prop-hint">暂无已平仓交易</div>}
+        {data.trades && data.trades.length > 0 && (
+          <table className="qf-state-table">
+            <thead><tr><th>标的</th><th>已实现盈亏</th><th>结果</th></tr></thead>
+            <tbody>
+              {data.trades.map((t) => (
+                <tr key={t.symbol}>
+                  <td>{t.symbol}</td>
+                  <td style={{ color: Number(t.realized_pnl) >= 0 ? '#16a34a' : '#e11d48' }}>{Number(t.realized_pnl).toLocaleString()}</td>
+                  <td>{Number(t.realized_pnl) >= 0 ? '盈利' : '亏损'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
     </div>
   )
 }

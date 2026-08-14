@@ -52,6 +52,11 @@ def get_summary(user: Dict[str, Any] = Depends(get_current_user)):
     return engine.summary(user["id"])
 
 
+@router.get("/trading/analytics")
+def get_analytics(user: Dict[str, Any] = Depends(get_current_user)):
+    return engine.analytics(user["id"])
+
+
 @router.get("/trading/positions")
 def get_positions(user: Dict[str, Any] = Depends(get_current_user)):
     return store.list_positions(user["id"])

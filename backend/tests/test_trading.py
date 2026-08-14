@@ -132,6 +132,30 @@ def test_win_rate_and_exposure_after_round_trip():
     assert s["exposure"] == pytest.approx(0.0, abs=0.001)  # 已平仓，无敞口
 
 
+def test_analytics_endpoint():
+    _seed_price("AAPL", 100.0)
+    c = _authed("trade_analytics")
+    c.delete("/api/trading/reset")
+    c.post("/api/trading/orders", json={"symbol": "AAPL", "side": "buy", "type": "market", "qty": 10})
+    _seed_price("AAPL", 130.0)
+    c.post("/api/trading/orders", json={"symbol": "AAPL", "side": "sell", "type": "market", "qty": 10})
+    # 一笔亏损交易
+    _seed_price("600519", 200.0)
+    c.post("/api/trading/orders", json={"symbol": "600519", "side": "buy", "type": "market", "qty": 5})
+    _seed_price("600519", 180.0)
+    c.post("/api/trading/orders", json={"symbol": "600519", "side": "sell", "type": "market", "qty": 5})
+
+    r = c.get("/api/trading/analytics")
+    assert r.status_code == 200
+    a = r.json()
+    assert a["total_trades"] == 2
+    assert a["profit_trades"] == 1
+    assert a["loss_trades"] == 1
+    assert a["max_drawdown"] < 0  # 经历过回撤
+    assert "profit_factor" in a
+    assert len(a["trades"]) == 2
+
+
 def test_live_mode_default_is_paper():
     c = _authed("trade_live_mode")
     r = c.get("/api/trading/mode")

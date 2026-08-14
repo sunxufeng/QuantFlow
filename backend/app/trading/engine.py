@@ -325,3 +325,58 @@ def summary(user_id: str):
         "daily_pnl": daily_pnl,
         "initial_cash": _INITIAL_CASH,
     }
+
+
+def analytics(user_id: str):
+    """V1.9 交易分析：权益曲线、最大回撤、胜率、盈利因子、按标的分解。"""
+    _store.init()
+    s = summary(user_id)
+    curve = s["equity_curve"]
+    # 最大回撤（基于权益曲线）
+    peak = _INITIAL_CASH
+    max_dd = 0.0
+    max_dd_amt = 0.0
+    for pt in curve:
+        eq = float(pt["equity"])
+        if eq > peak:
+            peak = eq
+        dd = (eq - peak) / peak if peak else 0.0
+        if dd < max_dd:
+            max_dd = dd
+        amt = eq - peak
+        if amt < max_dd_amt:
+            max_dd_amt = amt
+
+    # 按标的的已实现盈亏（含已平仓 qty=0 与持仓中的部分实现）
+    rows = _store.db.query(
+        "SELECT symbol, realized_pnl FROM trading_positions WHERE user_id=? AND realized_pnl!=0",
+        (user_id,),
+    )
+    trades = [
+        {"symbol": r["symbol"], "realized_pnl": round(float(r["realized_pnl"]), 2)}
+        for r in rows
+    ]
+    wins = [t for t in trades if t["realized_pnl"] > 0]
+    losses = [t for t in trades if t["realized_pnl"] < 0]
+    total = len(trades)
+    win_rate = round(len(wins) / total, 4) if total else 0.0
+    avg_win = round(sum(t["realized_pnl"] for t in wins) / len(wins), 2) if wins else 0.0
+    avg_loss = round(sum(t["realized_pnl"] for t in losses) / len(losses), 2) if losses else 0.0
+    gross_win = sum(t["realized_pnl"] for t in wins)
+    gross_loss = abs(sum(t["realized_pnl"] for t in losses))
+    profit_factor = round(gross_win / gross_loss, 2) if gross_loss else (99.0 if gross_win > 0 else 0.0)
+
+    return {
+        "equity_curve": curve,
+        "daily_pnl": s["daily_pnl"],
+        "max_drawdown": round(max_dd, 4),
+        "max_drawdown_amount": round(max_dd_amt, 2),
+        "win_rate": win_rate,
+        "total_trades": total,
+        "profit_trades": len(wins),
+        "loss_trades": len(losses),
+        "avg_win": avg_win,
+        "avg_loss": avg_loss,
+        "profit_factor": profit_factor,
+        "trades": trades,
+    }
