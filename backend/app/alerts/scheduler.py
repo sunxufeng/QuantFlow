@@ -38,7 +38,7 @@ def _run() -> List[Dict[str, Any]]:
     global _last_run_at, _last_run_triggered
     results: List[Dict[str, Any]] = []
     try:
-        from .service import alert_service
+        from . import alert_service
 
         results = alert_service.evaluate_all()
         if results:
