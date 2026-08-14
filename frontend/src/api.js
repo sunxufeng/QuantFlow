@@ -133,6 +133,8 @@ export const marketSyncNow = () => request('/market/sync', { method: 'POST' })
 // ---- 回测报告中心（V1.6）----
 export const backtestReports = () => request('/backtest/reports')
 export const backtestReport = (runId) => request(`/backtest/reports/${runId}`)
+export const backtestStrategies = () => request('/backtest/strategies')
+export const runBacktest = (payload) => request('/backtest/run', { method: 'POST', body: JSON.stringify(payload) })
 
 // ---- 因子库 CRUD（V1.1 N3）----
 export const factorLibraryList = (category) => request(

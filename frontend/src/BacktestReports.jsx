@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { backtestReport, backtestReports } from './api.js'
+import FuturesBacktest from './FuturesBacktest.jsx'
 
 function fmtPct(v) {
   if (v == null) return '-'
@@ -64,6 +65,7 @@ export default function BacktestReports() {
   const [detailLoading, setDetailLoading] = useState(false)
   const [compareId, setCompareId] = useState(null)
   const [compare, setCompare] = useState(null)
+  const [tab, setTab] = useState('reports')
 
   const refresh = useCallback(() => {
     setLoading(true)
@@ -95,14 +97,43 @@ export default function BacktestReports() {
     backtestReport(runId).then(setCompare).catch(() => {})
   }, [compareId])
 
+  const tabBtn = (key, label) => (
+    <button
+      type="button"
+      onClick={() => setTab(key)}
+      style={{
+        padding: '6px 12px',
+        borderRadius: 6,
+        border: '1px solid var(--border)',
+        background: tab === key ? '#6366f1' : '#fff',
+        color: tab === key ? '#fff' : '#334155',
+        cursor: 'pointer',
+        fontSize: 13,
+      }}
+    >
+      {label}
+    </button>
+  )
+
   return (
     <div className="qf-monitor" style={{ padding: 16 }}>
       <div className="qf-result-head">
         <h3>回测报告中心（V1.6）</h3>
-        <button className="qf-btn qf-btn-primary" onClick={refresh}>刷新</button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {tabBtn('reports', '报告列表')}
+          {tabBtn('futures', '期货回测')}
+          <button className="qf-btn qf-btn-primary" onClick={refresh}>刷新</button>
+        </div>
       </div>
       {error && <div className="qf-error">{error}</div>}
       {loading && <div className="qf-busy">加载中…</div>}
+
+      {tab === 'futures' && (
+        <FuturesBacktest onRun={() => refresh()} />
+      )}
+
+      {tab === 'reports' && (
+      <>
       {!loading && summaries.length === 0 && (
         <div className="qf-hint">暂无回测报告。在「工作流编辑器」运行回测节点后将自动留痕，可在此横向对比策略表现。</div>
       )}
@@ -168,6 +199,8 @@ export default function BacktestReports() {
           <MetricCards m={compare.metrics} />
           <EquityChart curve={compare.equity_curve} />
         </div>
+      )}
+      </>
       )}
     </div>
   )

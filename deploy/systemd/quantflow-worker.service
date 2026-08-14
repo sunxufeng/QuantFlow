@@ -1,0 +1,17 @@
+[Unit]
+Description=QuantFlow distributed worker (V1.1 N6)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/quantflow/QuantFlow/backend
+Environment=QF_DEBUG=0
+Environment=QF_DB_PATH=/opt/quantflow/QuantFlow/backend/data/quantflow.db
+Environment=QF_WORKER_POLL_INTERVAL=1.0
+Environment=QF_WORKER_STALE_TIMEOUT=300
+ExecStart=/opt/quantflow/QuantFlow/backend/.venv/bin/python -m app.core.worker
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
