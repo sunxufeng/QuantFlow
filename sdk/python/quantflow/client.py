@@ -177,6 +177,14 @@ class QuantFlowClient:
             payload["preferred_data_source"] = preferred_data_source
         return self._request("PUT", "/settings", json=payload or None)
 
+    # ---- V6.2 批量导出中心 ----
+    def export_data(self, resource: str, format: str = "json") -> Dict:
+        """批量导出（V6.2）：resource=factors|templates|backtests，format=csv|json。
+
+        JSON 格式返回解析后的 dict；CSV 格式返回带 BOM 的文本（便于 Excel）。
+        """
+        return self._request("GET", "/export", params={"resource": resource, "format": format})
+
     # ------------------------------------------------------------------ #
     # 项目（M4）
     # ------------------------------------------------------------------ #

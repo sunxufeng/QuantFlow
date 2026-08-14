@@ -32,6 +32,7 @@ import MarketBoard from './MarketBoard.jsx'
 import Watchlist from './Watchlist.jsx'
 import SchedulerCenter from './SchedulerCenter.jsx'
 import Settings from './Settings.jsx'
+import ExportCenter from './ExportCenter.jsx'
 import Factors from './Factors.jsx'
 import BrokerSettings from './BrokerSettings.jsx'
 import LoginScreen from './LoginScreen.jsx'
@@ -1005,6 +1006,7 @@ export default function App() {
           {view === 'sched' && <SchedulerCenter />}
           {view === 'trade' && <Trading onNavigate={setView} />}
           {view === 'prefs' && <Settings />}
+          {view === 'export' && <ExportCenter />}
           {view === 'broker' && <BrokerSettings />}
           {view === 'data' && <DataSync />}
         </main>

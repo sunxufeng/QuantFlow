@@ -304,3 +304,9 @@ export const updateSettings = (prefs = {}) => request('/settings', {
   method: 'PUT',
   body: JSON.stringify(prefs),
 })
+
+// ---- V6.2 批量导出中心 ----
+export const exportData = (resource, format = 'json') =>
+  fetch(`/api/export?resource=${encodeURIComponent(resource)}&format=${encodeURIComponent(format)}`, {
+    headers: { Authorization: `Bearer ${getToken() || ''}` },
+  })

@@ -20,6 +20,7 @@ const navItems = [
   { key: 'sched', label: '调度中心', abbr: '调' },
   { key: 'trade', label: '模拟交易', abbr: '易' },
   { key: 'prefs', label: '设置', abbr: '设' },
+  { key: 'export', label: '导出中心', abbr: '出' },
   { key: 'broker', label: '券商设置', abbr: '券', adminOnly: true },
 ]
 
