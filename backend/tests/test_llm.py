@@ -38,9 +38,9 @@ def test_openai_provider_requires_key():
         OpenAIProvider(api_key="", base_url="https://x", model="m")
 
 
-def test_assist_requires_auth(client):
-    # client 是未鉴权的 TestClient 夹具
-    resp = client.post("/api/llm/assist", json={"prompt": "hi"})
+def test_assist_requires_auth(anon_client):
+    # anon_client 是未鉴权的 TestClient 夹具
+    resp = anon_client.post("/api/llm/assist", json={"prompt": "hi"})
     assert resp.status_code == 401
 
 

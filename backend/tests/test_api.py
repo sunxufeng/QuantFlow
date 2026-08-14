@@ -1,11 +1,26 @@
 """API 测试：节点列表 / 工作流校验 / 运行。"""
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.core.workflow_repository import WORKFLOW_REPOSITORY
 from app.main import app
 
 client = TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def _authed_client():
+    """V1.7 起主读接口需登录，模块级 client 改为自带合法令牌。"""
+    global client
+    c = TestClient(app)
+    c.post("/api/auth/register", json={"username": "api_u", "password": "secret123"})
+    token = c.post(
+        "/api/auth/login", json={"username": "api_u", "password": "secret123"}
+    ).json()["token"]
+    c.headers["Authorization"] = f"Bearer {token}"
+    client = c
+    yield
 
 
 def test_health():

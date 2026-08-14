@@ -13,6 +13,13 @@ async function request(path, options = {}) {
   if (!resp.ok) {
     let detail = await resp.text()
     try { detail = JSON.parse(detail).detail || detail } catch { /* keep text */ }
+    // 登录态失效（非认证接口返回 401）→ 清除令牌并通知应用回到登录页
+    if (resp.status === 401 && !path.startsWith('/auth/')) {
+      clearToken()
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('qf:unauthorized'))
+      }
+    }
     const err = new Error(`HTTP ${resp.status}: ${String(detail).slice(0, 300)}`)
     err.status = resp.status
     throw err
@@ -111,7 +118,8 @@ export const listRuns = (limit = 30) => request(`/runs?limit=${limit}`)
 
 export function runWsUrl(runId) {
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
-  return `${proto}//${location.host}/api/ws/runs/${runId}`
+  const token = getToken()
+  return `${proto}//${location.host}/api/ws/runs/${runId}${token ? `?token=${encodeURIComponent(token)}` : ''}`
 }
 
 // ---- 行情 ----
@@ -171,6 +179,18 @@ export const llmSaveConfig = (cfg) => request('/llm/config', {
   body: JSON.stringify(cfg),
 })
 export const llmTestConfig = (cfg) => request('/llm/config/test', {
+  // cfg 可选：不传则测当前已保存配置
+  method: 'POST',
+  body: JSON.stringify(cfg || {}),
+})
+
+// ---- 券商凭证配置（V1.7 设置页）----
+export const brokerGetConfig = () => request('/settings/broker')
+export const brokerSaveConfig = (cfg) => request('/settings/broker', {
+  method: 'PUT',
+  body: JSON.stringify(cfg),
+})
+export const brokerTestConfig = (cfg) => request('/settings/broker/test', {
   // cfg 可选：不传则测当前已保存配置
   method: 'POST',
   body: JSON.stringify(cfg || {}),

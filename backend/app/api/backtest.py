@@ -13,18 +13,23 @@ from __future__ import annotations
 import logging
 from typing import Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from ..backtest import BacktestEngine, BacktestError, BacktestReportStore, build_report
 from ..backtest.portfolio import PortfolioBacktest
 from ..backtest.strategies import STRATEGY_REGISTRY
+from ..core.auth import get_current_user
 from ..market.models import Bar, Instrument
 from ..market.service import market_service
 
 logger = logging.getLogger("quantflow.api.backtest")
 
-router = APIRouter(prefix="/backtest", tags=["backtest"])
+router = APIRouter(
+    prefix="/backtest",
+    tags=["backtest"],
+    dependencies=[Depends(get_current_user)],
+)
 
 report_store = BacktestReportStore()
 

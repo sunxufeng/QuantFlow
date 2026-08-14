@@ -4,11 +4,26 @@ from __future__ import annotations
 
 import time
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
 
 client = TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def _authed_client():
+    """V1.7 起运行接口需登录，模块级 client 改为自带合法令牌。"""
+    global client
+    c = TestClient(app)
+    c.post("/api/auth/register", json={"username": "run_u", "password": "secret123"})
+    token = c.post(
+        "/api/auth/login", json={"username": "run_u", "password": "secret123"}
+    ).json()["token"]
+    c.headers["Authorization"] = f"Bearer {token}"
+    client = c
+    yield
 
 
 def _submit(payload: dict) -> dict:
@@ -71,7 +86,8 @@ def test_ws_receives_snapshot():
         "edges": [],
     })
     run_id = data["run_id"]
-    with client.websocket_connect(f"/api/ws/runs/{run_id}") as ws:
+    token = client.headers["Authorization"].split(" ", 1)[1]
+    with client.websocket_connect(f"/api/ws/runs/{run_id}?token={token}") as ws:
         msg = ws.receive_json()
         assert msg["kind"] == "snapshot"
         assert msg["run_id"] == run_id

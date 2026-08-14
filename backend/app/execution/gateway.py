@@ -21,6 +21,7 @@ from enum import Enum
 from typing import Dict, List, Optional
 
 from ..backtest.costs import CostCalculator, CostRates
+from ..core.broker.config import load_broker_config
 
 
 class OrderSide(str, Enum):
@@ -206,8 +207,13 @@ class LiveExecutionGateway(BaseExecutionGateway):
     mode = "live"
 
     def __init__(self) -> None:
-        self._api_key = os.getenv("QF_BROKER_API_KEY", "")
-        self._broker = os.getenv("QF_BROKER", "simulated-broker")
+        # 优先级：持久化配置（页面设置）> 环境变量
+        cfg = load_broker_config()
+        self._api_key = cfg.get("api_key") or os.getenv("QF_BROKER_API_KEY", "")
+        self._api_secret = cfg.get("api_secret") or os.getenv("QF_BROKER_SECRET", "")
+        self._broker = cfg.get("broker") or os.getenv("QF_BROKER", "simulated-broker")
+        self._base_url = cfg.get("base_url") or os.getenv("QF_BROKER_BASE_URL", "")
+        self._account_id = cfg.get("account_id") or os.getenv("QF_BROKER_ACCOUNT", "")
 
     def _ensure_configured(self) -> None:
         if not self._api_key:

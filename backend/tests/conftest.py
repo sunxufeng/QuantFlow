@@ -30,6 +30,32 @@ def clean_db():
 
 @pytest.fixture
 def client():
+    """已注册并登录的鉴权客户端（带 Bearer 头）。
+
+    V1.7 起主读接口均要求登录，故默认 client 自带合法令牌；
+    需断言「未登录返回 401」的测试请改用 ``anon_client``。
+    """
+    from app.main import app
+
+    with TestClient(app) as c:
+        username = f"t_{int(time.time() * 1000)}_{os.getpid()}"
+        password = "Test@123"
+        c.post(
+            "/api/auth/register",
+            json={"username": username, "password": password},
+        )
+        resp = c.post(
+            "/api/auth/login",
+            json={"username": username, "password": password},
+        )
+        token = resp.json()["token"]
+        c.headers["Authorization"] = f"Bearer {token}"
+        yield c
+
+
+@pytest.fixture
+def anon_client():
+    """未认证客户端：用于验证「未登录返回 401」的断言。"""
     from app.main import app
 
     with TestClient(app) as c:

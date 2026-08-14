@@ -12,10 +12,11 @@ from __future__ import annotations
 
 import os
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from typing import Dict, Optional
 
+from ..core.auth import get_current_user
 from ..execution import (
     GatewayNotConfigured,
     Order,
@@ -24,7 +25,11 @@ from ..execution import (
 )
 from ..market import market_service
 
-router = APIRouter(prefix="/execution", tags=["execution"])
+router = APIRouter(
+    prefix="/execution",
+    tags=["execution"],
+    dependencies=[Depends(get_current_user)],
+)
 
 
 def _resolve_last_price(symbol: str) -> Optional[float]:

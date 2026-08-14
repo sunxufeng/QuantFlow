@@ -140,6 +140,13 @@ def _fake_market(monkeypatch, tmp_path):
 class TestRunMinuteApi:
     def setup_method(self):
         self.client = TestClient(app)
+        self.client.post(
+            "/api/auth/register", json={"username": "min_u", "password": "secret123"}
+        )
+        token = self.client.post(
+            "/api/auth/login", json={"username": "min_u", "password": "secret123"}
+        ).json()["token"]
+        self.client.headers["Authorization"] = f"Bearer {token}"
 
     def test_run_minute(self):
         resp = self.client.post("/api/backtest/run", json={

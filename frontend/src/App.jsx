@@ -23,6 +23,8 @@ import Templates from './Templates.jsx'
 import AuthModal from './AuthModal.jsx'
 import BacktestResultView from './BacktestResultView.jsx'
 import BacktestReports from './BacktestReports.jsx'
+import BrokerSettings from './BrokerSettings.jsx'
+import LoginScreen from './LoginScreen.jsx'
 import { useGraphHistory } from './useHistory.js'
 import {
   clearToken,
@@ -789,6 +791,18 @@ export default function App() {
     setProjectId('')
   }
 
+  // 登录态失效（后端返回 401）→ 回到登录页
+  useEffect(() => {
+    const onUnauthorized = () => {
+      clearToken()
+      setUser(null)
+      setProjects([])
+      setProjectId('')
+    }
+    window.addEventListener('qf:unauthorized', onUnauthorized)
+    return () => window.removeEventListener('qf:unauthorized', onUnauthorized)
+  }, [])
+
   const handleCreateProject = () => {
     const name = window.prompt('新项目名称：')
     if (!name || !name.trim()) return
@@ -811,6 +825,11 @@ export default function App() {
         setProjectId('')
       })
       .catch((e) => window.alert(`删除项目失败: ${e.message}`))
+  }
+
+  // 登录门禁（V1.7）：未登录只渲染登录/注册页，不暴露任何业务内容
+  if (!user) {
+    return <LoginScreen onAuthed={handleAuthed} />
   }
 
   return (
@@ -873,6 +892,14 @@ export default function App() {
           >
             回测报告
           </button>
+          {user?.role === 'admin' && (
+            <button
+              className={`qf-nav-btn ${view === 'broker' ? 'qf-nav-active' : ''}`}
+              onClick={() => setView('broker')}
+            >
+              券商设置
+            </button>
+          )}
         </nav>
         <div className="qf-topbar-right">
           {user && (
@@ -927,6 +954,7 @@ export default function App() {
         />
       )}
       {view === 'reports' && <BacktestReports />}
+      {view === 'broker' && <BrokerSettings />}
       {authOpen && (
         <AuthModal onClose={() => setAuthOpen(false)} onAuthed={handleAuthed} />
       )}

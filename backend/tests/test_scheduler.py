@@ -65,8 +65,8 @@ def test_toggle_and_delete():
 
 
 # ---- API 层 ----
-def test_api_requires_auth(client):
-    code = client.post("/api/schedules", json={})
+def test_api_requires_auth(anon_client):
+    code = anon_client.post("/api/schedules", json={})
     assert code.status_code == 401
 
 

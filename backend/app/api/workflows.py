@@ -6,7 +6,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 
-from ..core.auth import get_current_user_optional
+from ..core.auth import get_current_user, get_current_user_optional
 from ..core.dag import WorkflowValidationError, validate_workflow
 from ..core.projects import PROJECT_REPOSITORY
 from ..core.registry import REGISTRY
@@ -24,7 +24,7 @@ from ..models.schemas import (
     WorkflowVersionOut,
 )
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_current_user)])
 
 
 def _payload(workflow: WorkflowIn) -> dict:

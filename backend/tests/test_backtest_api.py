@@ -15,6 +15,20 @@ from app.market import Bar
 client = TestClient(app)
 
 
+@pytest.fixture(autouse=True)
+def _authed_client():
+    """V1.7 起回测接口需登录，模块级 client 改为自带合法令牌。"""
+    global client
+    c = TestClient(app)
+    c.post("/api/auth/register", json={"username": "bt_u", "password": "secret123"})
+    token = c.post(
+        "/api/auth/login", json={"username": "bt_u", "password": "secret123"}
+    ).json()["token"]
+    c.headers["Authorization"] = f"Bearer {token}"
+    client = c
+    yield
+
+
 def _bars(closes: List[float], symbol: str, volume: float = 1e6) -> List[Bar]:
     base = dt.date(2024, 1, 2)
     return [

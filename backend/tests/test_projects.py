@@ -178,11 +178,14 @@ def test_workflow_scoped_to_project():
     assert len(bob_items) == 0
 
 
-def test_workflow_public_mode_backward_compat():
-    """无认证时仍可按老模式使用（单机/访客兼容）。"""
+def test_workflow_requires_auth():
+    """V1.7 起工作流接口需登录；未认证返回 401，登录后可正常创建。"""
     resp = client.post("/api/workflows", json=_mk_workflow())
-    assert resp.status_code == 201
-    wf = resp.json()
+    assert resp.status_code == 401
+    user = _register("carol")
+    authed = client.post(
+        "/api/workflows", json=_mk_workflow(), headers=_auth_header(user["token"])
+    )
+    assert authed.status_code == 201
+    wf = authed.json()
     assert wf["project_id"] is None
-    items = client.get("/api/workflows").json()
-    assert any(item["id"] == wf["id"] for item in items)

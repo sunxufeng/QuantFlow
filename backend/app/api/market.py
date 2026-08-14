@@ -11,7 +11,11 @@ from ..market.scheduler import data_sync_service
 from ..market.service import market_service
 from ..market.sources import DataSourceError
 
-router = APIRouter(prefix="/market", tags=["market"])
+router = APIRouter(
+    prefix="/market",
+    tags=["market"],
+    dependencies=[Depends(get_current_user)],
+)
 
 
 @router.get("/instruments", summary="可用标的列表")
