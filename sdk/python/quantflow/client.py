@@ -346,6 +346,32 @@ class QuantFlowClient:
             payload["end"] = end
         return self._request("POST", "/factors/scoring/score", json=payload)
 
+    # ---- V2.9 因子研究（相关性矩阵 + IC/IR）----
+    def factor_correlation_matrix(
+        self,
+        symbols: Optional[List[str]] = None,
+        start: str = "2000-01-01",
+        end: str = "2100-01-01",
+        window: int = 10,
+    ) -> Dict:
+        params = {"start": start, "end": end, "window": window}
+        if symbols:
+            params["symbols"] = ",".join(symbols)
+        return self._request("GET", "/factors/research/matrix", params=params)
+
+    def factor_ic_analysis(
+        self,
+        symbols: Optional[List[str]] = None,
+        start: str = "2000-01-01",
+        end: str = "2100-01-01",
+        window: int = 10,
+        forward: int = 1,
+    ) -> Dict:
+        params = {"start": start, "end": end, "window": window, "forward": forward}
+        if symbols:
+            params["symbols"] = ",".join(symbols)
+        return self._request("GET", "/factors/research/ic", params=params)
+
     # ---- V2.7 预警自动评估调度 ----
     def get_alert_scheduler(self) -> Dict:
         return self._request("GET", "/alerts/scheduler")

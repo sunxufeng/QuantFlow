@@ -202,6 +202,11 @@ export const factorScore = (payload) => request('/factors/scoring/score', {
   method: 'POST',
   body: JSON.stringify(payload),
 })
+// ---- 因子研究（V2.9）：相关性矩阵 + IC/IR ----
+export const factorResearchMatrix = (params = {}) =>
+  request(`/factors/research/matrix?${new URLSearchParams(params).toString()}`)
+export const factorResearchIc = (params = {}) =>
+  request(`/factors/research/ic?${new URLSearchParams(params).toString()}`)
 
 // ---- 通知渠道配置（V1.1 N5）----
 export const notificationsList = () => request('/notifications')

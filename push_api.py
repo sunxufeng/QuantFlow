@@ -11,7 +11,7 @@ if PROXY:
 
 REPO_ROOT = "/Users/sunxufeng/WorkBuddy/2026-08-12-14-19-17/quantflow"
 BASE = "18fbbe8"
-MESSAGE = "feat(v2.8): 回测对比与策略排行榜（多任务指标并排+归一化净值曲线叠加+按指标排序） (2.13.0)"
+MESSAGE = "feat(v2.9): 因子研究增强——相关性矩阵热力图 + IC/IR 分析（前端因子库新增「研究」tab） (2.14.0)"
 
 
 def api(method, path, data=None, retries=6):
