@@ -337,6 +337,7 @@ export const patchReport = (runId, payload) => request(`/backtest/reports/${runI
   body: JSON.stringify(payload),
 })
 export const reportTags = () => request('/backtest/tags')
+export const reportFactors = (runId) => request(`/backtest/reports/${runId}/factors`)
 
 // ---- V10.0 模拟交易（paper trading，无真实券商）----
 export const tradingMode = () => request('/trading/mode')

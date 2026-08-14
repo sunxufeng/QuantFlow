@@ -32,6 +32,7 @@ def build_report(
     strategy_config: Optional[Dict[str, Any]] = None,
     run_id: Optional[str] = None,
     benchmark_symbol: Optional[str] = None,
+    factors: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """汇总回测结果为结构化报告 dict。
 
@@ -41,6 +42,7 @@ def build_report(
     - 净值曲线（日期/总资产/收益率）
     - 交易明细（买卖/股数/价格/成本/盈亏）
     - 账户终态
+    - 策略关联因子（V3.2 因子 IC/IR 进策略排行榜）
     """
     metrics = PerformanceMetrics(
         result.equity_curve, result.engine.initial_cash, result.trades
@@ -60,6 +62,7 @@ def build_report(
         "trades": [t.to_dict() for t in result.trades],
         "account": result.account.to_dict(),
         "initial_cash": result.engine.initial_cash,
+        "factors": list(factors or []),
     }
     if result.fund_account is not None:
         report["fund_account"] = result.fund_account.to_dict()

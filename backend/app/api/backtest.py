@@ -22,8 +22,10 @@ from pydantic import BaseModel, Field
 from ..backtest import BacktestEngine, BacktestError, BacktestReportStore, build_report
 from ..backtest.optimizer import OptimizeConfigError, optimize
 from ..backtest.portfolio import PortfolioBacktest
-from ..backtest.strategies import STRATEGY_REGISTRY
+from ..backtest.strategies import STRATEGY_REGISTRY, default_factors
 from ..core.auth import get_current_user
+from ..factors import research as factor_research
+from ..factors.registry import list_factors
 from ..market.models import Bar, Instrument
 from ..market.service import market_service
 
@@ -62,6 +64,10 @@ class BacktestRunRequest(BaseModel):
     )
     strategy_name: str = Field(default="", description="报告显示用策略名（默认取 strategy）")
     benchmark_symbol: Optional[str] = Field(default=None, description="基准标的（预留）")
+    factors: Optional[List[str]] = Field(
+        default=None,
+        description="策略关联因子（用于报告 IC/IR 展示）；留空使用内置策略默认因子",
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -154,11 +160,14 @@ def run_backtest(payload: BacktestRunRequest) -> dict:
     result = engine.run()
 
     # 4. 生成报告并落盘
+    strategy_display = payload.strategy_name or payload.strategy
+    factors = list(payload.factors) if payload.factors else default_factors(payload.strategy)
     report = build_report(
         result,
-        strategy_name=payload.strategy_name or payload.strategy,
+        strategy_name=strategy_display,
         strategy_config=payload.params,
         benchmark_symbol=payload.benchmark_symbol,
+        factors=factors,
     )
     report_store.save(report)
     logger.info("backtest report %s generated (%s)", report["run_id"], payload.strategy)
@@ -276,6 +285,8 @@ def list_reports() -> dict:
                 "sharpe": m.get("sharpe"),
                 "max_drawdown": m.get("max_drawdown"),
                 "win_rate": m.get("win_rate"),
+                "factors": r.get("factors") or [],
+                "factor_count": len(r.get("factors") or []),
             }
         )
     return {"items": ids, "summaries": summaries}
@@ -288,6 +299,62 @@ def get_report(run_id: str) -> dict:
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return _normalize_report(r)
+
+
+@router.get("/reports/{run_id}/factors", summary="报告关联因子的 IC/IR（V3.2 策略排行榜）")
+def report_factors(run_id: str) -> dict:
+    """按报告记录的 symbols / 日期区间 / factors，计算并返回各因子 IC/IR。
+
+    - 若报告无 factors，按 strategy 取内置策略默认因子；
+    - 若因子不在因子库，自动过滤并提示；
+    - 窗口使用默认值 10，forward=1。
+    """
+    try:
+        r = report_store.load(run_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    r = _normalize_report(r)
+    factors = list(r.get("factors") or default_factors(r.get("strategy") or ""))
+    symbols = r.get("symbols") or []
+    if not factors:
+        return {"factors": [], "items": [], "symbols": symbols, "notice": "未配置关联因子"}
+    if not symbols:
+        return {"factors": factors, "items": [], "symbols": [], "notice": "报告无标的"}
+
+    valid_factors = {f["name"] for f in list_factors()}
+    unknown = [f for f in factors if f not in valid_factors]
+    factors = [f for f in factors if f in valid_factors]
+
+    start = r.get("start_date") or "2000-01-01"
+    end = r.get("end_date") or "2100-01-01"
+    try:
+        ic = factor_research.ic_analysis(symbols=symbols, start=start, end=end, window=10, forward=1)
+    except Exception as exc:
+        logger.warning("report %s factor ic failed: %s", run_id, exc)
+        raise HTTPException(status_code=503, detail=f"因子 IC 计算失败: {exc}") from exc
+
+    items = []
+    for f in factors:
+        res = ic["results"].get(f, {})
+        items.append(
+            {
+                "factor": f,
+                "mean_ic": res.get("mean_ic"),
+                "std_ic": res.get("std_ic"),
+                "ir": res.get("ir"),
+                "ic_positive_ratio": res.get("ic_positive_ratio"),
+                "observations": res.get("observations", 0),
+            }
+        )
+    return {
+        "factors": factors,
+        "items": items,
+        "symbols": symbols,
+        "start_date": start,
+        "end_date": end,
+        "forward_days": 1,
+        "unknown": unknown,
+    }
 
 
 class ReportPatchRequest(BaseModel):
