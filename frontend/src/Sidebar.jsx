@@ -19,6 +19,7 @@ const navItems = [
   { key: 'watch', label: '自选监控', abbr: '监' },
   { key: 'sched', label: '调度中心', abbr: '调' },
   { key: 'trade', label: '模拟交易', abbr: '易' },
+  { key: 'prefs', label: '设置', abbr: '设' },
   { key: 'broker', label: '券商设置', abbr: '券', adminOnly: true },
 ]
 

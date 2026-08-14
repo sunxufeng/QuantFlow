@@ -156,6 +156,27 @@ class QuantFlowClient:
             payload["initial_cash"] = initial_cash
         return self._request("DELETE", "/trading/reset", json=payload or None)
 
+    # ---- V6.1 系统设置 + 用户偏好 ----
+    def settings(self) -> Dict:
+        """读取系统信息与当前用户偏好（V6.1）：版本/数据源/缓存后端/券商 + 偏好。"""
+        return self._request("GET", "/settings")
+
+    def update_settings(
+        self,
+        default_view: Optional[str] = None,
+        theme: Optional[str] = None,
+        preferred_data_source: Optional[str] = None,
+    ) -> Dict:
+        """更新当前用户偏好（V6.1，部分字段合并）。"""
+        payload: Dict[str, Any] = {}
+        if default_view is not None:
+            payload["default_view"] = default_view
+        if theme is not None:
+            payload["theme"] = theme
+        if preferred_data_source is not None:
+            payload["preferred_data_source"] = preferred_data_source
+        return self._request("PUT", "/settings", json=payload or None)
+
     # ------------------------------------------------------------------ #
     # 项目（M4）
     # ------------------------------------------------------------------ #

@@ -297,3 +297,10 @@ export const brokerTestConfig = (cfg) => request('/settings/broker/test', {
   method: 'POST',
   body: JSON.stringify(cfg || {}),
 })
+
+// ---- V6.1 系统设置 + 用户偏好 ----
+export const getSettings = () => request('/settings')
+export const updateSettings = (prefs = {}) => request('/settings', {
+  method: 'PUT',
+  body: JSON.stringify(prefs),
+})

@@ -31,6 +31,7 @@ import Alerts from './Alerts.jsx'
 import MarketBoard from './MarketBoard.jsx'
 import Watchlist from './Watchlist.jsx'
 import SchedulerCenter from './SchedulerCenter.jsx'
+import Settings from './Settings.jsx'
 import Factors from './Factors.jsx'
 import BrokerSettings from './BrokerSettings.jsx'
 import LoginScreen from './LoginScreen.jsx'
@@ -51,6 +52,7 @@ import {
   restoreWorkflowVersion,
   getMe,
   getToken,
+  getSettings,
   importWorkflow,
   listRuns,
   runWsUrl,
@@ -885,6 +887,21 @@ export default function App() {
     refreshProjects()
   }, [user, refreshProjects])
 
+  // V6.1：登录后按用户偏好设置默认进入视图（仅首次进入时应用一次）
+  const _appliedDefaultView = useRef(false)
+  useEffect(() => {
+    if (!user || _appliedDefaultView.current) return
+    _appliedDefaultView.current = true
+    getSettings()
+      .then((s) => {
+        const dv = s?.preferences?.default_view
+        if (dv && dv !== view) setView(dv)
+      })
+      .catch(() => {})
+    // 仅在登录态首次就绪时应用一次
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user])
+
   const handleAuthed = () => {
     getMe().then(setUser).catch(() => {})
     refreshProjects()
@@ -987,6 +1004,7 @@ export default function App() {
           {view === 'watch' && <Watchlist />}
           {view === 'sched' && <SchedulerCenter />}
           {view === 'trade' && <Trading onNavigate={setView} />}
+          {view === 'prefs' && <Settings />}
           {view === 'broker' && <BrokerSettings />}
           {view === 'data' && <DataSync />}
         </main>

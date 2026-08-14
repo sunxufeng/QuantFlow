@@ -172,6 +172,13 @@ CREATE TABLE IF NOT EXISTS app_settings (
     updated_at TEXT NOT NULL
 );
 
+-- V6.1 用户级偏好（按用户隔离；整体以 JSON 持久化）
+CREATE TABLE IF NOT EXISTS user_preferences (
+    user_id  TEXT PRIMARY KEY,
+    prefs    TEXT NOT NULL DEFAULT '{}',
+    updated_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS alert_rules (
     id               TEXT PRIMARY KEY,
     name             TEXT NOT NULL,
