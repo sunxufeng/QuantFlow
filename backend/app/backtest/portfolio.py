@@ -181,19 +181,29 @@ class PortfolioBacktest:
                 }
             )
 
+        # 汇总所有腿的标的（去重保序）
+        all_symbols: List[str] = []
+        for leg in self.legs:
+            for s in leg["symbols"]:
+                if s not in all_symbols:
+                    all_symbols.append(s)
+        start_date = self.start or (combined_curve[0]["date"] if combined_curve else "")
+        end_date = self.end or (combined_curve[-1]["date"] if combined_curve else "")
+        interval = self.legs[0].get("interval", "daily") if self.legs else "daily"
+
         return {
             "type": "portfolio",
             "run_id": uuid.uuid4().hex[:12],
+            "strategy": "组合回测",
             "strategy_name": "portfolio",
+            "symbols": all_symbols,
+            "interval": interval,
+            "start_date": start_date,
+            "end_date": end_date,
             "initial_cash": self.initial_cash,
             "rebalance": self.rebalance,
             "legs": leg_summaries,
-            "metrics": {
-                "total_return": round(metrics.total_return, 6),
-                "annual_return": round(metrics.annual_return, 6),
-                "max_drawdown": round(metrics.max_drawdown, 6),
-                "sharpe": round(metrics.sharpe, 4),
-            },
+            "metrics": metrics.to_dict(),
             "equity_curve": combined_curve,
             "calendar": dates,
         }

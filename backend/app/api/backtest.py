@@ -156,6 +156,28 @@ def run_backtest(payload: BacktestRunRequest) -> dict:
     return report
 
 
+def _normalize_report(r: dict) -> dict:
+    """补齐组合回测报告缺失的顶层展示字段，使其与单标的报告 schema 一致。
+
+    仅做向后兼容的回填（不写回磁盘），让历史报告也能在报告中心正确展示。
+    """
+    if r.get("type") == "portfolio":
+        r.setdefault("strategy", r.get("strategy_name") or "组合回测")
+        if not r.get("symbols"):
+            syms = []
+            for leg in r.get("legs", []):
+                for s in leg.get("symbols", []) or []:
+                    if s not in syms:
+                        syms.append(s)
+            if syms:
+                r["symbols"] = syms
+        curve = r.get("equity_curve") or []
+        if curve:
+            r.setdefault("start_date", curve[0].get("date"))
+            r.setdefault("end_date", curve[-1].get("date"))
+    return r
+
+
 @router.get("/reports", summary="回测报告列表")
 def list_reports() -> dict:
     ids = report_store.list()
@@ -165,6 +187,7 @@ def list_reports() -> dict:
             r = report_store.load(rid)
         except Exception:
             continue
+        r = _normalize_report(r)
         m = r.get("metrics", {}) or {}
         summaries.append(
             {
@@ -186,9 +209,10 @@ def list_reports() -> dict:
 @router.get("/reports/{run_id}", summary="回测报告详情")
 def get_report(run_id: str) -> dict:
     try:
-        return report_store.load(run_id)
+        r = report_store.load(run_id)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return _normalize_report(r)
 
 
 # --------------------------------------------------------------------------- #
