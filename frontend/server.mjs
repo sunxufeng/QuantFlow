@@ -42,7 +42,7 @@ const server = createServer((req, res) => {
   }
   res.writeHead(200, {
     "Content-Type": types[extname(file)] || "application/octet-stream",
-    "Cache-Control": file.endsWith("index.html") ? "no-cache" : "public, max-age=31536000, immutable",
+    "Cache-Control": file.endsWith("index.html") ? "no-store" : "public, max-age=31536000, immutable",
   });
   createReadStream(file).pipe(res);
 });
