@@ -160,6 +160,7 @@ export const deleteAlert = (id) => request(`/alerts/${id}`, { method: 'DELETE' }
 export const toggleAlert = (id, payload) => request(`/alerts/${id}/toggle`, { method: 'POST', body: JSON.stringify(payload) })
 export const evaluateAlerts = () => request('/alerts/evaluate', { method: 'POST' })
 export const alertSchedulerStatus = () => request('/alerts/scheduler')
+export const triggerAlertScheduler = () => request('/alerts/scheduler/trigger', { method: 'POST' })
 
 // ---- 自选股监控 / 行情看板（V2.4）----
 export const getWatchlist = () => request('/market/watchlist')

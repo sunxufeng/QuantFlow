@@ -337,9 +337,12 @@ class QuantFlowClient:
             payload["end"] = end
         return self._request("POST", "/factors/scoring/score", json=payload)
 
-    # ---- V2.3 预警自动评估调度状态 ----
+    # ---- V2.7 预警自动评估调度 ----
     def get_alert_scheduler(self) -> Dict:
         return self._request("GET", "/alerts/scheduler")
+
+    def trigger_alert_scheduler(self) -> Dict:
+        return self._request("POST", "/alerts/scheduler/trigger")
 
     # ------------------------------------------------------------------ #
     # 工作流与运行（M3 / V1.1 N2）

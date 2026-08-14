@@ -11,7 +11,7 @@ if PROXY:
 
 REPO_ROOT = "/Users/sunxufeng/WorkBuddy/2026-08-12-14-19-17/quantflow"
 BASE = "18fbbe8"
-MESSAGE = "feat(v2.7): 预警自动巡检调度，按间隔自动评估并去重通知 (2.12.0)"
+MESSAGE = "feat(v2.7): 预警调度上次/下次巡检展示 + 手动立即巡检 (2.12.1)"
 
 
 def api(method, path, data=None, retries=6):

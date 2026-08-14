@@ -5,6 +5,8 @@
 - ``DELETE /api/alerts/{id}``          删除规则
 - ``POST   /api/alerts/{id}/toggle``  启用/停用
 - ``POST   /api/alerts/evaluate``      立即评估全部启用规则（触发通知）
+- ``GET    /api/alerts/scheduler``      自动巡检调度状态（V2.7）
+- ``POST   /api/alerts/scheduler/trigger`` 手动立即巡检一次（V2.7）
 """
 
 from __future__ import annotations
@@ -84,4 +86,11 @@ def scheduler_status() -> Dict[str, Any]:
     from ..alerts import scheduler as alert_scheduler
 
     return alert_scheduler.status()
+
+
+@router.post("/scheduler/trigger", summary="手动立即巡检一次")
+def scheduler_trigger() -> Dict[str, Any]:
+    from ..alerts import scheduler as alert_scheduler
+
+    return alert_scheduler.trigger_now()
 
