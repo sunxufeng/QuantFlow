@@ -61,23 +61,43 @@ export default function LoginScreen({ onAuthed }) {
           <button
             type="button"
             onClick={() => { setMode('login'); setError('') }}
-            className={`qf-btn ${mode === 'login' ? 'qf-btn-primary' : ''}`}
-            style={{ flex: 1 }}
+            style={{
+              flex: 1,
+              padding: '8px 12px',
+              borderRadius: 8,
+              border: '1px solid',
+              borderColor: mode === 'login' ? '#6366f1' : '#334155',
+              background: mode === 'login' ? '#6366f1' : 'transparent',
+              color: '#fff',
+              fontSize: 14,
+              cursor: 'pointer',
+            }}
           >
             登录
           </button>
           <button
             type="button"
             onClick={() => { setMode('register'); setError('') }}
-            className={`qf-btn ${mode === 'register' ? 'qf-btn-primary' : ''}`}
-            style={{ flex: 1 }}
+            style={{
+              flex: 1,
+              padding: '8px 12px',
+              borderRadius: 8,
+              border: '1px solid',
+              borderColor: mode === 'register' ? '#6366f1' : '#334155',
+              background: mode === 'register' ? '#6366f1' : 'transparent',
+              color: '#fff',
+              fontSize: 14,
+              cursor: 'pointer',
+            }}
           >
             注册
           </button>
         </div>
 
-        <label className="qf-field" style={{ display: 'block', marginBottom: 12 }}>
-          用户名
+        <div style={{ marginBottom: 14 }}>
+          <label style={{ display: 'block', fontSize: 13, color: '#94a3b8', marginBottom: 6 }}>
+            用户名
+          </label>
           <input
             value={username}
             onChange={(e) => setUsername(e.target.value)}
@@ -86,11 +106,23 @@ export default function LoginScreen({ onAuthed }) {
             minLength={3}
             maxLength={32}
             required
-            style={{ marginTop: 6 }}
+            style={{
+              width: '100%',
+              boxSizing: 'border-box',
+              padding: '10px 12px',
+              border: '1px solid #334155',
+              borderRadius: 8,
+              background: '#0f172a',
+              color: '#e2e8f0',
+              fontSize: 14,
+              outline: 'none',
+            }}
           />
-        </label>
-        <label className="qf-field" style={{ display: 'block', marginBottom: 12 }}>
-          密码
+        </div>
+        <div style={{ marginBottom: 14 }}>
+          <label style={{ display: 'block', fontSize: 13, color: '#94a3b8', marginBottom: 6 }}>
+            密码
+          </label>
           <input
             type="password"
             value={password}
@@ -98,16 +130,26 @@ export default function LoginScreen({ onAuthed }) {
             placeholder={mode === 'register' ? '至少 6 位' : '请输入密码'}
             minLength={6}
             required
-            style={{ marginTop: 6 }}
+            style={{
+              width: '100%',
+              boxSizing: 'border-box',
+              padding: '10px 12px',
+              border: '1px solid #334155',
+              borderRadius: 8,
+              background: '#0f172a',
+              color: '#e2e8f0',
+              fontSize: 14,
+              outline: 'none',
+            }}
           />
-        </label>
+        </div>
 
         {error && <div className="qf-error" style={{ marginBottom: 10 }}>{error}</div>}
-        {mode === 'register' && (
-          <div className="qf-hint" style={{ marginBottom: 10 }}>
-            首个注册用户将成为管理员（admin）。
-          </div>
-        )}
+        <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 12, lineHeight: 1.5 }}>
+          {mode === 'login'
+            ? '系统没有预置管理员账号，首次使用请切换到“注册”；首个注册用户自动成为管理员。'
+            : '首个注册用户将自动成为管理员（admin）。'}
+        </div>
 
         <button
           type="submit"
