@@ -372,6 +372,29 @@ class QuantFlowClient:
             params["symbols"] = ",".join(symbols)
         return self._request("GET", "/factors/research/ic", params=params)
 
+    def factor_ranking(
+        self,
+        symbols: Optional[List[str]] = None,
+        start: str = "2000-01-01",
+        end: str = "2100-01-01",
+        window: int = 10,
+        forward: int = 1,
+        metric: str = "mean_ic",
+        order: str = "desc",
+    ) -> Dict:
+        """因子排行榜（V3.2）：按 IC/IR 指标对所有内置因子排序。"""
+        params = {
+            "start": start,
+            "end": end,
+            "window": window,
+            "forward": forward,
+            "metric": metric,
+            "order": order,
+        }
+        if symbols:
+            params["symbols"] = ",".join(symbols)
+        return self._request("GET", "/factors/research/ranking", params=params)
+
     # ---- V2.7 预警自动评估调度 ----
     def get_alert_scheduler(self) -> Dict:
         return self._request("GET", "/alerts/scheduler")

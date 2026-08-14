@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { factorScoringCatalog, factorScore, factorResearchMatrix, factorResearchIc } from './api.js'
+import { factorScoringCatalog, factorScore, factorResearchMatrix, factorResearchIc, factorResearchRanking } from './api.js'
 
 const DEFAULT_SYMBOLS = 'TEST.STOCK, TEST.BANK, TEST.FUND, TEST.FUTURE'
 
@@ -75,6 +75,13 @@ export default function Factors() {
   const [researchBusy, setResearchBusy] = useState(false)
   const [researchError, setResearchError] = useState('')
 
+  // 排行榜态
+  const [rankMetric, setRankMetric] = useState('mean_ic')
+  const [rankOrder, setRankOrder] = useState('desc')
+  const [ranking, setRanking] = useState(null)
+  const [rankingBusy, setRankingBusy] = useState(false)
+  const [rankingError, setRankingError] = useState('')
+
   useEffect(() => {
     factorScoringCatalog()
       .then((r) => {
@@ -136,6 +143,36 @@ export default function Factors() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab])
 
+  const runRanking = useCallback(() => {
+    setRankingError('')
+    const symbols = parseSymbols(symbolsText)
+    if (symbols.length === 0) {
+      setRankingError('请至少输入一个标的代码')
+      return
+    }
+    setRankingBusy(true)
+    const params = {
+      symbols: symbols.join(','),
+      window: win,
+      start: '2000-01-01',
+      end: '2100-01-01',
+      metric: rankMetric,
+      order: rankOrder,
+    }
+    factorResearchRanking(params)
+      .then((r) => setRanking(r))
+      .catch((e) => setRankingError(`排行榜计算失败: ${e.message}`))
+      .finally(() => setRankingBusy(false))
+  }, [symbolsText, win, rankMetric, rankOrder])
+
+  // 切到排行榜页自动跑一次
+  useEffect(() => {
+    if (tab === 'ranking' && !ranking && !rankingBusy) {
+      runRanking()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab])
+
   const toggleAll = (checked) =>
     setSel((prev) => {
       const next = {}
@@ -166,6 +203,12 @@ export default function Factors() {
           onClick={() => setTab('research')}
         >
           因子研究
+        </button>
+        <button
+          className={`qf-reports-tab ${tab === 'ranking' ? 'qf-reports-tab-active' : ''}`}
+          onClick={() => setTab('ranking')}
+        >
+          因子排行榜
         </button>
       </div>
 
@@ -469,6 +512,114 @@ export default function Factors() {
             )}
             <div className="qf-hint" style={{ marginTop: 8 }}>
               说明：IC 为因子值与下期收益的秩相关；IR=均值IC/标准差IC，绝对值越大越稳定；IC&gt;0 占比越高代表选股方向越一致。样本不足（如 volume_trend 需 20 日窗口）会标记为「样本不足」。
+            </div>
+          </div>
+        </div>
+      )}
+
+      {tab === 'ranking' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+            <div style={{ flex: '1 1 320px', minWidth: 260 }}>
+              <label style={{ display: 'block', marginBottom: 4, fontSize: 13 }}>标的（逗号分隔）</label>
+              <textarea
+                value={symbolsText}
+                onChange={(e) => setSymbolsText(e.target.value)}
+                rows={1}
+                style={{ width: '100%', padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border)', background: '#0b1220', color: '#e2e8f0', fontFamily: 'inherit' }}
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', marginBottom: 4, fontSize: 13 }}>排序指标</label>
+              <select
+                value={rankMetric}
+                onChange={(e) => setRankMetric(e.target.value)}
+                style={{ padding: '6px 8px', borderRadius: 6, border: '1px solid var(--border)', background: '#0b1220', color: '#e2e8f0' }}
+              >
+                <option value="mean_ic">均值 IC</option>
+                <option value="ir">IR（信息比率）</option>
+                <option value="ic_positive_ratio">IC&gt;0 占比</option>
+                <option value="std_ic">IC 标准差（越小越稳）</option>
+              </select>
+            </div>
+            <div>
+              <label style={{ display: 'block', marginBottom: 4, fontSize: 13 }}>方向</label>
+              <select
+                value={rankOrder}
+                onChange={(e) => setRankOrder(e.target.value)}
+                style={{ padding: '6px 8px', borderRadius: 6, border: '1px solid var(--border)', background: '#0b1220', color: '#e2e8f0' }}
+              >
+                <option value="desc">降序</option>
+                <option value="asc">升序</option>
+              </select>
+            </div>
+            <button className="qf-btn qf-btn-primary" onClick={runRanking} disabled={rankingBusy}>
+              {rankingBusy ? '计算中…' : '刷新排行'}
+            </button>
+          </div>
+          {rankingError && <div className="qf-error">{rankingError}</div>}
+
+          <div style={{ border: '1px solid var(--border)', borderRadius: 8, background: '#fff', padding: 12 }}>
+            <div className="qf-reports-title" style={{ fontSize: 14, marginBottom: 8 }}>
+              因子排行榜
+              {ranking && (
+                <span className="qf-hint" style={{ marginLeft: 8 }}>
+                  （按 {ranking.metric} {ranking.order === 'desc' ? '降序' : '升序'} · {ranking.dates_count} 期 · 下期收益 {ranking.forward_days} 日）
+                </span>
+              )}
+            </div>
+            {ranking ? (
+              <div style={{ overflowX: 'auto' }}>
+                <table className="qf-table" style={{ width: '100%' }}>
+                  <thead>
+                    <tr>
+                      <th>排名</th>
+                      <th>因子</th>
+                      <th>方向</th>
+                      <th>均值 IC</th>
+                      <th>IR</th>
+                      <th>IC&gt;0 占比</th>
+                      <th>IC 标准差</th>
+                      <th>样本数</th>
+                      <th>IC 时序</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {ranking.ranked.map((r, i) => {
+                      const enough = r.observations && r.observations > 0
+                      return (
+                        <tr key={r.factor}>
+                          <td style={{ fontWeight: 700 }}>{i + 1}</td>
+                          <td style={{ fontWeight: 600 }}>
+                            {r.factor}
+                            <div className="qf-hint" style={{ fontWeight: 400, fontSize: 11 }}>{r.description}</div>
+                          </td>
+                          <td>{r.direction === 1 ? '高配' : r.direction === -1 ? '低配' : '—'}</td>
+                          <td style={{ fontVariantNumeric: 'tabular-nums' }}>{r.mean_ic == null ? '—' : r.mean_ic.toFixed(3)}</td>
+                          <td
+                            style={{
+                              fontVariantNumeric: 'tabular-nums',
+                              fontWeight: 600,
+                              color: !enough ? '#94a3b8' : r.ir >= 0 ? '#16a34a' : '#dc2626',
+                            }}
+                          >
+                            {r.ir == null ? '—' : r.ir.toFixed(3)}
+                          </td>
+                          <td style={{ fontVariantNumeric: 'tabular-nums' }}>{r.ic_positive_ratio == null ? '—' : `${(r.ic_positive_ratio * 100).toFixed(0)}%`}</td>
+                          <td style={{ fontVariantNumeric: 'tabular-nums' }}>{r.std_ic == null ? '—' : r.std_ic.toFixed(3)}</td>
+                          <td>{r.observations}</td>
+                          <td><IcSpark series={r.ic_series} /></td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="qf-hint">点击「刷新排行」生成因子排行榜。</div>
+            )}
+            <div className="qf-hint" style={{ marginTop: 8 }}>
+              说明：排行榜打通 V2.8 回测排行与 V2.9 因子研究——按 IC/IR 对全部内置因子排序，便于优先选择选股能力稳定（IR 高、IC&gt;0 占比高）的因子。当前回测报告未记录所用因子，策略级联动为后续项。
             </div>
           </div>
         </div>

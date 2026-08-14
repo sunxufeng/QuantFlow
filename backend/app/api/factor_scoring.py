@@ -97,3 +97,27 @@ def research_ic(
         window=window,
         forward=forward,
     )
+
+
+@router.get("/research/ranking", summary="因子排行榜：按 IC/IR 排序（V3.2）")
+def research_ranking(
+    symbols: Optional[str] = None,
+    start: str = "2000-01-01",
+    end: str = "2100-01-01",
+    window: int = 10,
+    forward: int = 1,
+    metric: str = "mean_ic",
+    order: str = "desc",
+) -> dict:
+    """对所有内置因子按 IC/IR 指标排序，连接 V2.8 排行榜与 V2.9 因子研究。"""
+    if order not in ("asc", "desc"):
+        order = "desc"
+    return factor_research.factor_ranking(
+        symbols=_parse_symbols(symbols),
+        start=start,
+        end=end,
+        window=window,
+        forward=forward,
+        metric=metric,
+        order=order,
+    )
