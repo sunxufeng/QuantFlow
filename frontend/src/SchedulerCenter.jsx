@@ -51,7 +51,7 @@ export default function SchedulerCenter() {
   const openForm = () => {
     setError('')
     setShowForm(true)
-    listWorkflows().then((ws) => setWorkflows(ws || [])).catch(() => setWorkflows([]))
+    listWorkflows().then((r) => setWorkflows(r.items || r || [])).catch(() => setWorkflows([]))
   }
 
   const onCreate = (e) => {
