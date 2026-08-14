@@ -114,6 +114,30 @@
 .qf-btn-primary:hover:not(:disabled) { background: var(--primary-dark); border-color: var(--primary-dark); color: #fff; }
 .qf-btn-danger { background: #dc2626; border-color: #dc2626; color: #fff; }
 .qf-btn-danger:hover:not(:disabled) { background: #b91c1c; border-color: #b91c1c; color: #fff; }
+
+/* 回测报告 / 风险归因面板（qf-bt-*） */
+.qf-bt { display: flex; flex-direction: column; gap: 12px; padding: 14px 16px; }
+.qf-bt-head { display: flex; justify-content: space-between; align-items: flex-start; }
+.qf-bt-title { font-size: 14px; font-weight: 600; }
+.qf-bt-final { text-align: right; }
+.qf-bt-final-v { font-size: 16px; font-weight: 700; }
+.qf-bt-ret { font-size: 13px; font-weight: 600; }
+.qf-bt-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; }
+.qf-bt-card { background: var(--panel, #f8fafc); border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px 10px; }
+.qf-bt-card-l { font-size: 11px; color: #64748b; }
+.qf-bt-card-v { font-size: 14px; font-weight: 600; margin-top: 2px; }
+.qf-bt-sec { border-top: 1px solid #eef2f7; padding-top: 10px; }
+.qf-bt-sec-h { font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 8px; }
+.qf-bt-sub { margin-top: 10px; }
+.qf-bt-sub-h { font-size: 11px; color: #64748b; display: block; margin-bottom: 2px; }
+.qf-bt-dd { display: flex; flex-wrap: wrap; gap: 6px; }
+.qf-bt-dd-pill { font-size: 11px; background: rgba(220,38,38,0.08); color: #b91c1c; border-radius: 999px; padding: 2px 8px; }
+.qf-bt-monthly { display: flex; flex-wrap: wrap; gap: 4px; }
+.qf-bt-month { font-size: 11px; padding: 2px 6px; border-radius: 4px; }
+.qf-bt-decomp { display: flex; gap: 4px; height: 28px; align-items: stretch; }
+.qf-bt-decomp-bar { display: flex; align-items: center; justify-content: center; color: #fff; font-size: 11px; font-weight: 600; border-radius: 4px; min-width: 0; }
+.qf-up { color: #15803d; }
+.qf-down { color: #dc2626; }
 .qf-run-pill {
   font-size: 11px; padding: 2px 8px; border-radius: 999px; font-weight: 600;
   background: var(--bg-soft); border: 1px solid var(--border);

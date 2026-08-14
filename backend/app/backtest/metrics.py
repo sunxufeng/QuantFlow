@@ -144,7 +144,29 @@ class PerformanceMetrics:
                     best_loss = max(best_loss, cur_loss)
             trade_attr["max_win_streak"] = best_win
             trade_attr["max_loss_streak"] = best_loss
+            trade_attr["win_pnl"] = round(gross_win, 2)
+            trade_attr["loss_pnl"] = round(-gross_loss, 2)
             attr["trade"] = trade_attr
+
+        # ---- 风险层面：年化波动 / 下行波动 / 索提诺 ----
+        rets = self.daily_returns
+        risk: Dict[str, Any] = {}
+        if len(rets) >= 2:
+            mean_r = sum(rets) / len(rets)
+            var = sum((r - mean_r) ** 2 for r in rets) / (len(rets) - 1)
+            std = math.sqrt(var)
+            volatility = std * math.sqrt(TRADING_DAYS_PER_YEAR)
+            # 下行偏差（目标收益 0）
+            downside = [min(0.0, r) for r in rets]
+            dd_var = sum(d * d for d in downside) / (len(rets) - 1)
+            downside_dev = math.sqrt(dd_var) * math.sqrt(TRADING_DAYS_PER_YEAR)
+            sortino = (mean_r * TRADING_DAYS_PER_YEAR) / downside_dev if downside_dev > 1e-12 else 0.0
+            risk = {
+                "volatility": round(volatility, 6),
+                "downside_deviation": round(downside_dev, 6),
+                "sortino": round(sortino, 6),
+            }
+        attr["risk"] = risk
 
         # ---- 曲线层面：月度收益 / 回撤区间 / 持仓暴露 ----
         if self.days >= 2:
