@@ -133,6 +133,11 @@ export const marketSyncNow = () => request('/market/sync', { method: 'POST' })
 // ---- 回测报告中心（V1.6）----
 export const backtestReports = () => request('/backtest/reports')
 export const backtestReport = (runId) => request(`/backtest/reports/${runId}`)
+// ---- 回测对比与排行榜（V2.8）----
+export const backtestCompare = (ids) =>
+  request(`/backtest/compare?ids=${encodeURIComponent(ids.join(','))}`)
+export const backtestLeaderboard = (metric = 'sharpe', order = 'desc') =>
+  request(`/backtest/leaderboard?metric=${metric}&order=${order}`)
 export const exportBacktestReport = async (runId, format = 'csv') => {
   const token = getToken()
   const resp = await fetch(`${BASE}/backtest/reports/${runId}/export?format=${format}`, {

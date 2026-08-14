@@ -230,6 +230,15 @@ class QuantFlowClient:
     def list_backtests(self) -> Dict:
         return self._request("GET", "/backtest/reports")
 
+    # ---- V2.8 回测对比与排行榜 ----
+    def compare_backtests(self, ids: List[str]) -> Dict:
+        return self._request("GET", "/backtest/compare", params={"ids": ",".join(ids)})
+
+    def backtest_leaderboard(self, metric: str = "sharpe", order: str = "desc") -> Dict:
+        return self._request(
+            "GET", "/backtest/leaderboard", params={"metric": metric, "order": order}
+        )
+
     def optimize_backtest(
         self,
         symbols: List[str],

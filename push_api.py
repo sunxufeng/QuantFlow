@@ -11,7 +11,7 @@ if PROXY:
 
 REPO_ROOT = "/Users/sunxufeng/WorkBuddy/2026-08-12-14-19-17/quantflow"
 BASE = "18fbbe8"
-MESSAGE = "fix(v2.7): 修正调度器错误的 alert_service 导入路径(曾静默 ImportError)，补回归测试 (2.12.2)"
+MESSAGE = "feat(v2.8): 回测对比与策略排行榜（多任务指标并排+归一化净值曲线叠加+按指标排序） (2.13.0)"
 
 
 def api(method, path, data=None, retries=6):

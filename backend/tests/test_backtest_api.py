@@ -191,3 +191,48 @@ class TestExportEndpoint:
     def test_export_not_found(self):
         resp = client.get("/api/backtest/reports/nope/export?format=csv")
         assert resp.status_code == 404
+
+
+class TestCompareAndLeaderboard:
+    def _run(self, strategy, symbol="TEST.SH", params=None):
+        resp = client.post("/api/backtest/run", json={
+            "strategy": strategy,
+            "params": params or {"shares": 1000},
+            "symbols": [symbol],
+            "start": "2024-01-01",
+            "end": "2024-02-01",
+        })
+        assert resp.status_code == 200
+        return resp.json()["run_id"]
+
+    def test_compare_returns_normalized_curves(self):
+        a = self._run("buy_hold")
+        b = self._run("buy_hold", params={"shares": 500})
+        resp = client.get(f"/api/backtest/compare?ids={a},{b}")
+        assert resp.status_code == 200
+        items = resp.json()["items"]
+        assert len(items) == 2
+        for it in items:
+            assert "curve_pct" in it and it["curve_pct"]
+            # 归一化起点应为 0%
+            assert it["curve_pct"][0]["pct"] == 0.0
+
+    def test_compare_skips_missing(self):
+        a = self._run("buy_hold")
+        resp = client.get(f"/api/backtest/compare?ids={a},missing-id")
+        assert resp.status_code == 200
+        assert len(resp.json()["items"]) == 1
+
+    def test_leaderboard_sorts_by_sharpe_desc(self):
+        self._run("buy_hold")
+        self._run("buy_hold", params={"shares": 500})
+        resp = client.get("/api/backtest/leaderboard?metric=sharpe&order=desc")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["metric"] == "sharpe"
+        vals = [r["value"] for r in body["items"]]
+        assert vals == sorted(vals, reverse=True)
+
+    def test_leaderboard_bad_metric_422(self):
+        resp = client.get("/api/backtest/leaderboard?metric=bogus")
+        assert resp.status_code == 422
