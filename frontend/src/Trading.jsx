@@ -153,7 +153,17 @@ export default function Trading({ onNavigate }) {
         <div className="qf-mcard"><div className="qf-mcard-value" style={{ color: summary && summary.realized_pnl >= 0 ? '#e11d48' : '#0891b2' }}>{summary ? summary.realized_pnl.toLocaleString() : '-'}</div><div className="qf-mcard-label">已实现盈亏</div></div>
         <div className="qf-mcard"><div className="qf-mcard-value">{summary ? summary.position_count : '-'}</div><div className="qf-mcard-label">持仓数</div></div>
         <div className="qf-mcard"><div className="qf-mcard-value">{summary ? summary.open_orders : '-'}</div><div className="qf-mcard-label">挂单</div></div>
+        <div className="qf-mcard"><div className="qf-mcard-value" style={{ color: '#0891b2' }}>{summary ? summary.total_fees.toLocaleString() : '-'}</div><div className="qf-mcard-label">累计手续费</div></div>
+        <div className="qf-mcard"><div className="qf-mcard-value">{summary ? (summary.win_rate * 100).toFixed(0) + '%' : '-'}</div><div className="qf-mcard-label">胜率</div></div>
+        <div className="qf-mcard"><div className="qf-mcard-value">{summary ? (summary.exposure * 100).toFixed(0) + '%' : '-'}</div><div className="qf-mcard-label">持仓敞口</div></div>
       </div>
+
+      {summary && summary.equity_curve && summary.equity_curve.length > 1 && (
+        <div style={{ marginTop: 14, border: '1px solid var(--border)', borderRadius: 10, padding: 14, background: '#fff' }}>
+          <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text)', marginBottom: 8 }}>权益曲线（模拟账户）</div>
+          <EquitySparkline data={summary.equity_curve} initial={summary.initial_cash} />
+        </div>
+      )}
 
       <div style={{ display: 'flex', gap: 16, marginTop: 18, flexWrap: 'wrap' }}>
         {/* 下单 */}
@@ -276,4 +286,32 @@ function btnStyle(active, color) {
 
 function statusLabel(s) {
   return { open: '挂单', filled: '已成交', cancelled: '已撤单', rejected: '已拒绝' }[s] || s
+}
+
+function EquitySparkline({ data, initial }) {
+  const W = 720, H = 160, PAD = 8
+  const pts = data.map(d => d.equity)
+  const min = Math.min(initial, ...pts)
+  const max = Math.max(initial, ...pts)
+  const span = (max - min) || 1
+  const stepX = data.length > 1 ? (W - PAD * 2) / (data.length - 1) : 0
+  const coords = data.map((d, i) => {
+    const x = PAD + (data.length > 1 ? i * stepX : W / 2)
+    const y = PAD + (1 - (d.equity - min) / span) * (H - PAD * 2)
+    return [x, y]
+  })
+  const path = coords.map((c, i) => (i === 0 ? 'M' : 'L') + c[0].toFixed(1) + ' ' + c[1].toFixed(1)).join(' ')
+  const last = coords[coords.length - 1]
+  const up = pts[pts.length - 1] >= initial
+  const color = up ? '#16a34a' : '#e11d48'
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto' }} role="img" aria-label="权益曲线">
+      <line x1={PAD} y1={PAD + (1 - (initial - min) / span) * (H - PAD * 2)} x2={W - PAD} y2={PAD + (1 - (initial - min) / span) * (H - PAD * 2)}
+        stroke="#cbd5e1" strokeDasharray="4 4" strokeWidth="1" />
+      <path d={path} fill="none" stroke={color} strokeWidth="2" />
+      <circle cx={last[0]} cy={last[1]} r="3" fill={color} />
+      <text x={PAD} y={PAD + 10} fontSize="10" fill="#94a3b8">高 {max.toLocaleString()}</text>
+      <text x={PAD} y={H - PAD} fontSize="10" fill="#94a3b8">低 {min.toLocaleString()}</text>
+    </svg>
+  )
 }

@@ -50,7 +50,16 @@ CREATE TABLE IF NOT EXISTS trading_fills (
     side TEXT NOT NULL,
     qty REAL NOT NULL,
     price REAL NOT NULL,
+    fee REAL NOT NULL DEFAULT 0,
     ts REAL NOT NULL
+);
+CREATE TABLE IF NOT EXISTS trading_equity_snapshots (
+    user_id TEXT NOT NULL,
+    ts REAL NOT NULL,
+    equity REAL NOT NULL,
+    cash REAL NOT NULL,
+    market_value REAL NOT NULL,
+    realized_pnl REAL NOT NULL
 );
 """
 
@@ -68,6 +77,10 @@ def init() -> None:
             return
         # 多语句 DDL 必须用 executescript（db.execute 仅支持单语句）
         db._ensure().executescript(_SCHEMA)
+        # 兼容旧库：补齐 fee 列（ALTER 不支持 IF NOT EXISTS）
+        cols = [r["name"] for r in db.query("PRAGMA table_info(trading_fills)")]
+        if "fee" not in cols:
+            db.execute("ALTER TABLE trading_fills ADD COLUMN fee REAL NOT NULL DEFAULT 0")
         _initialized = True
 
 
@@ -80,13 +93,16 @@ def _uid() -> str:
 
 
 def reset(user_id: str) -> None:
-    """重置某用户的模拟账户（现金/持仓/委托/成交）。"""
+    """重置某用户的模拟账户（现金/持仓/委托/成交/权益快照）。"""
     init()
     with _lock:
         db.execute("DELETE FROM trading_fills WHERE user_id=?", (user_id,))
         db.execute("DELETE FROM trading_orders WHERE user_id=?", (user_id,))
         db.execute("DELETE FROM trading_positions WHERE user_id=?", (user_id,))
         db.execute("DELETE FROM trading_cash WHERE user_id=?", (user_id,))
+        db.execute("DELETE FROM trading_equity_snapshots WHERE user_id=?", (user_id,))
+    # 重置后记录基线快照，权益曲线从初始资金重新开始
+    record_equity_snapshot(user_id, 1_000_000.0, 1_000_000.0, 0.0, 0.0)
 
 
 def get_cash(user_id: str) -> float:
@@ -133,5 +149,22 @@ def list_orders(user_id: str, status=None, limit=100):
 def list_fills(user_id: str, limit=100):
     return db.query(
         "SELECT * FROM trading_fills WHERE user_id=? ORDER BY ts DESC LIMIT ?",
+        (user_id, limit),
+    )
+
+
+def record_equity_snapshot(user_id: str, equity: float, cash: float, market_value: float, realized_pnl: float) -> None:
+    """记录一次权益快照（每次成交/模拟/重置后调用），用于绘制权益曲线与日盈亏。"""
+    init()
+    db.execute(
+        "INSERT INTO trading_equity_snapshots(user_id, ts, equity, cash, market_value, realized_pnl) "
+        "VALUES(?,?,?,?,?,?)",
+        (user_id, time.time(), equity, cash, market_value, realized_pnl),
+    )
+
+
+def list_equity_snapshots(user_id: str, limit: int = 500):
+    return db.query(
+        "SELECT * FROM trading_equity_snapshots WHERE user_id=? ORDER BY ts ASC LIMIT ?",
         (user_id, limit),
     )

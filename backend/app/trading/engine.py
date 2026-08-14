@@ -10,6 +10,7 @@ from __future__ import annotations
 from fastapi import HTTPException
 
 from ..core.broker.config import load_broker_config
+from ..backtest.costs import CostCalculator
 from ..execution.gateway import (
     LiveExecutionGateway,
     Order as LiveOrder,
@@ -20,6 +21,10 @@ from ..execution.gateway import (
 import time
 
 from . import store as _store
+
+# 与回测/执行网关一致的 A 股成本模型（佣金万 2.5、最低 5 元、印花税卖出 0.05%、过户费双边 0.001%）
+_CALC = CostCalculator()
+_INITIAL_CASH = 1_000_000.0
 
 
 def _now() -> str:
@@ -50,11 +55,24 @@ def _apply_fill(pos_qty: float, pos_avg: float, realized: float, delta: float, p
     return remaining, pos_avg, realized
 
 
-def _record_fill(user_id: str, order_id: str, symbol: str, side: str, qty: float, price: float):
+def _compute_fee(side: str, qty: float, price: float) -> float:
+    """按 A 股成本模型计算单笔费用（与执行网关 PaperExecutionGateway 一致）。"""
+    is_buy = side == "buy"
+    costs = _CALC.transaction_costs(price, int(round(abs(qty))), is_buy)
+    return float(costs["total"])
+
+
+def _record_fill(user_id: str, order_id: str, symbol: str, side: str, qty: float, price: float, fee: float = 0.0):
     _store.db.execute(
-        "INSERT INTO trading_fills(id, order_id, user_id, symbol, side, qty, price, ts) VALUES(?,?,?,?,?,?,?,?)",
-        (_store._uid(), order_id, user_id, symbol, side, qty, price, time.time()),
+        "INSERT INTO trading_fills(id, order_id, user_id, symbol, side, qty, price, fee, ts) VALUES(?,?,?,?,?,?,?,?,?)",
+        (_store._uid(), order_id, user_id, symbol, side, qty, price, fee, time.time()),
     )
+
+
+def _snapshot(user_id: str) -> None:
+    """记录当前权益快照（每次成交后调用），供权益曲线/日盈亏使用。"""
+    s = summary(user_id)
+    _store.record_equity_snapshot(user_id, s["equity"], s["cash"], s["market_value"], s["realized_pnl"])
 
 
 def _update_position(user_id: str, symbol: str, delta: float, price: float):
@@ -124,21 +142,23 @@ def submit_order(user_id: str, symbol: str, side: str, otype: str, qty: float, p
 
 def _fill_order(user_id, symbol, side, qty, price):
     delta = qty if side == "buy" else -qty
-    # 现金变动
+    fee = _compute_fee(side, qty, price)
+    # 现金变动（含费用）
     cash = _store.get_cash(user_id)
     if side == "buy":
-        cash -= qty * price
+        cash -= qty * price + fee
     else:
-        cash += qty * price
+        cash += qty * price - fee
     _store.db.execute("UPDATE trading_cash SET cash=? WHERE user_id=?", (cash, user_id))
     _update_position(user_id, symbol, delta, price)
-    _record_fill(user_id, "na", symbol, side, qty, price)
+    _record_fill(user_id, "na", symbol, side, qty, price, fee)
     order_id = _store._uid()
     _store.db.execute(
         "INSERT INTO trading_orders(id, user_id, symbol, side, type, qty, price, status, filled_qty, avg_fill_price, created_at, updated_at) "
         "VALUES(?,?,?,?,?,?,?, 'filled', ?, ?, ?, ?)",
         (order_id, user_id, symbol, side, "market", qty, price, qty, price, _now(), _now()),
     )
+    _snapshot(user_id)
     return get_order(user_id, order_id)
 
 
@@ -175,17 +195,20 @@ def simulate_tick(user_id: str, price_overrides: dict = None):
         if not cross:
             continue
         qty = float(o["qty"])
-        # 现金变动
+        fee = _compute_fee(side, qty, limit)
+        # 现金变动（含费用）
         cash = _store.get_cash(user_id)
-        cash += -qty * limit if side == "buy" else qty * limit
+        cash += (-qty * limit - fee) if side == "buy" else (qty * limit - fee)
         _store.db.execute("UPDATE trading_cash SET cash=? WHERE user_id=?", (cash, user_id))
         _update_position(user_id, sym, qty if side == "buy" else -qty, limit)
-        _record_fill(user_id, o["id"], sym, side, qty, limit)
+        _record_fill(user_id, o["id"], sym, side, qty, limit, fee)
         _store.db.execute(
             "UPDATE trading_orders SET status='filled', filled_qty=?, avg_fill_price=?, updated_at=? WHERE id=?",
             (qty, limit, _now(), o["id"]),
         )
         filled.append(o["id"])
+    if filled:
+        _snapshot(user_id)
     return filled
 
 
@@ -258,11 +281,47 @@ def summary(user_id: str):
     )
     realized = float(realized_row["r"]) if realized_row else 0.0
     open_orders = _store.list_orders(user_id, status="open")
+
+    # 费用合计
+    fills = _store.list_fills(user_id, limit=10000)
+    total_fees = round(sum(float(f["fee"]) if f["fee"] is not None else 0.0 for f in fills), 2)
+
+    # 胜率：按已平仓标的的累计已实现盈亏判定
+    closed = _store.db.query(
+        "SELECT realized_pnl FROM trading_positions WHERE user_id=? AND qty=0 AND realized_pnl!=0",
+        (user_id,),
+    )
+    wins = sum(1 for r in closed if float(r["realized_pnl"]) > 0)
+    losses = sum(1 for r in closed if float(r["realized_pnl"]) < 0)
+    win_rate = round(wins / (wins + losses), 4) if (wins + losses) > 0 else 0.0
+
+    exposure = round(market_value / equity, 4) if equity else 0.0
+
+    # 权益曲线 + 日盈亏
+    snaps = _store.list_equity_snapshots(user_id)
+    equity_curve = [{"ts": float(s["ts"]), "equity": round(float(s["equity"]), 2)} for s in snaps]
+    daily = {}
+    for s in snaps:
+        day = time.strftime("%Y-%m-%d", time.localtime(float(s["ts"])))
+        daily[day] = round(float(s["equity"]), 2)
+    daily_pnl = []
+    prev = _INITIAL_CASH
+    for d in sorted(daily.keys()):
+        eq = daily[d]
+        daily_pnl.append({"date": d, "pnl": round(eq - prev, 2)})
+        prev = eq
+
     return {
         "cash": round(cash, 2),
         "market_value": round(market_value, 2),
         "equity": round(equity, 2),
         "realized_pnl": round(realized, 2),
+        "total_fees": total_fees,
+        "win_rate": win_rate,
+        "exposure": exposure,
         "position_count": len(positions),
         "open_orders": len(open_orders),
+        "equity_curve": equity_curve,
+        "daily_pnl": daily_pnl,
+        "initial_cash": _INITIAL_CASH,
     }

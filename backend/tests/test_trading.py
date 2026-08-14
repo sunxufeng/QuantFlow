@@ -42,7 +42,8 @@ def test_market_order_fills_and_updates_position():
     assert float(pos[0]["qty"]) == 10
 
     summary = c.get("/api/trading/summary").json()
-    assert summary["cash"] == 1_000_000 - 1000
+    # 现金 = 初始 - 成交额 - 手续费（佣金最低 5 元 + 过户费 0.01）
+    assert summary["cash"] == pytest.approx(1_000_000 - 1000 - 5.01, abs=0.02)
     assert summary["position_count"] == 1
 
 
@@ -98,6 +99,37 @@ def test_reset_clears_account():
     assert summary["cash"] == 1_000_000
     assert summary["position_count"] == 0
     assert summary["open_orders"] == 0
+
+
+def test_fees_and_equity_curve():
+    _seed_price("600519", 100.0)
+    c = _authed("trade_fees")
+    c.delete("/api/trading/reset")  # 重置产生基线快照
+    c.post("/api/trading/orders", json={"symbol": "600519", "side": "buy", "type": "market", "qty": 10})
+    s = c.get("/api/trading/summary").json()
+    # 买入手续费：佣金 max(1000*0.00025, 5)=5，过户费 1000*0.00001=0.01，共 5.01
+    assert s["total_fees"] == pytest.approx(5.01, abs=0.02)
+    assert s["cash"] == pytest.approx(1_000_000 - 1000 - 5.01, abs=0.02)
+    # 权益曲线：基线 + 本次成交共 2 点
+    assert len(s["equity_curve"]) >= 2
+    assert s["equity_curve"][0]["equity"] == 1_000_000
+    assert "daily_pnl" in s
+    assert "win_rate" in s
+    assert "exposure" in s
+
+
+def test_win_rate_and_exposure_after_round_trip():
+    _seed_price("AAPL", 100.0)
+    c = _authed("trade_winrate")
+    c.delete("/api/trading/reset")
+    c.post("/api/trading/orders", json={"symbol": "AAPL", "side": "buy", "type": "market", "qty": 10})
+    _seed_price("AAPL", 120.0)
+    c.post("/api/trading/orders", json={"symbol": "AAPL", "side": "sell", "type": "market", "qty": 10})
+    s = c.get("/api/trading/summary").json()
+    assert s["position_count"] == 0
+    assert s["realized_pnl"] == pytest.approx((120 - 100) * 10, abs=0.01)
+    assert s["win_rate"] == 1.0  # 单笔平仓盈利
+    assert s["exposure"] == pytest.approx(0.0, abs=0.001)  # 已平仓，无敞口
 
 
 def test_live_mode_default_is_paper():
