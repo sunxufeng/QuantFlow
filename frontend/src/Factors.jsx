@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { factorScoringCatalog, factorScore, factorResearchMatrix, factorResearchIc, factorResearchRanking } from './api.js'
+import { factorScoringCatalog, factorScore, factorResearchMatrix, factorResearchIc, factorResearchRanking, multifactorBacktest } from './api.js'
 
 const DEFAULT_SYMBOLS = 'TEST.STOCK, TEST.BANK, TEST.FUND, TEST.FUTURE'
 
@@ -81,6 +81,20 @@ export default function Factors() {
   const [ranking, setRanking] = useState(null)
   const [rankingBusy, setRankingBusy] = useState(false)
   const [rankingError, setRankingError] = useState('')
+
+  // 多因子组合回测闭环（V4.2）
+  const [mfSymbol, setMfSymbol] = useState('TEST.STOCK')
+  const [mfStart, setMfStart] = useState('2024-01-01')
+  const [mfEnd, setMfEnd] = useState('2024-04-01')
+  const [mfThreshold, setMfThreshold] = useState(0)
+  const [mfFactors, setMfFactors] = useState([
+    { name: '动量', expression: 'close/close.shift(1)-1', weight: 1 },
+    { name: '均值回归', expression: '(close-open)/open', weight: 1 },
+    { name: '量能', expression: 'log(volume)', weight: 0.5 },
+  ])
+  const [mfResult, setMfResult] = useState(null)
+  const [mfBusy, setMfBusy] = useState(false)
+  const [mfError, setMfError] = useState('')
 
   useEffect(() => {
     factorScoringCatalog()
@@ -180,6 +194,29 @@ export default function Factors() {
       return next
     })
 
+  const runMultifactor = useCallback(() => {
+    setMfError('')
+    const factors = mfFactors
+      .map((f) => ({ name: f.name.trim(), expression: f.expression.trim(), weight: Number(f.weight) || 0 }))
+      .filter((f) => f.name && f.expression)
+    if (factors.length === 0) {
+      setMfError('请至少填写一个因子（名称 + 表达式）')
+      return
+    }
+    setMfBusy(true)
+    setMfResult(null)
+    multifactorBacktest({
+      symbol: mfSymbol.trim().toUpperCase(),
+      factors,
+      start: mfStart,
+      end: mfEnd,
+      threshold: mfThreshold,
+    })
+      .then((r) => setMfResult(r))
+      .catch((e) => setMfError(`组合回测失败: ${e.message}`))
+      .finally(() => setMfBusy(false))
+  }, [mfSymbol, mfStart, mfEnd, mfThreshold, mfFactors])
+
   const factorCols = useMemo(() => (result?.factors || []).map((f) => f.name), [result])
 
   return (
@@ -209,6 +246,12 @@ export default function Factors() {
           onClick={() => setTab('ranking')}
         >
           因子排行榜
+        </button>
+        <button
+          className={`qf-reports-tab ${tab === 'multi' ? 'qf-reports-tab-active' : ''}`}
+          onClick={() => setTab('multi')}
+        >
+          多因子组合(V4.2)
         </button>
       </div>
 
@@ -624,6 +667,144 @@ export default function Factors() {
           </div>
         </div>
       )}
+
+      {tab === 'multi' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+            <div style={{ flex: '1 1 200px', minWidth: 160 }}>
+              <label style={{ display: 'block', marginBottom: 4, fontSize: 13 }}>标的</label>
+              <input
+                value={mfSymbol}
+                onChange={(e) => setMfSymbol(e.target.value)}
+                style={{ width: '100%', padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border)', background: '#0b1220', color: '#e2e8f0' }}
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', marginBottom: 4, fontSize: 13 }}>起始</label>
+              <input value={mfStart} onChange={(e) => setMfStart(e.target.value)} style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border)', background: '#0b1220', color: '#e2e8f0' }} />
+            </div>
+            <div>
+              <label style={{ display: 'block', marginBottom: 4, fontSize: 13 }}>结束</label>
+              <input value={mfEnd} onChange={(e) => setMfEnd(e.target.value)} style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border)', background: '#0b1220', color: '#e2e8f0' }} />
+            </div>
+            <div>
+              <label style={{ display: 'block', marginBottom: 4, fontSize: 13 }}>综合分阈值</label>
+              <input type="number" step="0.1" value={mfThreshold} onChange={(e) => setMfThreshold(Number(e.target.value) || 0)} style={{ width: 90, padding: '6px 8px', borderRadius: 6, border: '1px solid var(--border)', background: '#0b1220', color: '#e2e8f0' }} />
+            </div>
+            <button className="qf-btn qf-btn-primary" onClick={runMultifactor} disabled={mfBusy}>
+              {mfBusy ? '回测中…' : '运行组合回测'}
+            </button>
+          </div>
+
+          <div style={{ border: '1px solid var(--border)', borderRadius: 8, background: '#fff', padding: 12 }}>
+            <div className="qf-reports-title" style={{ fontSize: 14, marginBottom: 8 }}>因子与权重</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {mfFactors.map((f, i) => (
+                <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <input
+                    value={f.name}
+                    onChange={(e) => setMfFactors((p) => p.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))}
+                    placeholder="因子名"
+                    style={{ width: 120, padding: '5px 8px', borderRadius: 6, border: '1px solid var(--border)', background: '#0b1220', color: '#e2e8f0' }}
+                  />
+                  <input
+                    value={f.expression}
+                    onChange={(e) => setMfFactors((p) => p.map((x, j) => (j === i ? { ...x, expression: e.target.value } : x)))}
+                    placeholder="表达式（仅用 open/high/low/close/volume）"
+                    style={{ flex: 1, minWidth: 240, padding: '5px 8px', borderRadius: 6, border: '1px solid var(--border)', background: '#0b1220', color: '#e2e8f0', fontFamily: 'monospace', fontSize: 12 }}
+                  />
+                  <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
+                    权重
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      value={f.weight}
+                      onChange={(e) => setMfFactors((p) => p.map((x, j) => (j === i ? { ...x, weight: Number(e.target.value) || 0 } : x)))}
+                      style={{ width: 64, padding: '5px 8px', borderRadius: 6, border: '1px solid var(--border)', background: '#0b1220', color: '#e2e8f0' }}
+                    />
+                  </label>
+                  <button className="qf-btn qf-btn-sm qf-btn-danger" onClick={() => setMfFactors((p) => p.filter((_, j) => j !== i))}>删</button>
+                </div>
+              ))}
+            </div>
+            <div style={{ marginTop: 8 }}>
+              <button className="qf-btn qf-btn-sm" onClick={() => setMfFactors((p) => [...p, { name: '', expression: '', weight: 1 }])}>+ 添加因子</button>
+            </div>
+          </div>
+
+          {mfError && <div className="qf-error">{mfError}</div>}
+
+          {mfResult && (
+            <>
+              <div className="qf-bt-cards">
+                {[
+                  ['总收益', pct(mfResult.metrics.total_return)],
+                  ['年化收益', pct(mfResult.metrics.annual_return)],
+                  ['夏普', num(mfResult.metrics.sharpe)],
+                  ['最大回撤', pct(mfResult.metrics.max_drawdown)],
+                  ['年化波动', pct(mfResult.metrics.attribution?.risk?.volatility)],
+                  ['持仓暴露比', pct(mfResult.metrics.attribution?.curve?.exposure_ratio)],
+                ].map(([k, v]) => (
+                  <div key={k} className="qf-bt-card">
+                    <div className="qf-bt-card-l">{k}</div>
+                    <div className="qf-bt-card-v">{v}</div>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ border: '1px solid var(--border)', borderRadius: 8, background: '#fff', padding: 12 }}>
+                <div className="qf-reports-title" style={{ fontSize: 14, marginBottom: 8 }}>
+                  综合分 / 仓位序列（{mfResult.composite_series.length} 个交易日）
+                </div>
+                <CompositeChart series={mfResult.composite_series} />
+              </div>
+
+              <div className="qf-hint">
+                综合分 = 各因子列 winsorize + 全局 zscore 后按权重求和；综合分 &gt; 阈值则下一交易日满仓，否则空仓（无前视）。
+                可把『因子排行榜』选出的高分因子表达式直接填入上方，完成研究→合成→回测闭环。
+              </div>
+            </>
+          )}
+        </div>
+      )}
     </div>
+  )
+}
+
+function pct(v) {
+  if (v == null) return '-'
+  return `${(Number(v) * 100).toFixed(2)}%`
+}
+function num(v) {
+  if (v == null) return '-'
+  return Number(v).toFixed(3)
+}
+
+// 多因子综合分 + 仓位可视化
+function CompositeChart({ series }) {
+  if (!series || series.length === 0) return null
+  const vals = series.map((s) => s.composite)
+  const lo = Math.min(...vals, 0)
+  const hi = Math.max(...vals, 0)
+  const span = hi - lo || 1
+  const w = 600
+  const h = 160
+  const step = w / Math.max(series.length - 1, 1)
+  const y = (v) => h - ((v - lo) / span) * h
+  const linePts = series.map((s, i) => `${i * step},${y(s.composite)}`).join(' ')
+  const zeroY = y(0)
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} style={{ width: '100%', height: 180 }}>
+      <line x1="0" y1={zeroY} x2={w} y2={zeroY} stroke="#cbd5e1" strokeWidth="1" strokeDasharray="3 3" />
+      <polyline points={linePts} fill="none" stroke="#6366f1" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
+      {series.map((s, i) =>
+        s.position > 0 ? (
+          <circle key={i} cx={i * step} cy={h - 6} r="3" fill="#15803d" />
+        ) : (
+          <circle key={i} cx={i * step} cy={h - 6} r="2" fill="#cbd5e1" />
+        ),
+      )}
+    </svg>
   )
 }

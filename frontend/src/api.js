@@ -233,6 +233,10 @@ export const factorResearchIc = (params = {}) =>
 export const factorResearchRanking = (params = {}) =>
   request(`/factors/research/ranking?${new URLSearchParams(params).toString()}`)
 
+// ---- 多因子组合回测闭环（V4.2）----
+export const multifactorBacktest = (payload) =>
+  request('/factors/research/multifactor', { method: 'POST', body: JSON.stringify(payload) })
+
 // ---- 通知渠道配置（V1.1 N5）----
 export const notificationsList = () => request('/notifications')
 export const notificationsCreate = (channel) => request('/notifications', {

@@ -277,6 +277,30 @@ class QuantFlowClient:
             },
         )
 
+    def multifactor_backtest(
+        self,
+        symbol: str,
+        factors: List[Dict[str, object]],
+        *,
+        start: str = "2024-01-01",
+        end: str = "2024-12-31",
+        threshold: float = 0.0,
+        initial_cash: float = 1_000_000.0,
+    ) -> Dict:
+        """多因子组合回测闭环（V4.2）：多因子按权重合成为综合信号并回测。"""
+        return self._request(
+            "POST",
+            "/factors/research/multifactor",
+            json={
+                "symbol": symbol,
+                "factors": factors,
+                "start": start,
+                "end": end,
+                "threshold": threshold,
+                "initial_cash": initial_cash,
+            },
+        )
+
     # ------------------------------------------------------------------ #
     # 健康检查
     # ------------------------------------------------------------------ #
