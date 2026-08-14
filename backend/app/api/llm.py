@@ -25,6 +25,7 @@ from ..core.llm import (
     reset_provider,
     save_llm_config,
 )
+from ..core.llm.providers import RoutingProvider, build_provider
 
 router = APIRouter()
 
@@ -55,7 +56,11 @@ class AssistResponse(BaseModel):
 
 
 class LLMConfigUpdate(BaseModel):
-    """配置更新：未传字段保持不变；api_key 传空串表示保留现有 key。"""
+    """配置更新：未传字段保持不变；api_key 传空串表示保留现有 key。
+
+    V3.3：``providers`` 为多模型路由链（顺序即优先级），每条为完整 provider 规格；
+    传入空列表 ``[]`` 关闭路由、回退单配置。
+    """
 
     provider: Optional[str] = None
     base_url: Optional[str] = None
@@ -66,6 +71,7 @@ class LLMConfigUpdate(BaseModel):
     max_tokens: Optional[int] = None
     timeout: Optional[float] = None
     enabled: Optional[bool] = None
+    providers: Optional[List[dict]] = None
 
 
 class LLMConfigOut(BaseModel):
@@ -79,6 +85,7 @@ class LLMConfigOut(BaseModel):
     enabled: bool
     has_api_key: bool
     api_key_masked: str
+    providers: List[dict] = []
 
 
 def _config_out(cfg: dict) -> LLMConfigOut:
@@ -93,6 +100,7 @@ def _config_out(cfg: dict) -> LLMConfigOut:
         enabled=bool(cfg.get("enabled", True)),
         has_api_key=bool(cfg.get("api_key")),
         api_key_masked=mask_api_key(cfg.get("api_key", "")),
+        providers=cfg.get("providers", []) or [],
     )
 
 
@@ -139,10 +147,15 @@ def assist(
 @router.get("/llm/status", summary="LLM provider 状态")
 def status(_user=Depends(get_current_user)) -> dict:
     provider = get_provider()
+    chain = provider.chain_info() if isinstance(provider, RoutingProvider) else [
+        {"name": provider.name, "model": provider.model, "configured": provider.is_configured()}
+    ]
     return {
         "provider": provider.name,
         "model": provider.model,
         "configured": provider.is_configured(),
+        "routing": isinstance(provider, RoutingProvider),
+        "chain": chain,
         "env_provider": settings.LLM_PROVIDER,
     }
 
@@ -177,7 +190,7 @@ def test_config(
         cur = load_llm_config()
         cfg = _merge_patch(cur, req.model_dump(exclude_unset=True))
     try:
-        provider = provider_from_config(cfg)
+        provider = build_provider(cfg, strict=True)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     try:

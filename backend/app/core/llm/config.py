@@ -28,7 +28,11 @@ LLM_CONFIG_KEY = "llm.config"
 
 
 def default_llm_config() -> Dict[str, Any]:
-    """环境变量的默认值（首次使用 / 未保存配置时）。"""
+    """环境变量的默认值（首次使用 / 未保存配置时）。
+
+    V3.3 起新增 ``providers`` 字段：非空列表时启用多模型路由（fallback 链），
+    列表顺序即优先级；为空（默认）时沿用单配置逻辑。
+    """
     return {
         "provider": env_settings.LLM_PROVIDER,
         "base_url": env_settings.LLM_BASE_URL,
@@ -39,7 +43,11 @@ def default_llm_config() -> Dict[str, Any]:
         "max_tokens": env_settings.LLM_MAX_TOKENS,
         "timeout": 90.0,
         "enabled": True,
+        "providers": [],
     }
+
+
+DEFAULT_LLM_CONFIG_KEYS = list(default_llm_config().keys())
 
 
 def load_llm_config() -> Dict[str, Any]:
@@ -47,13 +55,16 @@ def load_llm_config() -> Dict[str, Any]:
     stored = get_setting(LLM_CONFIG_KEY)
     base = default_llm_config()
     if isinstance(stored, dict):
-        base.update({k: v for k, v in stored.items() if k in base})
+        base.update({k: v for k, v in stored.items() if k in DEFAULT_LLM_CONFIG_KEYS})
     return base
 
 
 def save_llm_config(cfg: Dict[str, Any]) -> Dict[str, Any]:
     """持久化配置（仅保留约定字段，避免脏数据）。"""
-    clean = {k: cfg.get(k, default_llm_config()[k]) for k in default_llm_config()}
+    clean = {k: cfg.get(k, default_llm_config()[k]) for k in DEFAULT_LLM_CONFIG_KEYS}
+    # providers 必须为列表（允许为空），避免脏数据破坏路由构建
+    if not isinstance(clean.get("providers"), list):
+        clean["providers"] = []
     set_setting(LLM_CONFIG_KEY, clean)
     return clean
 
