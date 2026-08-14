@@ -194,6 +194,17 @@ export const toggleAlert = (id, payload) => request(`/alerts/${id}/toggle`, { me
 export const evaluateAlerts = () => request('/alerts/evaluate', { method: 'POST' })
 export const alertSchedulerStatus = () => request('/alerts/scheduler')
 export const triggerAlertScheduler = () => request('/alerts/scheduler/trigger', { method: 'POST' })
+// ---- V5.2 调度中心 ----
+export const schedulerCenter = () => request('/schedules/center')
+export const listSchedules = () => request('/schedules')
+export const createSchedule = (payload) =>
+  request('/schedules', { method: 'POST', body: JSON.stringify(payload) })
+export const runSchedule = (id) => request(`/schedules/${id}/run`, { method: 'POST' })
+export const toggleSchedule = (id, enabled) =>
+  request(`/schedules/${id}/toggle`, { method: 'POST', body: JSON.stringify({ enabled }) })
+export const deleteSchedule = (id) => request(`/schedules/${id}`, { method: 'DELETE' })
+export const listWorkflows = (scope = 'all') =>
+  request(`/workflows?scope=${scope}`)
 
 // ---- 自选股监控 / 行情看板（V2.4）----
 export const getWatchlist = () => request('/market/watchlist')
