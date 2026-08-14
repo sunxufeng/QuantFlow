@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import ErrorBoundary from './ErrorBoundary.jsx'
 import ReactFlow, {
   Background,
   Controls,
@@ -973,6 +974,7 @@ export default function App() {
           onLogout={handleLogout}
         />
         <main className="qf-main">
+         <ErrorBoundary>
           {view === 'home' && (
             <Dashboard onNavigate={setView} />
           )}
@@ -1009,6 +1011,7 @@ export default function App() {
           {view === 'export' && <ExportCenter />}
           {view === 'broker' && <BrokerSettings />}
           {view === 'data' && <DataSync />}
+         </ErrorBoundary>
         </main>
       </div>
     </ReactFlowProvider>
