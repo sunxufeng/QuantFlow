@@ -10,8 +10,9 @@ chk "frontend index" "200" "$(curl -s -o /dev/null -w '%{http_code}' -m 10 $B/)"
 
 echo "== [2] 后端健康检查（经 nginx 反代） =="
 H=$(curl -s -m 10 $B/api/health)
+APP_VER="$(grep -m1 'APP_VERSION' "$(dirname "$0")/../backend/app/config.py" | sed -E 's/.*"([0-9.]+)".*/\1/')"
 chk "health status=ok" "ok" "$(echo "$H" | python3 -c "import sys,json;print(json.load(sys.stdin)['status'])" 2>/dev/null)"
-chk "health version=1.0.0" "1.0.0" "$(echo "$H" | python3 -c "import sys,json;print(json.load(sys.stdin)['version'])" 2>/dev/null)"
+chk "health version=$APP_VER" "$APP_VER" "$(echo "$H" | python3 -c "import sys,json;print(json.load(sys.stdin)['version'])" 2>/dev/null)"
 
 echo "== [3] 未认证访问应 401 =="
 chk "auth/me 无 token" "401" "$(curl -s -o /dev/null -w '%{http_code}' -m 10 $B/api/auth/me)"

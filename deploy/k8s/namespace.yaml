@@ -4,4 +4,4 @@ metadata:
   name: quantflow
   labels:
     app.kubernetes.io/part-of: quantflow
-    app.kubernetes.io/version: "1.2.0"
+    app.kubernetes.io/version: "7.0.1"

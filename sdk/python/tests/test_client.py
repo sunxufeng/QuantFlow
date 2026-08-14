@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import os
+import re
 import sys
 import tempfile
 
@@ -44,10 +45,23 @@ def client():
         yield QuantFlowClient(base_url="http://testserver", _client=http_client)
 
 
+def _app_version():
+    cfg = os.path.join(_REPO, "backend", "app", "config.py")
+    try:
+        m = re.search(r'APP_VERSION\s*=\s*"([0-9.]+)"', open(cfg, encoding="utf-8").read())
+        return m.group(1) if m else None
+    except OSError:
+        return None
+
+
 def test_health(client):
     h = client.health()
     assert h["status"] == "ok"
-    assert h["version"].startswith("2.")
+    expected = _app_version()
+    if expected is not None:
+        assert h["version"] == expected
+    else:
+        assert h["version"]
 
 
 def test_register_login_and_backtest_flow(client):
