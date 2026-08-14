@@ -10,8 +10,8 @@ const OBJECTIVES = [
 ]
 
 const PRESET_STRATEGIES = {
-  ma_cross: { fast: [3, 5, 8, 10], slow: [15, 20, 30, 60] },
-  futures_ma_cross: { fast: [3, 5, 8], slow: [15, 20, 30] },
+  ma_cross: { fast: [2, 3, 5], slow: [6, 8, 10, 12] },
+  futures_ma_cross: { fast: [2, 3, 5], slow: [6, 8, 10, 12] },
 }
 
 function fmtPct(v) {
@@ -32,7 +32,7 @@ export default function Optimizer() {
   const [objective, setObjective] = useState('sharpe')
   const [topN, setTopN] = useState(10)
   const [gridText, setGridText] = useState(
-    JSON.stringify({ fast: [3, 5, 8, 10], slow: [15, 20, 30, 60] }, null, 2)
+    JSON.stringify({ fast: [2, 3, 5], slow: [6, 8, 10, 12] }, null, 2)
   )
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
