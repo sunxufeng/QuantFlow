@@ -264,6 +264,20 @@ def batch_generate_compare(req: BatchGenerateRequest) -> dict:
             )
             full = result.to_dict(include_outputs=True)
             bt = _extract_backtest(full)
+            # LLM 生成的因子表达式可能非法（如引用未定义变量），致回测节点 blocked/失败。
+            # 此时回退到规则模板（保证可运行 backtest.run）并重跑，保证批量对比始终有结果。
+            if bt is None and req.use_llm:
+                gen = generate_from_text(prompt, use_llm=False)
+                item["source"] = "llm→rule(fallback)"
+                item["name"] = gen.get("name")
+                item["nodes"] = gen.get("nodes", [])
+                item["edges"] = gen.get("edges", [])
+                validate_workflow(item["nodes"], item["edges"])
+                result = run_module.RUN_SERVICE.execute_sync(
+                    item["nodes"], item["edges"], workflow_name=gen.get("name") or "batch"
+                )
+                full = result.to_dict(include_outputs=True)
+                bt = _extract_backtest(full)
             if bt is None:
                 item["error"] = "未包含可运行的回测节点(backtest.run)"
                 items.append(item)

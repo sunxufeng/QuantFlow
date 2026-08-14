@@ -11,7 +11,7 @@ if PROXY:
 
 REPO_ROOT = "/Users/sunxufeng/WorkBuddy/2026-08-12-14-19-17/quantflow"
 BASE = "18fbbe8"
-MESSAGE = "feat(v3.4): 批量生成并对比回测——一次提交多条 prompt，LLM 生成工作流后自动回测并归一化绘制收益曲线对比 (3.4.0)"
+MESSAGE = "fix(v3.4): LLM 生成的因子表达式非法致回测节点 blocked 时回退规则模板重跑；约束 LLM 提示只用真实行情列"
 
 
 def api(method, path, data=None, retries=6):
