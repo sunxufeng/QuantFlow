@@ -77,3 +77,11 @@ def evaluate_alerts() -> Dict[str, Any]:
     results = alert_service.evaluate_all()
     notified = sum(1 for r in results if r.get("notified"))
     return {"evaluated": len(results), "notified": notified, "results": results}
+
+
+@router.get("/scheduler", summary="预警自动评估调度状态")
+def scheduler_status() -> Dict[str, Any]:
+    from ..alerts import scheduler as alert_scheduler
+
+    return alert_scheduler.status()
+

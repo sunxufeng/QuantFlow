@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { listAlerts, createAlert, deleteAlert, toggleAlert, evaluateAlerts } from './api.js'
+import { listAlerts, createAlert, deleteAlert, toggleAlert, evaluateAlerts, alertSchedulerStatus } from './api.js'
 
 const METRICS = [
   ['price', '最新价'],
@@ -12,6 +12,7 @@ export default function Alerts() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [evalResult, setEvalResult] = useState(null)
+  const [sched, setSched] = useState(null)
   const [form, setForm] = useState({
     name: '',
     symbol: 'TEST.STOCK',
@@ -31,6 +32,10 @@ export default function Alerts() {
   }, [])
 
   useEffect(() => { refresh() }, [refresh])
+
+  useEffect(() => {
+    alertSchedulerStatus().then(setSched).catch(() => setSched(null))
+  }, [])
 
   const submit = (e) => {
     e.preventDefault()
@@ -69,7 +74,14 @@ export default function Alerts() {
     <div className="qf-monitor" style={{ padding: 16 }}>
       <div className="qf-result-head">
         <h3>预警规则引擎（V2.3）</h3>
-        <button className="qf-btn qf-btn-primary" onClick={runEval}>立即检查</button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {sched && (
+            <span className="qf-badge" title="每 N 分钟自动评估一次启用中的规则">
+              {sched.running ? `自动巡检·${sched.interval_minutes}分钟` : (sched.disabled ? '自动巡检·已停用' : '自动巡检·未运行')}
+            </span>
+          )}
+          <button className="qf-btn qf-btn-primary" onClick={runEval}>立即检查</button>
+        </div>
       </div>
       <div className="qf-hint" style={{ marginBottom: 12 }}>
         定义「标的 + 指标 + 算子 + 阈值」规则，满足条件时通过已配置的通知渠道（飞书/Webhook/邮件）推送，并带冷却去重。

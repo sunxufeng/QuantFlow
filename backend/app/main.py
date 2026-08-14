@@ -114,6 +114,12 @@ async def startup() -> None:
     data_sync_service.start()
     workflow_scheduler.start()
     try:
+        from .alerts.scheduler import start as alerts_scheduler_start
+
+        alerts_scheduler_start()
+    except Exception as exc:  # pragma: no cover - 启动容错
+        logger.warning("预警自动评估调度启动失败（可忽略）：%s", exc)
+    try:
         seeded = factor_library.seed_defaults()
         if seeded:
             logger.info("因子库已写入 %d 个内置因子", seeded)
@@ -134,6 +140,12 @@ async def shutdown() -> None:
 
     workflow_scheduler.shutdown()
     data_sync_service.shutdown()
+    try:
+        from .alerts.scheduler import shutdown as alerts_scheduler_shutdown
+
+        alerts_scheduler_shutdown()
+    except Exception:  # pragma: no cover
+        pass
 
 
 @app.get("/api/health", summary="健康检查")
