@@ -316,6 +316,27 @@ class QuantFlowClient:
     def analyze_factor(self, payload: Dict) -> Dict:
         return self._request("POST", "/factors/analyze", json=payload)
 
+    # ---- V2.5 因子评分 ----
+    def factor_scoring_catalog(self) -> Dict:
+        return self._request("GET", "/factors/scoring/catalog")
+
+    def score_factors(
+        self,
+        symbols: List[str],
+        factors: Optional[List[Dict]] = None,
+        start: Optional[str] = None,
+        end: Optional[str] = None,
+        method: str = "rank",
+    ) -> Dict:
+        payload: Dict[str, object] = {"symbols": symbols, "method": method}
+        if factors is not None:
+            payload["factors"] = factors
+        if start is not None:
+            payload["start"] = start
+        if end is not None:
+            payload["end"] = end
+        return self._request("POST", "/factors/scoring/score", json=payload)
+
     # ------------------------------------------------------------------ #
     # 工作流与运行（M3 / V1.1 N2）
     # ------------------------------------------------------------------ #

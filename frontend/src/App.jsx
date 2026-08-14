@@ -28,6 +28,7 @@ import BacktestResultView from './BacktestResultView.jsx'
 import BacktestReports from './BacktestReports.jsx'
 import Alerts from './Alerts.jsx'
 import MarketBoard from './MarketBoard.jsx'
+import Factors from './Factors.jsx'
 import BrokerSettings from './BrokerSettings.jsx'
 import LoginScreen from './LoginScreen.jsx'
 import { useGraphHistory } from './useHistory.js'
@@ -867,6 +868,7 @@ export default function App() {
           {view === 'chart' && <ChartView />}
           {view === 'monitor' && <Monitoring />}
           {view === 'factor' && <FactorLibrary />}
+          {view === 'factorScore' && <Factors />}
           {view === 'notify' && <Notifications />}
           {view === 'llm' && <LLMAssistant />}
           {view === 'settings' && <LLMSettings />}
