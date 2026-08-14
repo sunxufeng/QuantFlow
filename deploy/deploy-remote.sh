@@ -53,8 +53,8 @@ if [[ "$SKIP_FRONTEND" != "1" ]]; then
     exit 4
   fi
   tar czf - --exclude='node_modules' -C "$REPO_DIR/frontend" src dist \
-    | $SSH "mkdir -p $QF_DIR/frontend && cd $QF_DIR/frontend && tar xzf -"
-  echo "✅ 前端同步完成"
+    | $SSH "mkdir -p $QF_DIR/frontend && cd $QF_DIR/frontend && rm -rf dist && tar xzf -"
+  echo "✅ 前端同步完成（已清理旧 dist 残留的陈旧 bundle）"
 fi
 
 echo "==> [3] 重启服务"

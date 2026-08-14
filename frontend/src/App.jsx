@@ -904,6 +904,31 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user])
 
+  // 版本看门狗：部署新版本后，若探测到后端 version 变化，自动刷新页面，
+  // 避免长期打开的标签页一直运行陈旧 bundle（曾导致 setView is not defined 等历史报错）。
+  useEffect(() => {
+    let alive = true
+    const probe = () => {
+      fetch('/api/health')
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => {
+          if (!alive || !d || !d.version) return
+          if (window.__QF_BACKEND_VERSION && window.__QF_BACKEND_VERSION !== d.version) {
+            window.location.reload()
+          } else {
+            window.__QF_BACKEND_VERSION = d.version
+          }
+        })
+        .catch(() => {})
+    }
+    probe()
+    const t = setInterval(probe, 60000)
+    return () => {
+      alive = false
+      clearInterval(t)
+    }
+  }, [])
+
   const handleAuthed = () => {
     getMe().then(setUser).catch(() => {})
     refreshProjects()
