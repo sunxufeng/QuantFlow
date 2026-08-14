@@ -92,6 +92,12 @@ export const generateWorkflow = (prompt, useLlm = true) =>
     method: 'POST',
     body: JSON.stringify({ prompt, use_llm: useLlm }),
   })
+// ---- V3.4 批量生成并对比回测 ----
+export const batchGenerateCompare = (payload) =>
+  request('/workflows/batch-generate-compare', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
 export const exportWorkflow = (id) => request(`/workflows/${id}/export`)
 export const fetchWorkflowVersions = (id) => request(`/workflows/${id}/versions`)
 export const createWorkflowVersion = (id, label) => request(`/workflows/${id}/versions`, {
