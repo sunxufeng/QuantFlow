@@ -94,3 +94,35 @@ def test_analyze_missing_input_400():
     headers = _auth_headers("fac_user4")
     resp = client.post("/api/factors/analyze", json={}, headers=headers)
     assert resp.status_code == 400
+
+
+# --------------------------------------------------------------------------- #
+# 因子研究（V2.9）：相关性矩阵 + IC/IR
+# --------------------------------------------------------------------------- #
+def test_research_matrix():
+    headers = _auth_headers("fac_user5")
+    resp = client.get("/api/factors/research/matrix", headers=headers)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert len(body["factors"]) == 7
+    assert len(body["matrix"]) == 7 and len(body["matrix"][0]) == 7
+    # 对角线应为 1.0
+    for i in range(7):
+        assert body["matrix"][i][i] == 1.0
+    assert body["dates_count"] >= 1
+
+
+def test_research_ic():
+    headers = _auth_headers("fac_user6")
+    resp = client.get("/api/factors/research/ic?window=10", headers=headers)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert len(body["results"]) == 7
+    # 多数因子应有观测样本（合成 20 日行情，window=10 约 9 期）
+    obs = [v["observations"] for v in body["results"].values()]
+    assert sum(1 for o in obs if o and o > 0) >= 3
+    # 有样本因子的 mean_ic 应为有限数值
+    for v in body["results"].values():
+        if v["observations"] and v["observations"] > 0:
+            assert isinstance(v["mean_ic"], (int, float))
+            assert isinstance(v["ir"], (int, float))

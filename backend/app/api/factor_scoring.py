@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from ..core.auth import get_current_user
+from ..factors import research as factor_research
 from ..factors.registry import FactorNotFoundError, list_factors
 from ..factors.scoring import FactorScoreConfigError, score
 
@@ -58,3 +59,41 @@ def scoring_score(payload: ScoreRequest) -> dict:
     except FactorNotFoundError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from None
     return result
+
+
+# --------------------------------------------------------------------------- #
+# 因子研究（V2.9）：相关性矩阵 + IC/IR
+# --------------------------------------------------------------------------- #
+def _parse_symbols(raw) -> Optional[List[str]]:
+    if not raw:
+        return None
+    return [s.strip() for s in raw.split(",") if s.strip()]
+
+
+@router.get("/research/matrix", summary="因子相关性矩阵（V2.9）")
+def research_matrix(
+    symbols: Optional[str] = None,
+    start: str = "2000-01-01",
+    end: str = "2100-01-01",
+    window: int = 10,
+) -> dict:
+    return factor_research.correlation_matrix(
+        symbols=_parse_symbols(symbols), start=start, end=end, window=window
+    )
+
+
+@router.get("/research/ic", summary="因子 IC / IR 分析（V2.9）")
+def research_ic(
+    symbols: Optional[str] = None,
+    start: str = "2000-01-01",
+    end: str = "2100-01-01",
+    window: int = 10,
+    forward: int = 1,
+) -> dict:
+    return factor_research.ic_analysis(
+        symbols=_parse_symbols(symbols),
+        start=start,
+        end=end,
+        window=window,
+        forward=forward,
+    )
