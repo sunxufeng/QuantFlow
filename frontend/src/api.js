@@ -127,6 +127,8 @@ export const fetchInstruments = () => request('/market/instruments')
 export const fetchBars = (symbol, start, end) => request(
   `/market/bars?symbol=${encodeURIComponent(symbol)}&as_table=false${start ? `&start=${start}` : ''}${end ? `&end=${end}` : ''}`,
 )
+export const marketSyncStatus = () => request('/market/sync/status')
+export const marketSyncNow = () => request('/market/sync', { method: 'POST' })
 
 // ---- 回测报告中心（V1.6）----
 export const backtestReports = () => request('/backtest/reports')

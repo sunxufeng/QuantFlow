@@ -4,6 +4,7 @@ const navItems = [
   { key: 'home', label: '概览', abbr: '览' },
   { key: 'editor', label: '工作流编辑器', abbr: '工' },
   { key: 'chart', label: '行情图表', abbr: '行' },
+  { key: 'data', label: '数据更新', abbr: '数' },
   { key: 'monitor', label: '系统监控', abbr: '系' },
   { key: 'factor', label: '因子库', abbr: '因' },
   { key: 'notify', label: '通知渠道', abbr: '通' },
