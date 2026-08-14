@@ -904,19 +904,43 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user])
 
-  // 版本看门狗：部署新版本后，若探测到后端 version 变化，自动刷新页面，
-  // 避免长期打开的标签页一直运行陈旧 bundle（曾导致 setView is not defined 等历史报错）。
+  // 版本看门狗：部署新版本后自动刷新页面，避免长期打开的标签页一直运行陈旧 bundle。
+  // 两层保护：
+  // 1) 后端 /api/health 的 version 变化 → 普通刷新即可；
+  // 2) 前端构建号（/version.json 的 build，每次发版不同）与当前 bundle 内嵌 __QF_BUILD_ID__ 不一致
+  //    → 说明 CDN/浏览器缓存了旧 index.html，做一次「带缓存破坏参数」的整页刷新强制拉取最新代码。
   useEffect(() => {
     let alive = true
+    const reloadWithCacheBust = () => {
+      try {
+        const url = new URL(window.location.href)
+        if (!url.searchParams.has('_cb')) {
+          url.searchParams.set('_cb', String(Date.now()))
+          window.location.replace(url.pathname + url.search + url.hash)
+          return
+        }
+      } catch { /* ignore */ }
+      window.location.reload(true)
+    }
     const probe = () => {
       fetch('/api/health')
         .then((r) => (r.ok ? r.json() : null))
         .then((d) => {
           if (!alive || !d || !d.version) return
           if (window.__QF_BACKEND_VERSION && window.__QF_BACKEND_VERSION !== d.version) {
-            window.location.reload()
+            reloadWithCacheBust()
           } else {
             window.__QF_BACKEND_VERSION = d.version
+          }
+        })
+        .catch(() => {})
+      // 前端构建号比对（version.json 由部署脚本写入，server.mjs 以 no-store 提供）
+      fetch('/version.json', { cache: 'no-store' })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((v) => {
+          if (!alive || !v || !v.build) return
+          if (typeof __QF_BUILD_ID__ !== 'undefined' && __QF_BUILD_ID__ !== v.build) {
+            reloadWithCacheBust()
           }
         })
         .catch(() => {})

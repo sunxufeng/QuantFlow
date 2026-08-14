@@ -22,6 +22,17 @@ const types = {
 const server = createServer((req, res) => {
   const url = new URL(req.url, "http://localhost");
 
+  // 缓存破坏：裸根路径（无查询参数）一律 302 跳转到带 _cb 时间戳的 URL。
+  // 原因：前端由 node 托管、域名前还有阿里云 CDN，会把 index.html 缓存起来；
+  // 一旦 CDN 保留了发版前的旧 index.html，普通刷新仍命中旧缓存，导致旧 bundle 持续运行
+  // （历史出现过 setView is not defined / LLM 白屏）。跳转到带 _cb 的 URL 使 CDN 视为新请求（缓存 MISS），
+  // 强制回源拉取最新 index.html + bundle。带 _cb 的请求不再跳转，避免死循环。
+  if (url.pathname === "/" && !url.search) {
+    res.writeHead(302, { Location: "/?_cb=" + Date.now(), "Cache-Control": "no-store" });
+    res.end();
+    return;
+  }
+
   // /api/* 反向代理到后端
   if (url.pathname.startsWith("/api/")) {
     const upstream = new URL(url.pathname + url.search, BACKEND_URL);
@@ -40,9 +51,11 @@ const server = createServer((req, res) => {
   if (!file.startsWith(root) || !existsSync(file) || statSync(file).isDirectory()) {
     file = join(root, "index.html");
   }
+  // version.json 携带前端构建号，供看门狗比对，必须 no-store（禁止 CDN/浏览器缓存）以免误判陈旧
+  const isNoStore = file.endsWith("index.html") || file.endsWith("version.json");
   res.writeHead(200, {
     "Content-Type": types[extname(file)] || "application/octet-stream",
-    "Cache-Control": file.endsWith("index.html") ? "no-store" : "public, max-age=31536000, immutable",
+    "Cache-Control": isNoStore ? "no-store" : "public, max-age=31536000, immutable",
   });
   createReadStream(file).pipe(res);
 });
