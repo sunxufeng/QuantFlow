@@ -289,6 +289,122 @@ def get_report(run_id: str) -> dict:
 
 
 # --------------------------------------------------------------------------- #
+# 回测对比与排行榜（V2.8）
+# --------------------------------------------------------------------------- #
+_LEADERBOARD_METRICS = {
+    "sharpe": "夏普比率",
+    "total_return": "总收益率",
+    "annual_return": "年化收益",
+    "max_drawdown": "最大回撤",
+    "win_rate": "胜率",
+}
+
+
+def _curve_to_pct(curve: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """把净值曲线归一化为累计收益率（%），便于不同初始资金横向对比。"""
+    if not curve:
+        return []
+    base = curve[0].get("total_value") or 0.0
+    out = []
+    for p in curve:
+        tv = p.get("total_value") or 0.0
+        pct = (tv / base - 1.0) * 100.0 if base else 0.0
+        out.append({"date": p.get("date"), "pct": round(pct, 4)})
+    return out
+
+
+@router.get("/compare", summary="回测对比：多任务指标 + 归一化净值曲线")
+def compare_reports(ids: str = "") -> dict:
+    """传入逗号分隔的 run_id 列表，返回可用于并排对比的结构化数据。
+
+    - ``ids`` 为空时返回空列表（前端据此提示先选择）。
+    - 每条返回：run_id / strategy / symbols / 区间 / metrics / curve_pct（累计收益率%）。
+    """
+    run_ids = [x.strip() for x in ids.split(",") if x.strip()]
+    items = []
+    for rid in run_ids:
+        try:
+            r = report_store.load(rid)
+        except FileNotFoundError:
+            continue
+        r = _normalize_report(r)
+        m = r.get("metrics", {}) or {}
+        items.append(
+            {
+                "run_id": rid,
+                "strategy": r.get("strategy"),
+                "symbols": r.get("symbols"),
+                "start_date": r.get("start_date"),
+                "end_date": r.get("end_date"),
+                "interval": r.get("interval"),
+                "metrics": m,
+                "curve_pct": _curve_to_pct(r.get("equity_curve", []) or []),
+            }
+        )
+    return {"items": items}
+
+
+@router.get("/leaderboard", summary="回测排行榜：按指标排序")
+def leaderboard(
+    metric: str = "sharpe",
+    order: str = "desc",
+    limit: int = 20,
+) -> dict:
+    """对所有已保存回测报告按指定指标排序，形成策略排行榜。
+
+    - ``metric``：sharpe / total_return / annual_return / max_drawdown / win_rate
+    - ``order``：desc（默认）或 asc；注意 max_drawdown 越小越好，前端可据此反转展示。
+    """
+    if metric not in _LEADERBOARD_METRICS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"不支持的指标 {metric!r}，可选: {sorted(_LEADERBOARD_METRICS)}",
+        )
+    order = order if order in ("asc", "desc") else "desc"
+
+    ids = report_store.list()
+    rows = []
+    for rid in ids:
+        try:
+            r = report_store.load(rid)
+        except Exception:
+            continue
+        r = _normalize_report(r)
+        m = r.get("metrics", {}) or {}
+        val = m.get(metric)
+        if val is None:
+            continue
+        rows.append(
+            {
+                "run_id": rid,
+                "strategy": r.get("strategy"),
+                "symbols": r.get("symbols"),
+                "start_date": r.get("start_date"),
+                "end_date": r.get("end_date"),
+                "metric": metric,
+                "metric_label": _LEADERBOARD_METRICS[metric],
+                "value": val,
+                "metrics": {
+                    "total_return": m.get("total_return"),
+                    "annual_return": m.get("annual_return"),
+                    "sharpe": m.get("sharpe"),
+                    "max_drawdown": m.get("max_drawdown"),
+                    "win_rate": m.get("win_rate"),
+                },
+            }
+        )
+
+    reverse = order == "desc"
+    rows.sort(key=lambda x: (x["value"] is None, x["value"]), reverse=reverse)
+    return {
+        "items": rows[: max(1, min(limit, 200))],
+        "metric": metric,
+        "metric_label": _LEADERBOARD_METRICS[metric],
+        "order": order,
+    }
+
+
+# --------------------------------------------------------------------------- #
 # 报告导出（V2.2）
 # --------------------------------------------------------------------------- #
 @router.get("/reports/{run_id}/export", summary="回测报告导出（csv / json）")

@@ -19,6 +19,7 @@ import FactorLibrary from './FactorLibrary.jsx'
 import Notifications from './Notifications.jsx'
 import LLMAssistant from './LLMAssistant.jsx'
 import LLMSettings from './LLMSettings.jsx'
+import Compare from './Compare.jsx'
 import Templates from './Templates.jsx'
 import Sidebar from './Sidebar.jsx'
 import Dashboard from './Dashboard.jsx'
@@ -881,6 +882,7 @@ export default function App() {
             />
           )}
           {view === 'reports' && <BacktestReports />}
+          {view === 'compare' && <Compare />}
           {view === 'alerts' && <Alerts />}
           {view === 'board' && <MarketBoard />}
           {view === 'trade' && <Trading onNavigate={setView} />}

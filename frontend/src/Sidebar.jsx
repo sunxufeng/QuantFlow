@@ -13,6 +13,7 @@ const navItems = [
   { key: 'settings', label: 'LLM 配置', abbr: '配' },
   { key: 'templates', label: '模板库', abbr: '模' },
   { key: 'reports', label: '回测报告', abbr: '报' },
+  { key: 'compare', label: '回测对比', abbr: '比' },
   { key: 'alerts', label: '预警规则', abbr: '警' },
   { key: 'board', label: '行情看板', abbr: '板' },
   { key: 'trade', label: '模拟交易', abbr: '易' },
