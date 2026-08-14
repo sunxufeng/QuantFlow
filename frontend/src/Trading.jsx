@@ -184,7 +184,7 @@ export default function Trading({ onNavigate }) {
 
       {summary && summary.equity_curve && summary.equity_curve.length > 1 && (
         <div style={{ marginTop: 14, border: '1px solid var(--border)', borderRadius: 10, padding: 14, background: '#fff' }}>
-          <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text)', marginBottom: 8 }}>权益曲线（模拟账户）</div>
+          <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text)', marginBottom: 8 }}>权益曲线（模拟账户）</div>
           <EquitySparkline data={summary.equity_curve} initial={summary.initial_cash} />
         </div>
       )}
@@ -193,7 +193,7 @@ export default function Trading({ onNavigate }) {
       <div style={{ display: 'flex', gap: 16, marginTop: 18, flexWrap: 'wrap' }}>
         {/* 下单 */}
         <form onSubmit={submit} style={{ flex: '1 1 300px', minWidth: 280, border: '1px solid var(--border)', borderRadius: 10, padding: 14, background: '#fff' }}>
-          <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text)', marginBottom: 10 }}>
+          <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text)', marginBottom: 10 }}>
             下单（{mode === 'live' ? '实盘' : '模拟'}）
           </div>
           <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
@@ -231,7 +231,7 @@ export default function Trading({ onNavigate }) {
 
         {/* 持仓 */}
         <div style={{ flex: '2 1 360px', minWidth: 320, border: '1px solid var(--border)', borderRadius: 10, padding: 14, background: '#fff' }}>
-          <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text)', marginBottom: 10 }}>持仓</div>
+          <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text)', marginBottom: 10 }}>持仓</div>
           {positions.length === 0 && <div className="qf-prop-hint">暂无持仓</div>}
           {positions.length > 0 && (
             <table className="qf-state-table">
@@ -254,7 +254,7 @@ export default function Trading({ onNavigate }) {
       {/* 委托（仅模拟模式维护挂单/成交流水） */}
       {mode === 'paper' && (
         <div style={{ marginTop: 18, border: '1px solid var(--border)', borderRadius: 10, padding: 14, background: '#fff' }}>
-          <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text)', marginBottom: 10 }}>委托记录</div>
+          <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text)', marginBottom: 10 }}>委托记录</div>
           {orders.length === 0 && <div className="qf-prop-hint">暂无委托</div>}
           {orders.length > 0 && (
             <table className="qf-state-table">
@@ -306,13 +306,13 @@ function AnalyticsPanel({ data, initial }) {
 
       {data.equity_curve && data.equity_curve.length > 1 && (
         <div style={{ marginTop: 14, border: '1px solid var(--border)', borderRadius: 10, padding: 14, background: '#fff' }}>
-          <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text)', marginBottom: 8 }}>权益曲线</div>
+          <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text)', marginBottom: 8 }}>权益曲线</div>
           <EquitySparkline data={data.equity_curve} initial={initial} />
         </div>
       )}
 
       <div style={{ marginTop: 14, border: '1px solid var(--border)', borderRadius: 10, padding: 14, background: '#fff' }}>
-        <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text)', marginBottom: 10 }}>逐标的盈亏（已实现）</div>
+        <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text)', marginBottom: 10 }}>逐标的盈亏（已实现）</div>
         {(!data.trades || data.trades.length === 0) && <div className="qf-prop-hint">暂无已平仓交易</div>}
         {data.trades && data.trades.length > 0 && (
           <table className="qf-state-table">
@@ -340,7 +340,7 @@ function toggleStyle(active, color) {
     background: active ? color : '#fff',
     color: active ? '#fff' : 'var(--text)',
     cursor: 'pointer',
-    fontSize: 13,
+    fontSize: 12,
   }
 }
 
@@ -353,7 +353,7 @@ function btnStyle(active, color) {
     background: active ? color : '#fff',
     color: active ? '#fff' : 'var(--text)',
     cursor: 'pointer',
-    fontSize: 13,
+    fontSize: 12,
   }
 }
 
@@ -362,7 +362,7 @@ function statusLabel(s) {
 }
 
 function EquitySparkline({ data, initial }) {
-  const W = 720, H = 160, PAD = 8
+  const W = 720, H = 120, PAD = 8
   const pts = data.map(d => d.equity)
   const min = Math.min(initial, ...pts)
   const max = Math.max(initial, ...pts)
