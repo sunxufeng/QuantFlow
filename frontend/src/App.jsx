@@ -36,6 +36,8 @@ import Settings from './Settings.jsx'
 import ExportCenter from './ExportCenter.jsx'
 import Factors from './Factors.jsx'
 import BrokerSettings from './BrokerSettings.jsx'
+import FuturesBacktest from './FuturesBacktest.jsx'
+import Optimizer from './Optimizer.jsx'
 import LoginScreen from './LoginScreen.jsx'
 import { useGraphHistory } from './useHistory.js'
 import {
@@ -1063,6 +1065,8 @@ export default function App() {
           {view === 'export' && <ExportCenter />}
           {view === 'broker' && <BrokerSettings />}
           {view === 'data' && <DataSync />}
+          {view === 'futures' && <FuturesBacktest />}
+          {view === 'optimizer' && <Optimizer />}
          </ErrorBoundary>
         </main>
       </div>

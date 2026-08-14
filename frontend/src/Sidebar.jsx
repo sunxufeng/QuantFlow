@@ -14,6 +14,8 @@ const navItems = [
   { key: 'templates', label: '模板库', abbr: '模' },
   { key: 'reports', label: '回测报告', abbr: '报' },
   { key: 'compare', label: '回测对比', abbr: '比' },
+  { key: 'futures', label: '期货回测', abbr: '期' },
+  { key: 'optimizer', label: '参数优化', abbr: '优' },
   { key: 'alerts', label: '预警规则', abbr: '警' },
   { key: 'board', label: '行情看板', abbr: '板' },
   { key: 'watch', label: '自选监控', abbr: '监' },
