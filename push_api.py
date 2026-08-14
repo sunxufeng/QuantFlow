@@ -11,7 +11,7 @@ if PROXY:
 
 REPO_ROOT = "/Users/sunxufeng/WorkBuddy/2026-08-12-14-19-17/quantflow"
 BASE = "18fbbe8"
-MESSAGE = "feat(v3.0): AI 策略工作台——自然语言生成工作流(规则兜底+LLM可选)，一键导入编辑器运行 (3.0.0)"
+MESSAGE = "fix(v3.0): 加固 LLM 生成路径——仅允许 SAFE_NODE_TYPES 且必须以 backtest.run 收口，否则回退规则模板，保证端到端可运行"
 
 
 def api(method, path, data=None, retries=6):

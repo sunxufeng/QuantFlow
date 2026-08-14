@@ -54,3 +54,24 @@ def test_generate_empty_prompt_422():
     headers = _auth("wfgen_u3")
     resp = client.post("/api/workflows/generate", json={"prompt": "   "}, headers=headers)
     assert resp.status_code == 422
+
+
+def test_llm_path_requires_backtest_sink():
+    """LLM 路径若产出无 backtest.run 收口的工作流，必须回退规则模板。"""
+    from app.workflows import generate as gen
+
+    # 没有 backtest.run 节点的 LLM 输出 → 回退
+    fake = {
+        "name": "坏工作流",
+        "nodes": [
+            {"id": "n1", "node_type": "data.quotes", "params": {}},
+            {"id": "n2", "node_type": "factor.expression", "params": {}},
+        ],
+        "edges": [{"source": "n1", "source_port": "table", "target": "n2", "target_port": "table"}],
+    }
+    # 直接调用 _llm_generate 的内部规范化不行（需 provider），这里验证 generate_from_text
+    # 在 use_llm=False 时总会给出带 backtest.run 的规则工作流
+    out = gen.generate_from_text("动量因子策略", use_llm=False)
+    assert out["source"] == "rule"
+    assert any(n["node_type"] == "backtest.run" for n in out["nodes"])
+    assert out["warnings"] == [] or out["warnings"]

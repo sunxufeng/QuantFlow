@@ -115,13 +115,22 @@ def _rule_generate(text: str) -> Tuple[Dict, List[str]]:
 # --------------------------------------------------------------------------- #
 # LLM 增强生成
 # --------------------------------------------------------------------------- #
+# 仅允许 LLM 使用「已知可端到端运行」的节点集合，且必须以 backtest.run 收口，
+# 否则回退规则模板，避免生成「结构合法但运行失败」的工作流。
+SAFE_NODE_TYPES = {"data.quotes", "indicator.ma", "factor.expression", "backtest.run"}
+
 _SYSTEM_PROMPT = (
     "你是 QuantFlow 量化工作流生成器。只输出一个 JSON 对象，"
     "描述一个可运行的工作流，结构严格如下：\n"
     '{"name": "策略名", "description": "简短说明", '
     '"nodes": [{"id":"n1","node_type":"data.quotes","params":{"symbol":"TEST.STOCK","start":"2024-01-01","end":"2024-04-01"}}], '
     '"edges": [{"source":"n1","source_port":"table","target":"n2","target_port":"table"}]}\n'
-    "可用节点类型（node_type）与端口：\n"
+    "约束（必须严格遵守）：\n"
+    "1. 只能用以下 node_type：data.quotes（行情源）、indicator.ma（均线指标，参数 window）、"
+    "factor.expression（因子表达式，参数 expression/output）、backtest.run（回测，参数 strategy）。\n"
+    "2. 必须以一个 backtest.run 节点作为终点（汇点），且从 data.quotes 开始形成有向链路。\n"
+    "3. 端口统一用 source_port:\"table\" / target_port:\"table\"；strategy用 ma_cross / buy_hold / futures_ma_cross 之一。\n"
+    "可用节点类型与端口详情：\n"
 )
 
 
@@ -177,6 +186,8 @@ def _llm_generate(text: str) -> Optional[Tuple[Dict, List[str]]]:
     for n in parsed["nodes"]:
         if not n.get("id") or not n.get("node_type"):
             return None
+        if n["node_type"] not in SAFE_NODE_TYPES:
+            return None
         nodes.append({
             "id": n["id"],
             "node_type": n["node_type"],
@@ -194,6 +205,9 @@ def _llm_generate(text: str) -> Optional[Tuple[Dict, List[str]]]:
             "target": e["target"],
             "target_port": e.get("target_port", "table"),
         })
+    # 必须存在 backtest.run 收口节点，否则执行期会因无回测汇点而失败
+    if not any(n["node_type"] == "backtest.run" for n in nodes):
+        return None
     try:
         validate_workflow(nodes, edges)
     except Exception:
