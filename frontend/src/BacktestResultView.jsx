@@ -33,6 +33,34 @@ function fmt(v) {
   return String(v)
 }
 
+function UnderwaterChart({ rows }) {
+  const { area, lo, hi } = useMemo(() => {
+    if (!rows || !rows.length) return { area: '', lo: 0, hi: 0 }
+    const vals = rows.map((r) => Number(r.total_value) || 0)
+    let peak = vals[0]
+    const dd = vals.map((v) => {
+      peak = Math.max(peak, v)
+      return v / peak - 1.0
+    })
+    const lo = Math.min(...dd)
+    const hi = 0
+    const w = 100
+    const h = 36
+    const span = hi - lo || 1
+    const step = w / Math.max(dd.length - 1, 1)
+    const pts = dd.map((d, i) => [i * step, h - ((d - lo) / span) * h])
+    const p = pts.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' ')
+    return { area: `0,${h} ${p} ${w},${h}`, lo, hi }
+  }, [rows])
+  if (!area) return null
+  return (
+    <svg viewBox="0 0 100 36" preserveAspectRatio="none" style={{ width: '100%', height: 52 }}>
+      <polyline points={area} fill="#dc2626" fillOpacity="0.12" stroke="none" />
+      <line x1="0" y1="0" x2="100" y2="0" stroke="#dc2626" strokeOpacity="0.4" strokeWidth="0.5" vectorEffect="non-scaling-stroke" />
+    </svg>
+  )
+}
+
 export default function BacktestResultView({ outputs }) {
   const summary = outputs?.summary
   const equity = outputs?.equity
@@ -55,6 +83,9 @@ export default function BacktestResultView({ outputs }) {
   const monthly = attr?.curve?.monthly_returns || []
   const drawdowns = attr?.curve?.drawdown_periods || []
   const bench = attr?.benchmark || {}
+  const risk = attr?.risk || {}
+  const trade = attr?.trade || {}
+  const hasDecomp = trade.win_pnl != null && trade.loss_pnl != null
 
   return (
     <div className="qf-bt">
@@ -137,6 +168,50 @@ export default function BacktestResultView({ outputs }) {
                 <div className="qf-bt-card-v">{v}</div>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      <div className="qf-bt-sec">
+        <div className="qf-bt-sec-h">风险归因（V4.1）</div>
+        <div className="qf-bt-cards">
+          {[
+            ['年化波动率', risk.volatility != null ? (Number(risk.volatility) * 100).toFixed(2) + '%' : '-'],
+            ['下行波动率', risk.downside_deviation != null ? (Number(risk.downside_deviation) * 100).toFixed(2) + '%' : '-'],
+            ['索提诺比率', risk.sortino != null ? Number(risk.sortino).toFixed(2) : '-'],
+            ['最大回撤', metrics.max_drawdown != null ? (Number(metrics.max_drawdown) * 100).toFixed(2) + '%' : '-'],
+            ['回撤天数', attr?.curve?.max_drawdown_days ?? '-'],
+            ['持仓暴露比', metrics['持仓暴露比'] != null ? (Number(metrics['持仓暴露比']) * 100).toFixed(1) + '%' : '-'],
+          ].map(([k, v]) => (
+            <div key={k} className="qf-bt-card">
+              <div className="qf-bt-card-l">{k}</div>
+              <div className="qf-bt-card-v">{v}</div>
+            </div>
+          ))}
+        </div>
+        {equityRows.length > 1 && (
+          <div className="qf-bt-sub">
+            <span className="qf-bt-sub-h">水下回撤曲线（Underwater）</span>
+            <UnderwaterChart rows={equityRows} />
+          </div>
+        )}
+      </div>
+
+      {hasDecomp && (
+        <div className="qf-bt-sec">
+          <div className="qf-bt-sec-h">收益分解（平仓盈亏贡献）</div>
+          <div className="qf-bt-decomp">
+            <div className="qf-bt-decomp-bar qf-up" style={{ flex: Math.max(trade.win_pnl, 1) }}>
+              <span>盈利 {Number(trade.win_pnl).toFixed(0)}</span>
+            </div>
+            <div className="qf-bt-decomp-bar qf-down" style={{ flex: Math.max(-trade.loss_pnl, 1) }}>
+              <span>亏损 {Number(trade.loss_pnl).toFixed(0)}</span>
+            </div>
+          </div>
+          <div className="qf-hint" style={{ marginTop: 6 }}>
+            盈亏比 {trade.profit_factor != null ? Number(trade.profit_factor).toFixed(2) : '-'} ·
+            平均盈利 {Number(trade.avg_win || 0).toFixed(0)} · 平均亏损 {Number(trade.avg_loss || 0).toFixed(0)} ·
+            最大连胜 {trade.max_win_streak ?? '-'} / 最大连亏 {trade.max_loss_streak ?? '-'}
           </div>
         </div>
       )}

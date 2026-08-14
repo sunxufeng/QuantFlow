@@ -11,7 +11,7 @@ if PROXY:
 
 REPO_ROOT = "/Users/sunxufeng/WorkBuddy/2026-08-12-14-19-17/quantflow"
 BASE = "18fbbe8"
-MESSAGE = "tune(v4.0): 参数优化器前端预设/默认网格改用适配 20 根合成行情的窗口(fast 2-5/slow 6-12)，线上可见真实排序分布"
+MESSAGE = "feat(v4.1): 风险归因面板——metrics.attribution 新增风险层(年化波动/下行波动/索提诺)与交易收益分解(盈/亏平仓贡献)，前端回测详情展示风险卡片+水下回撤曲线+盈亏分解 (4.1.0)"
 
 
 def api(method, path, data=None, retries=6):
