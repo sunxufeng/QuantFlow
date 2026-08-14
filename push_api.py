@@ -11,7 +11,7 @@ if PROXY:
 
 REPO_ROOT = "/Users/sunxufeng/WorkBuddy/2026-08-12-14-19-17/quantflow"
 BASE = "18fbbe8"
-MESSAGE = "fix(v3.4): LLM 生成的因子表达式非法致回测节点 blocked 时回退规则模板重跑；约束 LLM 提示只用真实行情列"
+MESSAGE = "tune(v4.0): 参数优化器前端预设/默认网格改用适配 20 根合成行情的窗口(fast 2-5/slow 6-12)，线上可见真实排序分布"
 
 
 def api(method, path, data=None, retries=6):
