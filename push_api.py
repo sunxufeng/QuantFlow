@@ -11,7 +11,7 @@ if PROXY:
 
 REPO_ROOT = "/Users/sunxufeng/WorkBuddy/2026-08-12-14-19-17/quantflow"
 BASE = "18fbbe8"
-MESSAGE = "fix(v3.0): 加固 LLM 生成路径——仅允许 SAFE_NODE_TYPES 且必须以 backtest.run 收口，否则回退规则模板，保证端到端可运行"
+MESSAGE = "feat(v3.1): 个人工作流模板库（模板市场）——保存/浏览/删除用户模板，持久化 SQLite，跨重启保留 (3.1.0)"
 
 
 def api(method, path, data=None, retries=6):

@@ -25,6 +25,7 @@ from ..models.schemas import (
     WorkflowVersionOut,
 )
 from ..workflows.generate import generate_from_text
+from ..core.template_store import TEMPLATE_STORE, TemplateNotFoundError, TemplatePermissionError
 
 router = APIRouter(dependencies=[Depends(get_current_user)])
 
@@ -76,6 +77,70 @@ def list_workflow_templates() -> list[dict]:
     from ..templates import list_templates
 
     return list_templates()
+
+
+class WorkflowTemplateSaveIn(BaseModel):
+    name: str = Field(..., description="模板名称", min_length=1)
+    description: str = Field("", description="模板说明")
+    nodes: list[dict] = Field(default_factory=list, description="节点列表")
+    edges: list[dict] = Field(default_factory=list, description="连接列表")
+    tags: list[str] = Field(default_factory=list, description="标签")
+
+
+@router.get("/workflows/templates/mine", summary="我的工作流模板（V3.1 模板市场）")
+def my_templates(user: Optional[dict] = Depends(get_current_user)) -> list[dict]:
+    """返回当前用户保存的个人模板列表（内置模板另见 /workflows/templates）。"""
+    return TEMPLATE_STORE.list_user(user["id"])
+
+
+@router.post(
+    "/workflows/templates",
+    status_code=status.HTTP_201_CREATED,
+    summary="保存工作流为个人模板",
+)
+def save_template(
+    body: WorkflowTemplateSaveIn,
+    user: Optional[dict] = Depends(get_current_user),
+) -> dict:
+    """把当前画布（或部分工作流）保存为可复用模板，持久化到个人模板库。"""
+    try:
+        validate_workflow(body.nodes, body.edges)
+    except WorkflowValidationError as exc:
+        raise HTTPException(status_code=422, detail=f"模板图非法: {exc}") from exc
+    return TEMPLATE_STORE.save(
+        body.name, body.description, body.nodes, body.edges, body.tags, user["id"]
+    )
+
+
+@router.get("/workflows/templates/{template_id}", summary="获取单个用户模板")
+def get_user_template(
+    template_id: str,
+    user: Optional[dict] = Depends(get_current_user),
+) -> dict:
+    tpl = TEMPLATE_STORE.get(template_id)
+    if tpl is None or tpl["builtin"]:
+        raise HTTPException(status_code=404, detail="模板不存在")
+    if tpl["owner_id"] != user["id"]:
+        raise HTTPException(status_code=403, detail="无权访问该模板")
+    return tpl
+
+
+@router.delete(
+    "/workflows/templates/{template_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="删除用户模板",
+)
+def delete_user_template(
+    template_id: str,
+    user: Optional[dict] = Depends(get_current_user),
+) -> Response:
+    try:
+        TEMPLATE_STORE.delete(template_id, user["id"])
+    except TemplateNotFoundError:
+        raise HTTPException(status_code=404, detail="模板不存在") from None
+    except TemplatePermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from None
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 class WorkflowGenerateRequest(BaseModel):

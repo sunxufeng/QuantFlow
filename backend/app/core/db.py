@@ -191,6 +191,21 @@ CREATE TABLE IF NOT EXISTS watchlists (
     added_at   TEXT NOT NULL
 );
 
+-- V3.1 个人工作流模板库（用户保存的可复用工作流，持久化，跨重启保留）
+CREATE TABLE IF NOT EXISTS workflow_templates (
+    id          TEXT PRIMARY KEY,
+    name        TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    nodes       TEXT NOT NULL,
+    edges       TEXT NOT NULL DEFAULT '[]',
+    tags        TEXT NOT NULL DEFAULT '[]',
+    builtin     INTEGER NOT NULL DEFAULT 0,
+    owner_id    TEXT,
+    created_at  TEXT NOT NULL,
+    updated_at  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_workflow_templates_owner ON workflow_templates(owner_id);
+
 """
 
 
