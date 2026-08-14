@@ -29,7 +29,11 @@ DEFAULT_PREFERENCES: Dict[str, Any] = {
     "theme": "light",              # light | dark
     "preferred_data_source": "fixture",  # fixture | tushare
 }
-_VALID_VIEWS = {"dashboard", "backtest", "factors", "watch", "trade", "sched", "settings", "templates", "broker"}
+_VALID_VIEWS = {
+    "home", "editor", "chart", "data", "monitor", "factor", "factorScore",
+    "notify", "llm", "prefs", "templates", "reports", "compare",
+    "alerts", "board", "watch", "sched", "trade", "broker",
+}
 _VALID_THEMES = {"light", "dark"}
 _VALID_SOURCES = {"fixture", "tushare"}
 
