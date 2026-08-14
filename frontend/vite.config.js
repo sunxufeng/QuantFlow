@@ -11,6 +11,12 @@ export default defineConfig({
   define: {
     __QF_BUILD_ID__: JSON.stringify(buildId),
   },
+  build: {
+    // 把打包产物放到按构建号隔离的目录：每次发版产物路径都不同，
+    // 浏览器/CDN 永远无法命中旧缓存（即使 index.html 被陈旧缓存也能靠新路径拿到新 bundle）。
+    assetsDir: 'assets/' + String(buildId).replace(/[^A-Za-z0-9_-]/g, '_'),
+    chunkSizeWarningLimit: 2000,
+  },
   server: {
     port: 5173,
     proxy: {

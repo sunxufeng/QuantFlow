@@ -1,7 +1,7 @@
 // QuantFlow 生产静态服务 + /api 反向代理（零依赖 Node 实现）
 // 用法：node server.mjs  （监听 8080，/api 转发到 QF_BACKEND_URL 默认 http://127.0.0.1:8100）
 // 支持 /api/ws/* WebSocket 升级转发（运行状态实时推送）
-import { createReadStream, existsSync, statSync } from "node:fs";
+import { createReadStream, existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { createServer, request } from "node:http";
 import { dirname, extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -9,6 +9,21 @@ import { fileURLToPath } from "node:url";
 const PORT = Number(process.env.QF_PORT || 8080);
 const BACKEND_URL = process.env.QF_BACKEND_URL || "http://127.0.0.1:8100";
 const root = join(dirname(fileURLToPath(import.meta.url)), "dist");
+
+// 读取前端构建号：每次发版都不同，用于把入口重定向到带构建号的专属路径，
+// 保证浏览器/CDN 永远无法命中发版前的旧 index.html / 旧 bundle。
+let BUILD_ID = "dev";
+try {
+  const v = JSON.parse(readFileSync(join(root, "version.json"), "utf8"));
+  if (v && v.build) BUILD_ID = String(v.build);
+} catch {
+  // version.json 缺失时回退到 dist 内第一个 assets 子目录名（兜底）
+  try {
+    const assetsDir = join(root, "assets");
+    const sub = readdirSync(assetsDir).find((d) => /^[A-Za-z0-9_-]+$/.test(d));
+    if (sub) BUILD_ID = sub;
+  } catch {}
+}
 const types = {
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
@@ -22,14 +37,20 @@ const types = {
 const server = createServer((req, res) => {
   const url = new URL(req.url, "http://localhost");
 
-  // 缓存破坏：裸根路径（无查询参数）一律 302 跳转到带 _cb 时间戳的 URL。
-  // 原因：前端由 node 托管、域名前还有阿里云 CDN，会把 index.html 缓存起来；
-  // 一旦 CDN 保留了发版前的旧 index.html，普通刷新仍命中旧缓存，导致旧 bundle 持续运行
-  // （历史出现过 setView is not defined / LLM 白屏）。跳转到带 _cb 的 URL 使 CDN 视为新请求（缓存 MISS），
-  // 强制回源拉取最新 index.html + bundle。带 _cb 的请求不再跳转，避免死循环。
+  // 缓存破坏（根治 setView is not defined / LLM 白屏）：
+  // 裸根路径（无查询参数）一律 302 跳转到「带构建号的专属入口 /<BUILD_ID>/」。
+  // 该路径每次发版都不同，浏览器/CDN 永远无法命中旧缓存；
+  // 入口 index.html 与 bundle 均 no-store，后续请求始终回源取最新。
+  // 带构建号路径本身（/BUILD_ID/ 或 /BUILD_ID）直接返回 index.html，避免死循环。
   if (url.pathname === "/" && !url.search) {
-    res.writeHead(302, { Location: "/?_cb=" + Date.now(), "Cache-Control": "no-store" });
+    res.writeHead(302, { Location: "/" + BUILD_ID + "/", "Cache-Control": "no-store" });
     res.end();
+    return;
+  }
+  if (url.pathname === "/" + BUILD_ID || url.pathname === "/" + BUILD_ID + "/") {
+    const file = join(root, "index.html");
+    res.writeHead(200, { "Content-Type": types[".html"], "Cache-Control": "no-store" });
+    createReadStream(file).pipe(res);
     return;
   }
 

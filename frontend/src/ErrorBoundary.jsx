@@ -1,14 +1,22 @@
 import { Component } from 'react'
 
 // 带「缓存破坏」整页刷新的错误边界。
-// 根因：前端由 node server.mjs 托管，域名前还有阿里云 CDN，会缓存 index.html 与带 hash 的 bundle。
+// 根因：前端由 node server.mjs 托管，域名前还有阿里云 CDN，会把 index.html 与 bundle 缓存起来。
 // 一旦浏览器/CDN 保留了「发版前的旧 bundle」，点击某些视图就会执行旧代码（如历史 setView is not defined），
 // 且普通刷新仍请求同一个被缓存的 index.html，导致错误复发。
-// 解决：捕获到渲染错误时，做一次「带缓存破坏参数」的整页刷新（?_cb=<时间戳>），
-// 让 CDN/浏览器无法命中被缓存的 index.html，从而拉取到最新 index.html + 最新 bundle。
-// 若已带 _cb 仍报错，说明是新代码真实 bug，停止自动刷新以免死循环，改为展示错误 + 手动按钮。
+// 解决：捕获到渲染错误时，直接跳转到「最新构建号专属入口 /<build>/」（每次发版路径都不同，
+// 浏览器/CDN 永远无法命中旧缓存），从而彻底拉取最新 index.html + 最新 bundle。
+// 防死循环：同一构建号只自动跳转一次（用 sessionStorage 记录），若仍报错说明是新代码真实 bug。
 
-function cacheBustReload() {
+async function goFreshEntry() {
+  try {
+    const res = await fetch('/version.json', { cache: 'no-store' })
+    const v = await res.json()
+    if (v && v.build) {
+      window.location.replace('/' + v.build + '/')
+      return
+    }
+  } catch { /* ignore，落到下面的兜底 */ }
   try {
     const url = new URL(window.location.href)
     url.searchParams.set('_cb', String(Date.now()))
@@ -16,6 +24,19 @@ function cacheBustReload() {
   } catch {
     window.location.reload(true)
   }
+}
+
+function alreadyFixedFor(build) {
+  try {
+    return sessionStorage.getItem('qf_last_fix') === build
+  } catch {
+    return false
+  }
+}
+function markFixedFor(build) {
+  try {
+    sessionStorage.setItem('qf_last_fix', build || '')
+  } catch { /* ignore */ }
 }
 
 export default class ErrorBoundary extends Component {
@@ -32,11 +53,17 @@ export default class ErrorBoundary extends Component {
     // eslint-disable-next-line no-console
     console.error('[ErrorBoundary]', error, info)
     try {
-      const alreadyBusted = new URL(window.location.href).searchParams.has('_cb')
-      if (!alreadyBusted) {
-        // 延迟一点，确保用户能看到「正在修复」提示；旧 bundle 引发的错误会被这次刷新彻底解决
-        setTimeout(cacheBustReload, 700)
-      }
+      fetch('/version.json', { cache: 'no-store' })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((v) => {
+          const build = v && v.build
+          if (build && !alreadyFixedFor(build)) {
+            markFixedFor(build)
+            // 延迟一点，确保用户能看到「正在修复」提示
+            setTimeout(goFreshEntry, 700)
+          }
+        })
+        .catch(() => {})
     } catch {
       /* ignore */
     }
@@ -44,13 +71,6 @@ export default class ErrorBoundary extends Component {
 
   render() {
     if (this.state.error) {
-      const alreadyBusted = (() => {
-        try {
-          return new URL(window.location.href).searchParams.has('_cb')
-        } catch {
-          return false
-        }
-      })()
       return (
         <div
           style={{
@@ -77,16 +97,10 @@ export default class ErrorBoundary extends Component {
             <div style={{ fontSize: 13, color: '#7f1d1d', whiteSpace: 'pre-wrap', marginBottom: 12 }}>
               {String(this.state.error?.message || this.state.error)}
             </div>
-            {alreadyBusted ? (
-              <div className="qf-hint" style={{ marginBottom: 12 }}>
-                已尝试刷新到最新版本仍报错，可能是新代码的真实异常。请检查网络或联系管理员。
-              </div>
-            ) : (
-              <div className="qf-hint" style={{ marginBottom: 12 }}>
-                检测到可能是「陈旧缓存的旧代码」导致，正在自动刷新到最新版本…
-              </div>
-            )}
-            <button className="qf-btn qf-btn-primary" onClick={cacheBustReload}>
+            <div className="qf-hint" style={{ marginBottom: 12 }}>
+              检测到可能是「陈旧缓存的旧代码」导致，可点击下方按钮强制跳转到最新版本。
+            </div>
+            <button className="qf-btn qf-btn-primary" onClick={goFreshEntry}>
               立即强制刷新
             </button>
           </div>
