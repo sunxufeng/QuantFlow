@@ -189,6 +189,13 @@ export const factorAnalyze = (payload) => request('/factors/analyze', {
   body: JSON.stringify(payload),
 })
 
+// ---- V2.5 因子评分 ----
+export const factorScoringCatalog = () => request('/factors/scoring/catalog')
+export const factorScore = (payload) => request('/factors/scoring/score', {
+  method: 'POST',
+  body: JSON.stringify(payload),
+})
+
 // ---- 通知渠道配置（V1.1 N5）----
 export const notificationsList = () => request('/notifications')
 export const notificationsCreate = (channel) => request('/notifications', {

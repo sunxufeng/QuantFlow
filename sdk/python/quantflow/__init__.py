@@ -22,4 +22,4 @@ from __future__ import annotations
 from .client import QuantFlowClient, QuantFlowError
 
 __all__ = ["QuantFlowClient", "QuantFlowError"]
-__version__ = "0.3.0"
+__version__ = "0.4.0"
