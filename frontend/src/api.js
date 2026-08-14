@@ -159,6 +159,7 @@ export const createAlert = (payload) => request('/alerts', { method: 'POST', bod
 export const deleteAlert = (id) => request(`/alerts/${id}`, { method: 'DELETE' })
 export const toggleAlert = (id, payload) => request(`/alerts/${id}/toggle`, { method: 'POST', body: JSON.stringify(payload) })
 export const evaluateAlerts = () => request('/alerts/evaluate', { method: 'POST' })
+export const alertSchedulerStatus = () => request('/alerts/scheduler')
 
 // ---- 自选股监控 / 行情看板（V2.4）----
 export const getWatchlist = () => request('/market/watchlist')

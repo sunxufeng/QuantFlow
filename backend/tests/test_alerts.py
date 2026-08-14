@@ -126,3 +126,11 @@ def test_cross_operators():
     res_down = alert_service.evaluate_all()
     down = next(r for r in res_down if r["id"] == r_down["id"])
     assert down["triggered"] is False
+
+
+def test_alert_scheduler_status():
+    resp = client.get("/api/alerts/scheduler")
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert "running" in body and isinstance(body["running"], bool)
+    assert "interval_minutes" in body and isinstance(body["interval_minutes"], int)
