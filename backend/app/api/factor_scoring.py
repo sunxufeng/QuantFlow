@@ -16,6 +16,8 @@ from pydantic import BaseModel, Field
 
 from ..core.auth import get_current_user
 from ..factors import research as factor_research
+from ..factors import multifactor as multifactor_module
+from ..factors.multifactor import multifactor_backtest
 from ..factors.registry import FactorNotFoundError, list_factors
 from ..factors.scoring import FactorScoreConfigError, score
 
@@ -121,3 +123,44 @@ def research_ranking(
         metric=metric,
         order=order,
     )
+
+
+# --------------------------------------------------------------------------- #
+# 多因子组合回测闭环（V4.2）
+# --------------------------------------------------------------------------- #
+class FactorWeight(BaseModel):
+    name: str = Field(..., description="因子名（展示用）")
+    expression: str = Field(..., description="因子表达式（仅用真实行情列 open/high/low/close/volume）")
+    weight: float = Field(1.0, description="权重（内部自动归一化）")
+
+
+class MultiFactorRequest(BaseModel):
+    symbol: str = Field(..., description="回测标的")
+    start: str = Field(..., description="起始日期 YYYY-MM-DD")
+    end: str = Field(..., description="结束日期 YYYY-MM-DD")
+    factors: List[FactorWeight] = Field(..., min_length=1, description="因子列表（含权重）")
+    threshold: float = Field(0.0, description="综合分阈值：>阈值满仓，否则空仓")
+    initial_cash: float = Field(1_000_000.0, gt=0, description="初始资金")
+
+
+@router.post("/research/multifactor", summary="多因子组合回测闭环（V4.2）")
+def research_multifactor(payload: MultiFactorRequest) -> dict:
+    """把多个因子按权重合成为综合信号并回测，形成研究→合成→回测闭环。
+
+    综合分 = 各因子列 winsorize + 全局 zscore 后按权重求和；综合分 > 阈值则满仓。
+    返回绩效指标、综合分/仓位序列与所用因子权重，可衔接 V3.2 因子排行榜选出的高分因子。
+    """
+    if payload.end < payload.start:
+        raise HTTPException(status_code=422, detail="end 不得早于 start")
+    try:
+        return multifactor_backtest(
+            symbol=payload.symbol,
+            start=payload.start,
+            end=payload.end,
+            factors=[f.model_dump() for f in payload.factors],
+            threshold=payload.threshold,
+            initial_cash=payload.initial_cash,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+

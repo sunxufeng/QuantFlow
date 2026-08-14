@@ -11,7 +11,7 @@ if PROXY:
 
 REPO_ROOT = "/Users/sunxufeng/WorkBuddy/2026-08-12-14-19-17/quantflow"
 BASE = "18fbbe8"
-MESSAGE = "feat(v4.1): 风险归因面板——metrics.attribution 新增风险层(年化波动/下行波动/索提诺)与交易收益分解(盈/亏平仓贡献)，前端回测详情展示风险卡片+水下回撤曲线+盈亏分解 (4.1.0)"
+MESSAGE = "feat(v4.2): 多因子组合回测闭环——/factors/research/multifactor 按权重 winsorize+zscore 合成综合信号并回测，前端因子库新增『多因子组合』面板(因子权重表+综合分/仓位图) (4.2.0)"
 
 
 def api(method, path, data=None, retries=6):
