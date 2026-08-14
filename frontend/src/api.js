@@ -86,6 +86,12 @@ export const importWorkflow = (workflow) => request('/workflows/import', {
   method: 'POST',
   body: JSON.stringify(workflow),
 })
+// ---- V3.0 AI 策略工作台：自然语言生成工作流 ----
+export const generateWorkflow = (prompt, useLlm = true) =>
+  request('/workflows/generate', {
+    method: 'POST',
+    body: JSON.stringify({ prompt, use_llm: useLlm }),
+  })
 export const exportWorkflow = (id) => request(`/workflows/${id}/export`)
 export const fetchWorkflowVersions = (id) => request(`/workflows/${id}/versions`)
 export const createWorkflowVersion = (id, label) => request(`/workflows/${id}/versions`, {
