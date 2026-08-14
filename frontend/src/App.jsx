@@ -228,7 +228,7 @@ function VersionHistoryModal({ workflowId, onClose, onRestore, setError }) {
   )
 }
 
-function Canvas({ projectId, pendingTemplate, onTemplateConsumed }) {
+function Canvas({ projectId, pendingTemplate, onTemplateConsumed, setView }) {
   const [specs, setSpecs] = useState([])
   const [nodes, setNodes, onNodesChange] = useNodesState([])
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
@@ -1040,6 +1040,7 @@ export default function App() {
               projectId={projectId}
               pendingTemplate={pendingTemplate}
               onTemplateConsumed={() => setPendingTemplate(null)}
+              setView={setView}
             />
           )}
           {view === 'chart' && <ChartView />}
