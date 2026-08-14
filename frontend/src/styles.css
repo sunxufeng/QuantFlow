@@ -257,6 +257,7 @@
 .qf-result h3, .qf-runs h3 { margin: 0; font-size: 13px; color: var(--text); }
 .qf-error { color: var(--err); font-size: 12px; white-space: pre-wrap; margin: 4px 0; }
 .qf-busy { color: var(--warn); font-size: 12px; }
+.qf-success { color: #16a34a; font-size: 12px; margin: 4px 0; }
 .qf-run-meta { font-size: 12px; color: #475569; margin-bottom: 8px; }
 .qf-run-succeeded { color: #16a34a; }
 .qf-run-failed { color: var(--err); }

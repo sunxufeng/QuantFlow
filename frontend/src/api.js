@@ -151,6 +151,10 @@ export const fetchBars = (symbol, start, end) => request(
 )
 export const marketSyncStatus = () => request('/market/sync/status')
 export const marketSyncNow = () => request('/market/sync', { method: 'POST' })
+// ---- V5.0 行情缓存 / 数据源管理 ----
+export const marketCache = () => request('/market/cache')
+export const marketRefresh = (payload = {}) =>
+  request('/market/cache/refresh', { method: 'POST', body: JSON.stringify(payload) })
 
 // ---- 回测报告中心（V1.6）----
 export const backtestReports = () => request('/backtest/reports')

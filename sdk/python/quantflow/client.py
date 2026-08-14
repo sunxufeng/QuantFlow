@@ -123,6 +123,27 @@ class QuantFlowClient:
     def sync_now(self) -> Dict:
         return self._request("POST", "/market/sync")
 
+    # ---- V5.0 行情缓存 / 数据源管理 ----
+    def market_cache(self) -> Dict:
+        """行情缓存与数据源快照（V5.0）：数据源模式、缓存后端、各标的中继情况。"""
+        return self._request("GET", "/market/cache")
+
+    def market_refresh(
+        self,
+        symbols: Optional[List[str]] = None,
+        start: Optional[str] = None,
+        end: Optional[str] = None,
+    ) -> Dict:
+        """强制从数据源重新拉取并落库（V5.0）。tushare 源需显式指定 symbols。"""
+        payload: Dict[str, Any] = {}
+        if symbols is not None:
+            payload["symbols"] = symbols
+        if start is not None:
+            payload["start"] = start
+        if end is not None:
+            payload["end"] = end
+        return self._request("POST", "/market/cache/refresh", json=payload or None)
+
     # ------------------------------------------------------------------ #
     # 项目（M4）
     # ------------------------------------------------------------------ #

@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import datetime as dt
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 
 from ..core.auth import get_current_user
 from ..core.data import to_serializable
@@ -64,6 +66,32 @@ def sync_status() -> dict:
 @router.post("/sync", summary="手动触发行情同步（V1.1 N4）", status_code=202)
 def sync_trigger(user: dict = Depends(get_current_user)) -> dict:
     return data_sync_service.run_once()
+
+
+# --------------------------------------------------------------------------- #
+# 行情缓存 / 数据源管理（V5.0）
+# --------------------------------------------------------------------------- #
+@router.get("/cache", summary="行情缓存与数据源快照（V5.0）")
+def cache_snapshot() -> dict:
+    return market_service.cache_summary()
+
+
+class CacheRefreshRequest(BaseModel):
+    symbols: Optional[List[str]] = None
+    start: Optional[str] = None
+    end: Optional[str] = None
+
+
+@router.post("/cache/refresh", summary="强制从数据源重新拉取并落库（V5.0）", status_code=200)
+def cache_refresh(
+    req: CacheRefreshRequest,
+    user: dict = Depends(get_current_user),
+) -> dict:
+    try:
+        return market_service.refresh(symbols=req.symbols, start=req.start, end=req.end)
+    except DataSourceError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
 
 
 # --------------------------------------------------------------------------- #
