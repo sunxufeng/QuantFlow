@@ -305,6 +305,9 @@ export const updateSettings = (prefs = {}) => request('/settings', {
   body: JSON.stringify(prefs),
 })
 
+// ---- V7.0 投研工作区总览快照 ----
+export const fetchWorkspace = () => request('/workspace')
+
 // ---- V6.2 批量导出中心 ----
 export const exportData = (resource, format = 'json') =>
   fetch(`/api/export?resource=${encodeURIComponent(resource)}&format=${encodeURIComponent(format)}`, {
