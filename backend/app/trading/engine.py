@@ -298,6 +298,7 @@ def get_order(user_id: str, order_id: str):
 def summary(user_id: str):
     _store.init()
     cash = _store.get_cash(user_id)
+    initial_cash = _store.get_initial_cash(user_id)
     positions = _store.list_positions(user_id)
     market_value = 0.0
     for p in positions:
@@ -334,7 +335,7 @@ def summary(user_id: str):
         day = time.strftime("%Y-%m-%d", time.localtime(float(s["ts"])))
         daily[day] = round(float(s["equity"]), 2)
     daily_pnl = []
-    prev = _INITIAL_CASH
+    prev = initial_cash
     for d in sorted(daily.keys()):
         eq = daily[d]
         daily_pnl.append({"date": d, "pnl": round(eq - prev, 2)})
@@ -352,7 +353,7 @@ def summary(user_id: str):
         "open_orders": len(open_orders),
         "equity_curve": equity_curve,
         "daily_pnl": daily_pnl,
-        "initial_cash": _INITIAL_CASH,
+        "initial_cash": round(initial_cash, 2),
     }
 
 
@@ -361,8 +362,9 @@ def analytics(user_id: str):
     _store.init()
     s = summary(user_id)
     curve = s["equity_curve"]
+    initial_cash = float(s.get("initial_cash") or _INITIAL_CASH)
     # 最大回撤（基于权益曲线）
-    peak = _INITIAL_CASH
+    peak = initial_cash
     max_dd = 0.0
     max_dd_amt = 0.0
     for pt in curve:

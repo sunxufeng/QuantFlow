@@ -144,6 +144,18 @@ class QuantFlowClient:
             payload["end"] = end
         return self._request("POST", "/market/cache/refresh", json=payload or None)
 
+    # ---- V6.0 模拟交易账户（paper，纯本地） ----
+    def trading_account(self) -> Dict:
+        """账户概览（V6.0）：初始资金（可配置）、当前现金/权益与持仓/挂单数。"""
+        return self._request("GET", "/trading/account")
+
+    def trading_reset(self, initial_cash: Optional[float] = None) -> Dict:
+        """重置模拟账户；initial_cash 可指定新的账户初始资金并持久化（V6.0）。"""
+        payload: Dict[str, Any] = {}
+        if initial_cash is not None:
+            payload["initial_cash"] = initial_cash
+        return self._request("DELETE", "/trading/reset", json=payload or None)
+
     # ------------------------------------------------------------------ #
     # 项目（M4）
     # ------------------------------------------------------------------ #

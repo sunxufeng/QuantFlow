@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from ..core.auth import get_current_user
@@ -28,6 +28,10 @@ class OrderIn(BaseModel):
 
 class SimulateIn(BaseModel):
     price_overrides: Dict[str, float] = {}
+
+
+class ResetIn(BaseModel):
+    initial_cash: Optional[float] = None
 
 
 @router.get("/trading/mode")
@@ -55,6 +59,22 @@ def place_live(payload: OrderIn, user: Dict[str, Any] = Depends(get_current_user
 @router.get("/trading/summary")
 def get_summary(user: Dict[str, Any] = Depends(get_current_user)):
     return engine.summary(user["id"])
+
+
+@router.get("/trading/account")
+def get_account(user: Dict[str, Any] = Depends(get_current_user)):
+    """V6.0 账户概览：初始资金（可配置）、当前现金/权益与持仓/挂单数。"""
+    s = engine.summary(user["id"])
+    return {
+        "initial_cash": s["initial_cash"],
+        "cash": s["cash"],
+        "market_value": s["market_value"],
+        "equity": s["equity"],
+        "realized_pnl": s["realized_pnl"],
+        "position_count": s["position_count"],
+        "open_orders": s["open_orders"],
+        "total_fees": s["total_fees"],
+    }
 
 
 @router.get("/trading/analytics")
@@ -93,9 +113,13 @@ def simulate(payload: SimulateIn, user: Dict[str, Any] = Depends(get_current_use
 
 
 @router.delete("/trading/reset")
-def reset(user: Dict[str, Any] = Depends(get_current_user)):
-    engine._store.reset(user["id"])
-    return {"ok": True}
+def reset(payload: ResetIn = None, user: Dict[str, Any] = Depends(get_current_user)):
+    """重置模拟账户；``initial_cash`` 可指定新的账户初始资金并持久化（V6.0）。"""
+    initial = payload.initial_cash if payload else None
+    if initial is not None and initial <= 0:
+        raise HTTPException(status_code=400, detail="initial_cash 必须为正数")
+    effective = engine._store.reset(user["id"], initial)
+    return {"ok": True, "initial_cash": effective}
 
 
 def _serialize(order: Optional[dict]) -> Optional[dict]:
