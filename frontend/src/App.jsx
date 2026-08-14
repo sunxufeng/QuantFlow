@@ -20,7 +20,7 @@ import Notifications from './Notifications.jsx'
 import LLMAssistant from './LLMAssistant.jsx'
 import LLMSettings from './LLMSettings.jsx'
 import Templates from './Templates.jsx'
-import AuthModal from './AuthModal.jsx'
+import Sidebar from './Sidebar.jsx'
 import BacktestResultView from './BacktestResultView.jsx'
 import BacktestReports from './BacktestReports.jsx'
 import BrokerSettings from './BrokerSettings.jsx'
@@ -748,8 +748,8 @@ function Canvas({ projectId, pendingTemplate, onTemplateConsumed }) {
 export default function App() {
   const [view, setView] = useState('editor')
   const [user, setUser] = useState(null)
-  const [authOpen, setAuthOpen] = useState(false)
   const [projects, setProjects] = useState([])
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [projectId, setProjectId] = useState('')
   const [pendingTemplate, setPendingTemplate] = useState(null)
 
@@ -834,130 +834,46 @@ export default function App() {
 
   return (
     <ReactFlowProvider>
-      <div className="qf-topbar">
-        <span className="qf-logo">⚡ QuantFlow</span>
-        <span className="qf-sub">量化工作流平台 · M4 业务能力</span>
-        <nav className="qf-nav">
-          <button
-            className={`qf-nav-btn ${view === 'editor' ? 'qf-nav-active' : ''}`}
-            onClick={() => setView('editor')}
-          >
-            工作流编辑器
-          </button>
-          <button
-            className={`qf-nav-btn ${view === 'chart' ? 'qf-nav-active' : ''}`}
-            onClick={() => setView('chart')}
-          >
-            行情图表
-          </button>
-          <button
-            className={`qf-nav-btn ${view === 'monitor' ? 'qf-nav-active' : ''}`}
-            onClick={() => setView('monitor')}
-          >
-            系统监控
-          </button>
-          <button
-            className={`qf-nav-btn ${view === 'factor' ? 'qf-nav-active' : ''}`}
-            onClick={() => setView('factor')}
-          >
-            因子库
-          </button>
-          <button
-            className={`qf-nav-btn ${view === 'notify' ? 'qf-nav-active' : ''}`}
-            onClick={() => setView('notify')}
-          >
-            通知渠道
-          </button>
-          <button
-            className={`qf-nav-btn ${view === 'llm' ? 'qf-nav-active' : ''}`}
-            onClick={() => setView('llm')}
-          >
-            LLM 助手
-          </button>
-          <button
-            className={`qf-nav-btn ${view === 'settings' ? 'qf-nav-active' : ''}`}
-            onClick={() => setView('settings')}
-          >
-            LLM 配置
-          </button>
-          <button
-            className={`qf-nav-btn ${view === 'templates' ? 'qf-nav-active' : ''}`}
-            onClick={() => setView('templates')}
-          >
-            模板库
-          </button>
-          <button
-            className={`qf-nav-btn ${view === 'reports' ? 'qf-nav-active' : ''}`}
-            onClick={() => setView('reports')}
-          >
-            回测报告
-          </button>
-          {user?.role === 'admin' && (
-            <button
-              className={`qf-nav-btn ${view === 'broker' ? 'qf-nav-active' : ''}`}
-              onClick={() => setView('broker')}
-            >
-              券商设置
-            </button>
-          )}
-        </nav>
-        <div className="qf-topbar-right">
-          {user && (
-            <>
-              <select
-                className="qf-project-select"
-                value={projectId}
-                onChange={(e) => setProjectId(e.target.value)}
-                aria-label="切换项目"
-                title="切换项目"
-              >
-                <option value="">未分组（全局）</option>
-                {projects.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}（{p.member_count} 人）
-                  </option>
-                ))}
-              </select>
-              <button className="qf-btn qf-btn-sm" onClick={handleCreateProject} title="新建项目">＋ 项目</button>
-              <button className="qf-btn qf-btn-sm" onClick={handleDeleteProject} disabled={!projectId} title="删除当前项目">🗑</button>
-              <span className="qf-user-chip" title={`${user.username} · ${user.role}`}>
-                {user.username}
-                <em>{user.role === 'admin' ? '管理员' : user.role}</em>
-              </span>
-              <button className="qf-btn qf-btn-sm" onClick={handleLogout}>退出</button>
-            </>
-          )}
-          {!user && (
-            <button className="qf-btn qf-btn-sm" onClick={() => setAuthOpen(true)}>登录 / 注册</button>
-          )}
-        </div>
-      </div>
-      {view === 'editor' && (
-        <Canvas
+      <div className="qf-app-shell">
+        <Sidebar
+          collapsed={sidebarCollapsed}
+          setCollapsed={setSidebarCollapsed}
+          view={view}
+          setView={setView}
+          user={user}
+          projects={projects}
           projectId={projectId}
-          pendingTemplate={pendingTemplate}
-          onTemplateConsumed={() => setPendingTemplate(null)}
+          setProjectId={setProjectId}
+          onCreateProject={handleCreateProject}
+          onDeleteProject={handleDeleteProject}
+          onLogout={handleLogout}
         />
-      )}
-      {view === 'chart' && <ChartView />}
-      {view === 'monitor' && <Monitoring />}
-      {view === 'factor' && <FactorLibrary />}
-      {view === 'notify' && <Notifications />}
-      {view === 'llm' && <LLMAssistant />}
-      {view === 'settings' && <LLMSettings />}
-      {view === 'templates' && (
-        <Templates
-          onApply={(tpl) => {
-            setPendingTemplate(tpl)
-            setView('editor')
-          }}
-        />
-      )}
-      {view === 'reports' && <BacktestReports />}
-      {view === 'broker' && <BrokerSettings />}
-      {authOpen && (
-        <AuthModal onClose={() => setAuthOpen(false)} onAuthed={handleAuthed} />
-      )}
+        <main className="qf-main">
+          {view === 'editor' && (
+            <Canvas
+              projectId={projectId}
+              pendingTemplate={pendingTemplate}
+              onTemplateConsumed={() => setPendingTemplate(null)}
+            />
+          )}
+          {view === 'chart' && <ChartView />}
+          {view === 'monitor' && <Monitoring />}
+          {view === 'factor' && <FactorLibrary />}
+          {view === 'notify' && <Notifications />}
+          {view === 'llm' && <LLMAssistant />}
+          {view === 'settings' && <LLMSettings />}
+          {view === 'templates' && (
+            <Templates
+              onApply={(tpl) => {
+                setPendingTemplate(tpl)
+                setView('editor')
+              }}
+            />
+          )}
+          {view === 'reports' && <BacktestReports />}
+          {view === 'broker' && <BrokerSettings />}
+        </main>
+      </div>
     </ReactFlowProvider>
   )
 }

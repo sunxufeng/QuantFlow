@@ -30,10 +30,25 @@
 .qf-nav-btn:hover { background: rgba(255,255,255,.08); }
 .qf-nav-active { background: rgba(99,102,241,.35); color: #fff; }
 
+/* ---------- 应用外壳（左侧边栏 + 主内容） ---------- */
+.qf-app-shell {
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+}
+.qf-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #f8fafc;
+}
+
 /* ---------- 布局 ---------- */
 .qf-layout {
   display: flex;
-  height: calc(100% - 48px);
+  height: 100%;
 }
 .qf-center { flex: 1; display: flex; flex-direction: column; min-width: 0; }
 .qf-canvas-wrap { flex: 1; position: relative; }
@@ -229,7 +244,7 @@
 .qf-run-item-meta { font-size: 10px; color: #94a3b8; }
 
 /* ---------- 行情图表页 ---------- */
-.qf-chart-view { height: calc(100% - 48px); display: flex; flex-direction: column; padding: 12px 16px; gap: 8px; }
+.qf-chart-view { height: 100%; display: flex; flex-direction: column; padding: 12px 16px; gap: 8px; }
 .qf-chart-toolbar { display: flex; align-items: center; gap: 10px; }
 .qf-chart-toolbar select {
   padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; min-width: 220px;
@@ -291,7 +306,7 @@
 .qf-ver-save { display: flex; gap: 8px; margin-top: 6px; }
 
 /* 监控页 */
-.qf-monitor { height: calc(100% - 48px); overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 16px; }
+.qf-monitor { height: 100%; overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 16px; }
 .qf-toolbar-title { font-weight: 600; font-size: 13px; color: var(--text); }
 .qf-mcards { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
 .qf-mcard {
@@ -371,7 +386,7 @@
   .qf-topbar-right { flex-wrap: wrap; gap: 6px; }
 
   /* 编辑器三栏改为纵向堆叠，全部满宽 */
-  .qf-layout { flex-direction: column; height: auto; min-height: calc(100% - 48px); }
+  .qf-layout { flex-direction: column; height: 100%; min-height: 100%; }
   .qf-center { min-height: 0; }
 
   /* 组件面板改为可横向滚动的网格条 */
