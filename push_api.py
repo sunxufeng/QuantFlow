@@ -11,7 +11,7 @@ if PROXY:
 
 REPO_ROOT = "/Users/sunxufeng/WorkBuddy/2026-08-12-14-19-17/quantflow"
 BASE = "18fbbe8"
-MESSAGE = "feat(v2.3): 预警规则引擎——行情条件评估+通知+冷却去重 (2.9.0)"
+MESSAGE = "feat(v2.4): 行情看板与自选股监控（含模拟实时跳动） (2.10.0)"
 
 
 def api(method, path, data=None, retries=6):

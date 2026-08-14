@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import datetime as dt
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ..core.auth import get_current_user
 from ..core.data import to_serializable
+from ..core.db import db
 from ..market.models import bars_to_table
 from ..market.scheduler import data_sync_service
 from ..market.service import market_service
@@ -16,6 +19,10 @@ router = APIRouter(
     tags=["market"],
     dependencies=[Depends(get_current_user)],
 )
+
+
+def _today() -> str:
+    return dt.date.today().isoformat()
 
 
 @router.get("/instruments", summary="可用标的列表")
@@ -57,3 +64,65 @@ def sync_status() -> dict:
 @router.post("/sync", summary="手动触发行情同步（V1.1 N4）", status_code=202)
 def sync_trigger(user: dict = Depends(get_current_user)) -> dict:
     return data_sync_service.run_once()
+
+
+# --------------------------------------------------------------------------- #
+# 自选股监控 / 行情看板（V2.4）
+# --------------------------------------------------------------------------- #
+@router.get("/watchlist", summary="自选股列表")
+def get_watchlist() -> dict:
+    rows = db.query("SELECT symbol FROM watchlists ORDER BY added_at DESC, symbol")
+    return {"items": [r["symbol"] for r in rows]}
+
+
+@router.post("/watchlist", summary="添加自选股", status_code=201)
+def add_watchlist(symbol: str = Query(..., description="标的代码")):
+    sym = symbol.strip().upper()
+    if not sym:
+        raise HTTPException(status_code=422, detail="symbol 不能为空")
+    now = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    db.execute(
+        "INSERT OR IGNORE INTO watchlists (symbol, added_at) VALUES (?, ?)",
+        (sym, now),
+    )
+    return {"symbol": sym, "added": True}
+
+
+@router.delete("/watchlist/{symbol}", summary="移除自选股", status_code=204)
+def remove_watchlist(symbol: str) -> None:
+    db.execute("DELETE FROM watchlists WHERE symbol = ?", (symbol.strip().upper(),))
+
+
+@router.get("/quotes", summary="批量行情快照（最新价 + 当日涨跌）")
+def get_quotes(symbols: str = Query(..., description="逗号分隔的标的，如 TEST.STOCK,TEST.BANK")):
+    out = []
+    for raw in symbols.split(","):
+        sym = raw.strip().upper()
+        if not sym:
+            continue
+        try:
+            bars = market_service.bars(sym, "2000-01-01", _today())
+        except DataSourceError:
+            bars = []
+        if not bars:
+            out.append({"symbol": sym, "error": "无行情数据"})
+            continue
+        last = bars[-1]
+        prev_close = bars[-2].close if len(bars) >= 2 else None
+        change_pct = (
+            (last.close - prev_close) / prev_close * 100.0
+            if prev_close and prev_close > 0
+            else None
+        )
+        out.append({
+            "symbol": sym,
+            "date": last.date,
+            "last": last.close,
+            "prev_close": prev_close,
+            "change_pct": round(change_pct, 4) if change_pct is not None else None,
+            "open": last.open,
+            "high": last.high,
+            "low": last.low,
+            "volume": last.volume,
+        })
+    return {"items": out}

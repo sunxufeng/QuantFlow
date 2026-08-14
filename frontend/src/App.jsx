@@ -27,6 +27,7 @@ import DataSync from './DataSync.jsx'
 import BacktestResultView from './BacktestResultView.jsx'
 import BacktestReports from './BacktestReports.jsx'
 import Alerts from './Alerts.jsx'
+import MarketBoard from './MarketBoard.jsx'
 import BrokerSettings from './BrokerSettings.jsx'
 import LoginScreen from './LoginScreen.jsx'
 import { useGraphHistory } from './useHistory.js'
@@ -879,6 +880,7 @@ export default function App() {
           )}
           {view === 'reports' && <BacktestReports />}
           {view === 'alerts' && <Alerts />}
+          {view === 'board' && <MarketBoard />}
           {view === 'trade' && <Trading onNavigate={setView} />}
           {view === 'broker' && <BrokerSettings />}
           {view === 'data' && <DataSync />}
