@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { backtestReport, backtestReports, exportBacktestReport } from './api.js'
+import { backtestReport, backtestReports, exportBacktestReport, patchReport, reportTags } from './api.js'
 import FuturesBacktest from './FuturesBacktest.jsx'
 import Optimizer from './Optimizer.jsx'
 
@@ -67,6 +67,11 @@ export default function BacktestReports() {
   const [compareId, setCompareId] = useState(null)
   const [compare, setCompare] = useState(null)
   const [tab, setTab] = useState('reports')
+  const [allTags, setAllTags] = useState([])
+  const [tagFilter, setTagFilter] = useState('')
+  const [editTags, setEditTags] = useState('')
+  const [editNotes, setEditNotes] = useState('')
+  const [savingTag, setSavingTag] = useState(false)
 
   const refresh = useCallback(() => {
     setLoading(true)
@@ -77,16 +82,39 @@ export default function BacktestReports() {
       .finally(() => setLoading(false))
   }, [])
 
-  useEffect(() => { refresh() }, [refresh])
+  useEffect(() => {
+    refresh()
+    reportTags().then((r) => setAllTags((r.items || []).map((it) => it[0]))).catch(() => {})
+  }, [refresh])
 
   const openDetail = useCallback((runId) => {
     setDetailLoading(true)
     setDetail(null)
     backtestReport(runId)
-      .then(setDetail)
+      .then((d) => {
+        setDetail(d)
+        setEditTags((d.tags || []).join(', '))
+        setEditNotes(d.notes || '')
+      })
       .catch((e) => setError(`报告加载失败: ${e.message}`))
       .finally(() => setDetailLoading(false))
   }, [])
+
+  const saveMeta = useCallback(() => {
+    if (!detail) return
+    setSavingTag(true)
+    const tags = editTags.split(',').map((t) => t.trim()).filter(Boolean)
+    patchReport(detail.run_id, { tags, notes: editNotes })
+      .then((d) => {
+        setDetail(d)
+        setEditTags((d.tags || []).join(', '))
+        setEditNotes(d.notes || '')
+        return refresh()
+      })
+      .then(() => reportTags().then((r) => setAllTags((r.items || []).map((it) => it[0]))).catch(() => {}))
+      .catch((e) => setError(`保存失败: ${e.message}`))
+      .finally(() => setSavingTag(false))
+  }, [detail, editTags, editNotes, refresh])
 
   const toggleCompare = useCallback((runId) => {
     if (compareId === runId) {
@@ -122,6 +150,18 @@ export default function BacktestReports() {
       {error && <div className="qf-error">{error}</div>}
       {loading && <div className="qf-busy">加载中…</div>}
 
+      {tab === 'reports' && allTags.length > 0 && (
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', margin: '8px 0' }}>
+          <span className="qf-prop-label">按实验标签筛选</span>
+          <select className="qf-name-input" style={{ width: 200 }}
+            value={tagFilter} onChange={(e) => setTagFilter(e.target.value)}>
+            <option value="">全部</option>
+            {allTags.map((t) => <option key={t} value={t}>{t}</option>)}
+          </select>
+          {tagFilter && <button className="qf-btn qf-btn-sm" onClick={() => setTagFilter('')}>清除</button>}
+        </div>
+      )}
+
       {tab === 'futures' && (
         <FuturesBacktest onRun={() => refresh()} />
       )}
@@ -153,9 +193,20 @@ export default function BacktestReports() {
               </tr>
             </thead>
             <tbody>
-              {summaries.map((s) => (
+              {summaries
+                .filter((s) => !tagFilter || (s.tags || []).includes(tagFilter))
+                .map((s) => (
                 <tr key={s.run_id} className={compareId === s.run_id ? 'qf-row-active' : ''}>
-                  <td>{s.strategy}</td>
+                  <td>
+                    {s.strategy}
+                    {(s.tags || []).length > 0 && (
+                      <div style={{ marginTop: 4, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                        {s.tags.map((t) => (
+                          <span key={t} className="qf-tag" style={{ background: '#6366f1', color: '#fff' }}>{t}</span>
+                        ))}
+                      </div>
+                    )}
+                  </td>
                   <td>{(s.symbols || []).join(', ')}</td>
                   <td className="qf-hint">{s.start_date} ~ {s.end_date}</td>
                   <td className={Number(s.total_return) >= 0 ? 'qf-up' : 'qf-down'}>{fmtPct(s.total_return)}</td>
@@ -186,6 +237,30 @@ export default function BacktestReports() {
             </span>
           </div>
           <MetricCards m={detail.metrics} />
+          <div className="qf-an-title">实验标签与备注（V9.0）</div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-start', marginBottom: 8 }}>
+            <label className="qf-prop-field" style={{ margin: 0, flex: 1, minWidth: 220 }}>
+              <span className="qf-prop-label">标签（逗号分隔，如 基线,参数组A）</span>
+              <input className="qf-name-input" value={editTags}
+                onChange={(e) => setEditTags(e.target.value)} placeholder="基线, 参数组A" />
+            </label>
+            <button className="qf-btn qf-btn-primary qf-btn-sm" onClick={saveMeta} disabled={savingTag}>
+              {savingTag ? '保存中…' : '保存标签/备注'}
+            </button>
+          </div>
+          <label className="qf-prop-field" style={{ margin: 0, display: 'block' }}>
+            <span className="qf-prop-label">备注</span>
+            <textarea className="qf-name-input" value={editNotes} rows={2}
+              onChange={(e) => setEditNotes(e.target.value)}
+              placeholder="记录本次实验的设计意图、参数选择、结论…" style={{ width: '100%' }} />
+          </label>
+          {(detail.tags || []).length > 0 && (
+            <div style={{ marginTop: 6, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+              {detail.tags.map((t) => (
+                <span key={t} className="qf-tag" style={{ background: '#6366f1', color: '#fff' }}>{t}</span>
+              ))}
+            </div>
+          )}
           <div className="qf-an-title">净值曲线</div>
           <EquityChart curve={detail.equity_curve} />
           <div className="qf-hint">

@@ -212,6 +212,9 @@ CREATE TABLE IF NOT EXISTS workflow_templates (
     updated_at  TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_workflow_templates_owner ON workflow_templates(owner_id);
+-- 注意：is_public 列及 idx_workflow_templates_public 索引由 TemplateStore._ensure()
+-- 惰性补齐（ALTER TABLE ADD COLUMN），避免对「已存在旧表」重复执行 CREATE TABLE 时
+-- 因列缺失导致 CREATE INDEX 失败。详见 core/template_store.py。
 
 """
 

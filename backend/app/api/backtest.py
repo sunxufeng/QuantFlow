@@ -269,6 +269,8 @@ def list_reports() -> dict:
                 "symbols": r.get("symbols"),
                 "start_date": r.get("start_date"),
                 "end_date": r.get("end_date"),
+                "tags": r.get("tags") or [],
+                "notes": r.get("notes") or "",
                 "total_return": m.get("total_return"),
                 "annual_return": m.get("annual_return"),
                 "sharpe": m.get("sharpe"),
@@ -286,6 +288,34 @@ def get_report(run_id: str) -> dict:
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return _normalize_report(r)
+
+
+class ReportPatchRequest(BaseModel):
+    tags: Optional[List[str]] = Field(None, description="实验标签（如 基线/参数组A）")
+    notes: Optional[str] = Field(None, description="实验备注")
+
+
+@router.patch("/reports/{run_id}", summary="更新报告标签/备注（V9.0 实验追踪）")
+def patch_report(run_id: str, body: ReportPatchRequest) -> dict:
+    try:
+        return report_store.patch(run_id, tags=body.tags, notes=body.notes)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get("/tags", summary="回测实验标签全集（V9.0）")
+def list_tags() -> dict:
+    """聚合所有报告的标签，供前端筛选。"""
+    ids = report_store.list()
+    tag_set: Dict[str, int] = {}
+    for rid in ids:
+        try:
+            r = report_store.load(rid)
+        except Exception:
+            continue
+        for t in (r.get("tags") or []):
+            tag_set[t] = tag_set.get(t, 0) + 1
+    return {"items": sorted(tag_set.items(), key=lambda kv: (-kv[1], kv[0]))}
 
 
 # --------------------------------------------------------------------------- #

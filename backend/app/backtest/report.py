@@ -103,3 +103,14 @@ class BacktestReportStore:
             key=lambda f: os.path.getmtime(os.path.join(self.report_dir, f)), reverse=True
         )
         return [os.path.splitext(f)[0] for f in files]
+
+    def patch(self, run_id: str, tags: Optional[List[str]] = None,
+              notes: Optional[str] = None) -> Dict[str, Any]:
+        """更新报告的标签/备注（V9.0 实验追踪）。返回更新后的报告。"""
+        report = self.load(run_id)
+        if tags is not None:
+            report["tags"] = list(tags)
+        if notes is not None:
+            report["notes"] = notes
+        self.save(report)
+        return report

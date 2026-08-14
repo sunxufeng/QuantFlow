@@ -79,6 +79,32 @@ class MarketService:
         return self.primary.symbols()
 
     # ------------------------------------------------------------------ #
+    # 用户行情导入（V7.1）：用户上传 CSV -> 落库，回测/行情可直接使用
+    # ------------------------------------------------------------------ #
+    def upload_bars(self, symbol: str, bars: List[Bar]) -> int:
+        """把用户上传的日线写入持久化层（source='upload'），返回写入条数。"""
+        if not bars:
+            return 0
+        written = self.repository.upsert_daily(bars)
+        # 让缓存失效（旧 provider 缓存可能已含该 symbol 的空/错误结果）
+        self.cache.delete(
+            cache_key(self.primary.name, symbol, DEFAULT_START, DEFAULT_END, "daily")
+        )
+        return written
+
+    def uploaded_symbols(self) -> List[dict]:
+        """返回所有用户导入（source='upload'）的标的快照。"""
+        return [s for s in self.repository.list_symbols() if s.get("source") == "upload"]
+
+    def delete_uploaded(self, symbol: str) -> int:
+        """删除用户导入的标的（同时清缓存）。"""
+        n = self.repository.delete_symbol(symbol)
+        self.cache.delete(
+            cache_key(self.primary.name, symbol, DEFAULT_START, DEFAULT_END, "daily")
+        )
+        return n
+
+    # ------------------------------------------------------------------ #
     # 缓存/数据源管理（V5.0）：可见性 + 强制刷新
     # ------------------------------------------------------------------ #
     def cache_summary(self) -> dict:

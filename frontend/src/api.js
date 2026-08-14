@@ -313,3 +313,53 @@ export const exportData = (resource, format = 'json') =>
   fetch(`/api/export?resource=${encodeURIComponent(resource)}&format=${encodeURIComponent(format)}`, {
     headers: { Authorization: `Bearer ${getToken() || ''}` },
   })
+
+// ---- V7.1 用户行情导入 ----
+export const uploadMarket = (payload) => request('/market/upload', {
+  method: 'POST',
+  body: JSON.stringify(payload),
+})
+export const listUploaded = () => request('/market/uploaded')
+export const deleteUploaded = (symbol) => request(`/market/uploaded/${encodeURIComponent(symbol)}`, {
+  method: 'DELETE',
+})
+
+// ---- V8.0 公共模板市场 ----
+export const templateMarket = () => request('/workflows/templates/market')
+export const shareTemplate = (id, publicFlag) => request(`/workflows/templates/${id}/share`, {
+  method: 'POST',
+  body: JSON.stringify({ public: publicFlag }),
+})
+
+// ---- V9.0 回测实验追踪（标签 / 备注）----
+export const patchReport = (runId, payload) => request(`/backtest/reports/${runId}`, {
+  method: 'PATCH',
+  body: JSON.stringify(payload),
+})
+export const reportTags = () => request('/backtest/tags')
+
+// ---- V10.0 模拟交易（paper trading，无真实券商）----
+export const tradingMode = () => request('/trading/mode')
+export const tradingLiveStatus = () => request('/trading/live/status')
+export const tradingAccount = () => request('/trading/account')
+export const tradingSummary = () => request('/trading/summary')
+export const tradingAnalytics = () => request('/trading/analytics')
+export const tradingPositions = () => request('/trading/positions')
+export const tradingOrders = (status = '') =>
+  request(`/trading/orders${status ? `?status=${status}` : ''}`)
+export const placeTradingOrder = (payload) => request('/trading/orders', {
+  method: 'POST',
+  body: JSON.stringify(payload),
+})
+export const cancelTradingOrder = (id) => request(`/trading/orders/${id}/cancel`, {
+  method: 'POST',
+})
+export const simulateTrading = (priceOverrides = {}) => request('/trading/simulate', {
+  method: 'POST',
+  body: JSON.stringify({ price_overrides: priceOverrides }),
+})
+export const resetTrading = (initialCash = null) => request('/trading/reset', {
+  method: 'DELETE',
+  body: JSON.stringify(initialCash != null ? { initial_cash: initialCash } : {}),
+})
+

@@ -38,6 +38,7 @@ import Factors from './Factors.jsx'
 import BrokerSettings from './BrokerSettings.jsx'
 import FuturesBacktest from './FuturesBacktest.jsx'
 import Optimizer from './Optimizer.jsx'
+import MarketData from './MarketData.jsx'
 import LoginScreen from './LoginScreen.jsx'
 import { useGraphHistory } from './useHistory.js'
 import {
@@ -1067,6 +1068,7 @@ export default function App() {
           {view === 'data' && <DataSync />}
           {view === 'futures' && <FuturesBacktest />}
           {view === 'optimizer' && <Optimizer />}
+          {view === 'market' && <MarketData />}
          </ErrorBoundary>
         </main>
       </div>

@@ -174,7 +174,8 @@ class SQLiteMarketDataRepository(MarketDataRepository):
 
     def list_symbols(self) -> List[dict]:
         rows = db.query(
-            "SELECT symbol, COUNT(*) AS count, MIN(date) AS first_date, MAX(date) AS last_date "
+            "SELECT symbol, COUNT(*) AS count, MIN(date) AS first_date, MAX(date) AS last_date, "
+            "MAX(source) AS source "
             "FROM market_bars GROUP BY symbol ORDER BY symbol ASC"
         )
         return [
@@ -183,9 +184,19 @@ class SQLiteMarketDataRepository(MarketDataRepository):
                 "count": int(r["count"]),
                 "first_date": r["first_date"],
                 "last_date": r["last_date"],
+                "source": r["source"],
             }
             for r in rows
         ]
+
+    def delete_symbol(self, symbol: str) -> int:
+        """删除某标的的全部日线（V7.1 用户导入数据清理）。"""
+        with db._lock:
+            cur = db._ensure().execute(
+                "DELETE FROM market_bars WHERE symbol = ? AND interval = 'daily'", (symbol,)
+            )
+            db._ensure().commit()
+            return cur.rowcount
 
     def clear(self) -> None:
         with db._lock:
