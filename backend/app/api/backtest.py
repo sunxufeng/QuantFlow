@@ -10,10 +10,13 @@
 
 from __future__ import annotations
 
+import csv
+import io
+import json
 import logging
 from typing import Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, Field
 
 from ..backtest import BacktestEngine, BacktestError, BacktestReportStore, build_report
@@ -283,6 +286,61 @@ def get_report(run_id: str) -> dict:
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return _normalize_report(r)
+
+
+# --------------------------------------------------------------------------- #
+# 报告导出（V2.2）
+# --------------------------------------------------------------------------- #
+@router.get("/reports/{run_id}/export", summary="回测报告导出（csv / json）")
+def export_report(run_id: str, format: str = "csv") -> Response:
+    if format not in ("csv", "json"):
+        raise HTTPException(status_code=422, detail="format 仅支持 csv / json")
+    try:
+        report = report_store.load(run_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    report = _normalize_report(report)
+
+    if format == "json":
+        content = json.dumps(report, ensure_ascii=False, indent=2)
+        return Response(
+            content,
+            media_type="application/json",
+            headers={
+                "Content-Disposition": f'attachment; filename="backtest_{run_id}.json"'
+            },
+        )
+
+    # CSV：指标 + 净值曲线 + 交易明细，三段式便于 Excel 直接打开
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    meta = report.get("metrics", {}) or {}
+    writer.writerow(["# 绩效指标"])
+    for k, v in meta.items():
+        writer.writerow([k, v])
+    writer.writerow([])
+    curve = report.get("equity_curve", []) or []
+    writer.writerow(["# 净值曲线"])
+    if curve:
+        cols = list(curve[0].keys())
+        writer.writerow(cols)
+        for row in curve:
+            writer.writerow([row.get(c) for c in cols])
+    writer.writerow([])
+    trades = report.get("trades", []) or []
+    writer.writerow(["# 交易明细"])
+    if trades:
+        tcols = list(trades[0].keys())
+        writer.writerow(tcols)
+        for t in trades:
+            writer.writerow([t.get(c) for c in tcols])
+    return Response(
+        buf.getvalue(),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="backtest_{run_id}.csv"'
+        },
+    )
 
 
 # --------------------------------------------------------------------------- #

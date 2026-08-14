@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { backtestReport, backtestReports } from './api.js'
+import { backtestReport, backtestReports, exportBacktestReport } from './api.js'
 import FuturesBacktest from './FuturesBacktest.jsx'
 import Optimizer from './Optimizer.jsx'
 
@@ -186,8 +186,12 @@ export default function BacktestReports() {
 
       {detail && (
         <div className="qf-an-block" style={{ marginTop: 16 }}>
-          <div className="qf-an-title">
-            报告详情 · {detail.strategy} · {detail.run_id}
+          <div className="qf-an-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>报告详情 · {detail.strategy} · {detail.run_id}</span>
+            <span style={{ display: 'flex', gap: 6 }}>
+              <button className="qf-btn qf-btn-sm" onClick={() => exportBacktestReport(detail.run_id, 'csv').catch((e) => setError(`导出失败: ${e.message}`))}>导出 CSV</button>
+              <button className="qf-btn qf-btn-sm" onClick={() => exportBacktestReport(detail.run_id, 'json').catch((e) => setError(`导出失败: ${e.message}`))}>导出 JSON</button>
+            </span>
           </div>
           <MetricCards m={detail.metrics} />
           <div className="qf-an-title" style={{ marginTop: 10 }}>净值曲线</div>
