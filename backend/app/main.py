@@ -83,6 +83,27 @@ if _RUN_BACKEND == "worker":
 else:
     logger.info("运行后端=local（进程内线程池执行）")
 
+
+# 前端顶层错误边界上报入口（无需鉴权，便于在登录前/崩溃时也能收集真实错误）。
+from pydantic import BaseModel
+
+
+class ClientErrorPayload(BaseModel):
+    message: str = ""
+    stack: str = ""
+    phase: str = ""
+
+
+@app.post("/api/client-error")
+async def client_error(payload: ClientErrorPayload):
+    logger.error(
+        "[CLIENT-ERROR] phase=%s message=%s stack=%s",
+        payload.phase,
+        payload.message,
+        payload.stack[:2000] if payload.stack else "",
+    )
+    return {"ok": True}
+
 app.include_router(workflows.router, prefix="/api")
 app.include_router(market.router, prefix="/api")
 app.include_router(runs.router, prefix="/api")
