@@ -134,3 +134,27 @@ def test_alert_scheduler_status():
     body = resp.json()
     assert "running" in body and isinstance(body["running"], bool)
     assert "interval_minutes" in body and isinstance(body["interval_minutes"], int)
+
+
+def test_alert_scheduler_trigger_runs_evaluate(monkeypatch):
+    """回归：scheduler._run 必须真正调用 alert_service.evaluate_all（曾因错误
+    的 `from .service import alert_service` 导入路径，每次运行静默 ImportError）。"""
+    import app.alerts as alerts_pkg
+    from app.alerts import scheduler as sched_mod
+
+    fake_results = [
+        {"id": "r1", "name": "n", "triggered": True, "notified": True, "value": 1.0, "error": None}
+    ]
+
+    class FakeService:
+        def evaluate_all(self):
+            return list(fake_results)
+
+    monkeypatch.setattr(alerts_pkg, "alert_service", FakeService())
+
+    out = sched_mod.trigger_now()
+    assert out["evaluated"] == 1
+    assert out["notified"] == 1
+    assert out["results"] == fake_results
+    assert out["last_run_at"] is not None
+    assert sched_mod.status()["last_run_at"] is not None
