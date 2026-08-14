@@ -1,11 +1,18 @@
 import { useCallback, useEffect, useState } from 'react'
-import { listAlerts, createAlert, deleteAlert, toggleAlert, evaluateAlerts, alertSchedulerStatus } from './api.js'
+import { listAlerts, createAlert, deleteAlert, toggleAlert, alertSchedulerStatus, triggerAlertScheduler } from './api.js'
 
 const METRICS = [
   ['price', '最新价'],
   ['daily_change_pct', '当日涨跌幅(%)'],
 ]
 const OPERATORS = ['>', '<', '>=', '<=', 'cross_above', 'cross_below']
+
+const fmtTime = (epoch) => {
+  if (!epoch) return '—'
+  const d = new Date(epoch * 1000)
+  const p = (n) => String(n).padStart(2, '0')
+  return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+}
 
 export default function Alerts() {
   const [items, setItems] = useState([])
@@ -63,9 +70,12 @@ export default function Alerts() {
   const runEval = () => {
     setError('')
     setEvalResult(null)
-    evaluateAlerts()
-      .then(setEvalResult)
-      .catch((e) => setError(`评估失败: ${e.message}`))
+    triggerAlertScheduler()
+      .then((r) => {
+        setEvalResult(r)
+        setSched((s) => (s ? { ...s, last_run_at: r.last_run_at } : s))
+      })
+      .catch((e) => setError(`巡检失败: ${e.message}`))
   }
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }))
@@ -80,7 +90,12 @@ export default function Alerts() {
               {sched.running ? `自动巡检·${sched.interval_minutes}分钟` : (sched.disabled ? '自动巡检·已停用' : '自动巡检·未运行')}
             </span>
           )}
-          <button className="qf-btn qf-btn-primary" onClick={runEval}>立即检查</button>
+          {sched && sched.running && (
+            <span className="qf-hint" style={{ fontSize: 12 }}>
+              上次 {fmtTime(sched.last_run_at)} ｜ 下次 ~{fmtTime(sched.next_run_at)}
+            </span>
+          )}
+          <button className="qf-btn qf-btn-primary" onClick={runEval}>立即巡检</button>
         </div>
       </div>
       <div className="qf-hint" style={{ marginBottom: 12 }}>
