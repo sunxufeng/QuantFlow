@@ -11,6 +11,7 @@ const navItems = [
   { key: 'settings', label: 'LLM 配置', abbr: '配' },
   { key: 'templates', label: '模板库', abbr: '模' },
   { key: 'reports', label: '回测报告', abbr: '报' },
+  { key: 'trade', label: '模拟交易', abbr: '易' },
   { key: 'broker', label: '券商设置', abbr: '券', adminOnly: true },
 ]
 

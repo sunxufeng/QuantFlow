@@ -22,6 +22,7 @@ import LLMSettings from './LLMSettings.jsx'
 import Templates from './Templates.jsx'
 import Sidebar from './Sidebar.jsx'
 import Dashboard from './Dashboard.jsx'
+import Trading from './Trading.jsx'
 import BacktestResultView from './BacktestResultView.jsx'
 import BacktestReports from './BacktestReports.jsx'
 import BrokerSettings from './BrokerSettings.jsx'
@@ -875,6 +876,7 @@ export default function App() {
             />
           )}
           {view === 'reports' && <BacktestReports />}
+          {view === 'trade' && <Trading />}
           {view === 'broker' && <BrokerSettings />}
         </main>
       </div>
