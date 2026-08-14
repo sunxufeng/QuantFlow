@@ -39,6 +39,11 @@ def get_mode(user: Dict[str, Any] = Depends(get_current_user)):
     }
 
 
+@router.get("/trading/live/status")
+def get_live_status(user: Dict[str, Any] = Depends(get_current_user)):
+    return engine.live_status()
+
+
 @router.post("/trading/live/orders")
 def place_live(payload: OrderIn, user: Dict[str, Any] = Depends(get_current_user)):
     fill = engine.place_live_order(

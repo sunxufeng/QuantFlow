@@ -222,6 +222,35 @@ def live_broker() -> str:
     return load_broker_config().get("broker", "none")
 
 
+def live_status() -> dict:
+    """V2.0 实盘就绪详情：列出缺失的凭证字段与可读提示（真实下单仍待券商 SDK）。"""
+    cfg = load_broker_config()
+    broker = cfg.get("broker", "none")
+    capable = live_capable()
+    missing = []
+    if broker not in ("universal", "easytrade", "xuntou"):
+        missing.append("broker(需 universal/easytrade/xuntou)")
+    if not cfg.get("api_key"):
+        missing.append("api_key")
+    if not cfg.get("api_secret"):
+        missing.append("api_secret")
+    if not cfg.get("base_url"):
+        missing.append("base_url")
+    if not cfg.get("account_id"):
+        missing.append("account_id")
+    message = "实盘已就绪" if capable else ("缺少凭证：" + "、".join(missing) if missing else "未配置券商")
+    return {
+        "live_capable": capable,
+        "broker": broker,
+        "has_api_key": bool(cfg.get("api_key")),
+        "has_api_secret": bool(cfg.get("api_secret")),
+        "has_base_url": bool(cfg.get("base_url")),
+        "has_account_id": bool(cfg.get("account_id")),
+        "missing": missing,
+        "message": message,
+    }
+
+
 def place_live_order(user_id, symbol, side, otype, qty, price=None):
     """实盘下单：接入 LiveExecutionGateway；凭证/SDK 就绪前返回结构化的 4xx/5xx。"""
     if not live_capable():

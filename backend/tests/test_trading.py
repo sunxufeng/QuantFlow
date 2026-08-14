@@ -172,6 +172,16 @@ def test_live_order_requires_config():
     assert "券商设置" in r.json()["detail"]
 
 
+def test_live_status_reports_readiness():
+    c = _authed("trade_live_status")
+    r = c.get("/api/trading/live/status")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["live_capable"] is False
+    assert isinstance(body["missing"], list)
+    assert body["message"]  # 可读提示非空
+
+
 def test_live_order_configured_wires_gateway():
     from app.trading import engine
 

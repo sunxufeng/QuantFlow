@@ -16,6 +16,7 @@ export default function Trading({ onNavigate }) {
   const [tab, setTab] = useState('trade')           // trade | analytics
   const [mode, setMode] = useState('paper')        // paper | live
   const [liveCapable, setLiveCapable] = useState(false)
+  const [liveStatus, setLiveStatus] = useState(null)
   const [broker, setBroker] = useState(null)
   const [form, setForm] = useState({ symbol: '', side: 'buy', type: 'market', qty: '', price: '' })
   const [busy, setBusy] = useState(false)
@@ -41,6 +42,10 @@ export default function Trading({ onNavigate }) {
     fetch('/api/trading/mode', { headers: authHeaders() })
       .then(r => r.json())
       .then(d => setLiveCapable(!!d.live_capable))
+      .catch(() => {})
+    fetch('/api/trading/live/status', { headers: authHeaders() })
+      .then(r => r.json())
+      .then(setLiveStatus)
       .catch(() => {})
   }, [load])
 
@@ -151,9 +156,17 @@ export default function Trading({ onNavigate }) {
 
       {liveDisabled && (
         <div className="qf-hint" style={{ background: '#fff7ed', border: '1px solid #fed7aa', padding: 10, borderRadius: 8, marginBottom: 12 }}>
-          实盘模式尚未配置。请在「券商设置」中选择 universal / easytrade / xuntou 并填写 api_key 等凭证；
+          实盘模式尚未配置（{liveStatus?.message || '缺少券商凭证'}）。
+          请在「券商设置」中选择 universal / easytrade / xuntou 并填写 api_key 等凭证；
           凭证就绪后这里即可切换到真实下单。
           <button className="qf-btn qf-btn-sm" style={{ marginLeft: 8 }} onClick={() => onNavigate && onNavigate('broker')}>去券商设置</button>
+        </div>
+      )}
+
+      {mode === 'live' && liveCapable && (
+        <div className="qf-hint" style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', padding: 10, borderRadius: 8, marginBottom: 12 }}>
+          实盘已具备条件（券商：{liveStatus?.broker}）。真实下单已接入执行网关，券商 SDK 待凭证就绪后启用；
+          当前下单会返回 501（接入点已就位），不影响模拟交易。
         </div>
       )}
 
