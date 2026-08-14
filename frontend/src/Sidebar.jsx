@@ -16,6 +16,7 @@ const navItems = [
   { key: 'compare', label: '回测对比', abbr: '比' },
   { key: 'alerts', label: '预警规则', abbr: '警' },
   { key: 'board', label: '行情看板', abbr: '板' },
+  { key: 'watch', label: '自选监控', abbr: '监' },
   { key: 'trade', label: '模拟交易', abbr: '易' },
   { key: 'broker', label: '券商设置', abbr: '券', adminOnly: true },
 ]

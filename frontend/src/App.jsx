@@ -29,6 +29,7 @@ import BacktestResultView from './BacktestResultView.jsx'
 import BacktestReports from './BacktestReports.jsx'
 import Alerts from './Alerts.jsx'
 import MarketBoard from './MarketBoard.jsx'
+import Watchlist from './Watchlist.jsx'
 import Factors from './Factors.jsx'
 import BrokerSettings from './BrokerSettings.jsx'
 import LoginScreen from './LoginScreen.jsx'
@@ -982,6 +983,7 @@ export default function App() {
           {view === 'compare' && <Compare />}
           {view === 'alerts' && <Alerts />}
           {view === 'board' && <MarketBoard />}
+          {view === 'watch' && <Watchlist />}
           {view === 'trade' && <Trading onNavigate={setView} />}
           {view === 'broker' && <BrokerSettings />}
           {view === 'data' && <DataSync />}

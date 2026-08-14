@@ -155,6 +155,8 @@ export const marketSyncNow = () => request('/market/sync', { method: 'POST' })
 export const marketCache = () => request('/market/cache')
 export const marketRefresh = (payload = {}) =>
   request('/market/cache/refresh', { method: 'POST', body: JSON.stringify(payload) })
+// ---- V5.1 自选股监控 + 价格预警 ----
+export const watchlistMonitor = () => request('/market/watchlist/monitor')
 
 // ---- 回测报告中心（V1.6）----
 export const backtestReports = () => request('/backtest/reports')

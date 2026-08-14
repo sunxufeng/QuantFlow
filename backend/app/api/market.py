@@ -15,6 +15,7 @@ from ..market.models import bars_to_table
 from ..market.scheduler import data_sync_service
 from ..market.service import market_service
 from ..market.sources import DataSourceError
+from ..alerts import alert_service
 
 router = APIRouter(
     prefix="/market",
@@ -119,6 +120,42 @@ def add_watchlist(symbol: str = Query(..., description="标的代码")):
 @router.delete("/watchlist/{symbol}", summary="移除自选股", status_code=204)
 def remove_watchlist(symbol: str) -> None:
     db.execute("DELETE FROM watchlists WHERE symbol = ?", (symbol.strip().upper(),))
+
+
+@router.get("/watchlist/monitor", summary="自选股监控 + 价格预警（V5.1）")
+def watchlist_monitor() -> dict:
+    """把自选股、实时行情快照、以及绑定到该标的的价格预警规则聚合为一个视图。"""
+    rows = db.query("SELECT symbol FROM watchlists ORDER BY added_at DESC, symbol")
+    symbols = [r["symbol"] for r in rows]
+    all_alerts = alert_service.list_rules()
+    items = []
+    for sym in symbols:
+        try:
+            bars = market_service.bars(sym, "2000-01-01", _today())
+        except DataSourceError:
+            bars = []
+        quote = None
+        if bars:
+            last = bars[-1]
+            prev_close = bars[-2].close if len(bars) >= 2 else None
+            change_pct = (
+                (last.close - prev_close) / prev_close * 100.0
+                if prev_close and prev_close > 0
+                else None
+            )
+            quote = {
+                "date": last.date,
+                "last": last.close,
+                "prev_close": prev_close,
+                "change_pct": round(change_pct, 4) if change_pct is not None else None,
+                "open": last.open,
+                "high": last.high,
+                "low": last.low,
+                "volume": last.volume,
+            }
+        alerts = [a for a in all_alerts if a.get("symbol") == sym]
+        items.append({"symbol": sym, "quote": quote, "alerts": alerts})
+    return {"items": items, "total": len(items)}
 
 
 @router.get("/quotes", summary="批量行情快照（最新价 + 当日涨跌）")
