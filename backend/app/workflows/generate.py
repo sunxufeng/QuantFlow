@@ -130,6 +130,10 @@ _SYSTEM_PROMPT = (
     "factor.expression（因子表达式，参数 expression/output）、backtest.run（回测，参数 strategy）。\n"
     "2. 必须以一个 backtest.run 节点作为终点（汇点），且从 data.quotes 开始形成有向链路。\n"
     "3. 端口统一用 source_port:\"table\" / target_port:\"table\"；strategy用 ma_cross / buy_hold / futures_ma_cross 之一。\n"
+    "4. factor.expression 的 expression 只能使用真实行情列 open/high/low/close/volume 与四则运算及"
+    " log/abs/.shift()（例如 '(close-open)/open'、'close/close.shift(1)-1'、'log(volume)'），"
+    "严禁引用 ma / rsi / 任何指标变量或未定义符号，否则该节点会求值失败。\n"
+    "5. 信号优先用 indicator.ma（短/长均线交叉）喂给 backtest.run；factor.expression 仅用于简单价格/成交量衍生。\n"
     "可用节点类型与端口详情：\n"
 )
 
