@@ -52,6 +52,7 @@ import {
   importWorkflow,
   listRuns,
   runWsUrl,
+  saveTemplate,
   submitRun,
   updateWorkflow,
   validateWorkflow,
@@ -233,6 +234,12 @@ function Canvas({ projectId, pendingTemplate, onTemplateConsumed }) {
   const [savedWorkflows, setSavedWorkflows] = useState([])
   const [workflowId, setWorkflowId] = useState('')
   const [workflowName, setWorkflowName] = useState('Untitled workflow')
+  const [saveTplOpen, setSaveTplOpen] = useState(false)
+  const [tplName, setTplName] = useState('')
+  const [tplDesc, setTplDesc] = useState('')
+  const [tplTags, setTplTags] = useState('')
+  const [tplBusy, setTplBusy] = useState(false)
+  const [tplMsg, setTplMsg] = useState('')
   const [runId, setRunId] = useState('')
   const [runStatus, setRunStatus] = useState('')
   const [runs, setRuns] = useState([])
@@ -530,6 +537,39 @@ function Canvas({ projectId, pendingTemplate, onTemplateConsumed }) {
     clearHistory()
   }, [clearHistory, setEdges, setNodes])
 
+  // V3.1 模板市场：把当前画布保存为个人模板
+  const openSaveTemplate = useCallback(() => {
+    setTplName(workflowName === 'Untitled workflow' ? '' : workflowName)
+    setTplDesc('')
+    setTplTags('')
+    setTplMsg('')
+    setSaveTplOpen(true)
+  }, [workflowName])
+
+  const onSaveTemplate = useCallback(async () => {
+    const wf = buildWorkflow()
+    if (!wf.nodes.length) {
+      setTplMsg('画布为空，无法保存为模板')
+      return
+    }
+    setTplBusy(true)
+    setTplMsg('')
+    try {
+      await saveTemplate({
+        name: tplName.trim() || '未命名模板',
+        description: tplDesc.trim(),
+        tags: tplTags.split(/[,，\s]+/).map((s) => s.trim()).filter(Boolean),
+        nodes: wf.nodes,
+        edges: wf.edges,
+      })
+      setSaveTplOpen(false)
+    } catch (err) {
+      setTplMsg(`保存失败: ${err.message}`)
+    } finally {
+      setTplBusy(false)
+    }
+  }, [buildWorkflow, tplDesc, tplName, tplTags])
+
   // ---- 异步运行 + WebSocket 实时状态 ----
   const onRun = useCallback(async () => {
     setError('')
@@ -679,6 +719,7 @@ function Canvas({ projectId, pendingTemplate, onTemplateConsumed }) {
           <button className="qf-btn" onClick={() => onDeleteWorkflow(workflowId)} disabled={busy || !workflowId} title="删除当前工作流">删除</button>
           <button className="qf-btn" onClick={() => importRef.current?.click()} disabled={busy}>导入 JSON</button>
           <button className="qf-btn" onClick={onExport} disabled={busy || !workflowId}>导出 JSON</button>
+          <button className="qf-btn" onClick={openSaveTemplate} disabled={busy} title="把当前画布保存为个人模板">存为模板</button>
           <button className="qf-btn" onClick={() => setVersionsOpen(true)} disabled={busy || !workflowId} title="工作流版本历史">版本历史</button>
           <span className="qf-toolbar-sep" />
           <button className="qf-btn" onClick={undo} disabled={!canUndo} title="撤销 (Ctrl+Z)">↶</button>
@@ -756,6 +797,53 @@ function Canvas({ projectId, pendingTemplate, onTemplateConsumed }) {
           onRestore={onRestoreVersion}
           setError={setError}
         />
+      )}
+      {saveTplOpen && (
+        <div className="qf-modal-mask" onClick={() => setSaveTplOpen(false)}>
+          <div className="qf-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="qf-modal-head">
+              <h3>保存为个人模板</h3>
+              <button className="qf-btn qf-btn-sm" onClick={() => setSaveTplOpen(false)}>×</button>
+            </div>
+            <div className="qf-modal-body">
+              <label className="qf-field">
+                <span>模板名称</span>
+                <input
+                  className="qf-input"
+                  value={tplName}
+                  onChange={(e) => setTplName(e.target.value)}
+                  placeholder="例如：动量因子均线策略"
+                />
+              </label>
+              <label className="qf-field">
+                <span>说明</span>
+                <textarea
+                  className="qf-input"
+                  value={tplDesc}
+                  onChange={(e) => setTplDesc(e.target.value)}
+                  rows={2}
+                  placeholder="这个模板做什么、适用场景"
+                />
+              </label>
+              <label className="qf-field">
+                <span>标签（逗号分隔）</span>
+                <input
+                  className="qf-input"
+                  value={tplTags}
+                  onChange={(e) => setTplTags(e.target.value)}
+                  placeholder="动量, 均线, 期货"
+                />
+              </label>
+              {tplMsg && <div className="qf-error">{tplMsg}</div>}
+            </div>
+            <div className="qf-modal-foot">
+              <button className="qf-btn" onClick={() => setSaveTplOpen(false)} disabled={tplBusy}>取消</button>
+              <button className="qf-btn qf-btn-primary" onClick={onSaveTemplate} disabled={tplBusy}>
+                {tplBusy ? '保存中…' : '保存模板'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

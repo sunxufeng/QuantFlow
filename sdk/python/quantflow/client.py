@@ -441,6 +441,36 @@ class QuantFlowClient:
     def submit_run(self, workflow_id: str) -> Dict:
         return self._request("POST", "/runs", json={"workflow_id": workflow_id})
 
+    # ---- V3.1 个人工作流模板库 ----
+    def list_my_templates(self) -> List[Dict]:
+        return self._request("GET", "/workflows/templates/mine")
+
+    def save_template(
+        self,
+        name: str,
+        nodes: List[Dict],
+        edges: List[Dict],
+        description: str = "",
+        tags: Optional[List[str]] = None,
+    ) -> Dict:
+        return self._request(
+            "POST",
+            "/workflows/templates",
+            json={
+                "name": name,
+                "description": description,
+                "nodes": nodes,
+                "edges": edges,
+                "tags": tags or [],
+            },
+        )
+
+    def get_template(self, template_id: str) -> Dict:
+        return self._request("GET", f"/workflows/templates/{template_id}")
+
+    def delete_template(self, template_id: str) -> None:
+        self._request("DELETE", f"/workflows/templates/{template_id}")
+
     def list_runs(self) -> List[Dict]:
         return self._request("GET", "/runs")
 

@@ -114,6 +114,16 @@ export const runWorkflow = (workflow) => request('/workflows/run', {
 // ---- 内置示例工作流模板库（V1.1 遗留项 / V1.3 扩展）----
 export const listTemplates = () => request('/workflows/templates')
 
+// ---- 个人工作流模板库（V3.1 模板市场）----
+export const listMyTemplates = () => request('/workflows/templates/mine')
+export const saveTemplate = (payload) => request('/workflows/templates', {
+  method: 'POST',
+  body: JSON.stringify(payload),
+})
+export const deleteTemplate = (id) => request(`/workflows/templates/${id}`, {
+  method: 'DELETE',
+})
+
 // ---- M2 异步运行 + WebSocket ----
 export const submitRun = (payload) => request('/runs', {
   method: 'POST',
