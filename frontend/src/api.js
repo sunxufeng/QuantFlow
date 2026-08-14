@@ -135,6 +135,7 @@ export const backtestReports = () => request('/backtest/reports')
 export const backtestReport = (runId) => request(`/backtest/reports/${runId}`)
 export const backtestStrategies = () => request('/backtest/strategies')
 export const runBacktest = (payload) => request('/backtest/run', { method: 'POST', body: JSON.stringify(payload) })
+export const optimizeBacktest = (payload) => request('/backtest/optimize', { method: 'POST', body: JSON.stringify(payload) })
 
 // ---- 因子库 CRUD（V1.1 N3）----
 export const factorLibraryList = (category) => request(

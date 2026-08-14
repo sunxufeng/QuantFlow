@@ -167,6 +167,44 @@ class QuantFlowClient:
     def list_backtests(self) -> Dict:
         return self._request("GET", "/backtest/reports")
 
+    def optimize_backtest(
+        self,
+        symbols: List[str],
+        strategy: str,
+        grid: Dict[str, List[object]],
+        *,
+        fixed_params: Optional[Dict[str, object]] = None,
+        start: str = "2024-01-01",
+        end: str = "2024-12-31",
+        initial_cash: float = 100000,
+        asset_types: Optional[Dict[str, str]] = None,
+        multipliers: Optional[Dict[str, float]] = None,
+        interval: str = "daily",
+        objective: str = "sharpe",
+        top_n: int = 10,
+        max_combos: int = 200,
+    ) -> Dict:
+        """回测参数优化（V2.1）：网格搜索并按目标排序返回 Top-N。"""
+        return self._request(
+            "POST",
+            "/backtest/optimize",
+            json={
+                "symbols": symbols,
+                "strategy": strategy,
+                "grid": grid,
+                "fixed_params": fixed_params or {},
+                "start": start,
+                "end": end,
+                "initial_cash": initial_cash,
+                "asset_types": asset_types or {},
+                "multipliers": multipliers or {},
+                "interval": interval,
+                "objective": objective,
+                "top_n": top_n,
+                "max_combos": max_combos,
+            },
+        )
+
     # ------------------------------------------------------------------ #
     # 健康检查
     # ------------------------------------------------------------------ #

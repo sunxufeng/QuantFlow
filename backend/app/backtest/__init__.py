@@ -23,6 +23,7 @@ from .engine import (
 from .fund import FundAccount, FundOrderRejected, FundPosition, FundTrade
 from .futures import FuturesAccount, FuturesPosition, FuturesTrade
 from .metrics import PerformanceMetrics
+from .optimizer import OptimizeConfigError, optimize
 from .portfolio import PortfolioBacktest
 from .report import BacktestReportStore, build_report
 from .strategies import (
@@ -42,6 +43,8 @@ __all__ = [
     "BacktestError",
     "BacktestReportStore",
     "BacktestResult",
+    "OptimizeConfigError",
+    "optimize",
     "BuyHoldStrategy",
     "CostCalculator",
     "CostRates",

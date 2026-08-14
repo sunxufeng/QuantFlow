@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { backtestReport, backtestReports } from './api.js'
 import FuturesBacktest from './FuturesBacktest.jsx'
+import Optimizer from './Optimizer.jsx'
 
 function fmtPct(v) {
   if (v == null) return '-'
@@ -122,6 +123,7 @@ export default function BacktestReports() {
         <div style={{ display: 'flex', gap: 8 }}>
           {tabBtn('reports', '报告列表')}
           {tabBtn('futures', '期货回测')}
+          {tabBtn('optimize', '参数优化')}
           <button className="qf-btn qf-btn-primary" onClick={refresh}>刷新</button>
         </div>
       </div>
@@ -130,6 +132,10 @@ export default function BacktestReports() {
 
       {tab === 'futures' && (
         <FuturesBacktest onRun={() => refresh()} />
+      )}
+
+      {tab === 'optimize' && (
+        <Optimizer />
       )}
 
       {tab === 'reports' && (
