@@ -175,3 +175,192 @@ class QuantFlowClient:
         if resp.status_code >= 400:
             raise QuantFlowError(resp.status_code, resp.text)
         return resp.json()
+
+    # ------------------------------------------------------------------ #
+    # 因子库与分析（V1.1 N3）
+    # ------------------------------------------------------------------ #
+    def list_factors(self, category: Optional[str] = None) -> Dict:
+        params = {"category": category} if category else None
+        return self._request("GET", "/factors/library", params=params)
+
+    def create_factor(
+        self,
+        name: str,
+        expression: str,
+        category: str = "自定义",
+        description: str = "",
+        params: Optional[Dict] = None,
+    ) -> Dict:
+        return self._request(
+            "POST",
+            "/factors/library",
+            json={
+                "name": name,
+                "expression": expression,
+                "category": category,
+                "description": description,
+                "params": params or {},
+            },
+        )
+
+    def get_factor(self, factor_id: str) -> Dict:
+        return self._request("GET", f"/factors/library/{factor_id}")
+
+    def update_factor(self, factor_id: str, **kwargs) -> Dict:
+        return self._request("PUT", f"/factors/library/{factor_id}", json=kwargs)
+
+    def delete_factor(self, factor_id: str) -> None:
+        self._request("DELETE", f"/factors/library/{factor_id}")
+
+    def analyze_factor(self, payload: Dict) -> Dict:
+        return self._request("POST", "/factors/analyze", json=payload)
+
+    # ------------------------------------------------------------------ #
+    # 工作流与运行（M3 / V1.1 N2）
+    # ------------------------------------------------------------------ #
+    def list_nodes(self) -> List[Dict]:
+        return self._request("GET", "/nodes")
+
+    def list_workflows(self, project_id: Optional[str] = None, scope: str = "all") -> List[Dict]:
+        params: Dict[str, Any] = {"scope": scope}
+        if project_id:
+            params["project_id"] = project_id
+        return self._request("GET", "/workflows", params=params)
+
+    def create_workflow(self, name: str, nodes: List[Dict], edges: List[Dict], **kwargs) -> Dict:
+        return self._request(
+            "POST",
+            "/workflows",
+            json={"name": name, "nodes": nodes, "edges": edges, **kwargs},
+        )
+
+    def get_workflow(self, workflow_id: str) -> Dict:
+        return self._request("GET", f"/workflows/{workflow_id}")
+
+    def update_workflow(self, workflow_id: str, name: str, nodes: List[Dict], edges: List[Dict], **kwargs) -> Dict:
+        return self._request(
+            "PUT",
+            f"/workflows/{workflow_id}",
+            json={"name": name, "nodes": nodes, "edges": edges, **kwargs},
+        )
+
+    def delete_workflow(self, workflow_id: str) -> None:
+        self._request("DELETE", f"/workflows/{workflow_id}")
+
+    def export_workflow(self, workflow_id: str) -> Dict:
+        return self._request("GET", f"/workflows/{workflow_id}/export")
+
+    def validate_workflow(self, nodes: List[Dict], edges: List[Dict]) -> Dict:
+        return self._request(
+            "POST", "/workflows/validate", json={"nodes": nodes, "edges": edges}
+        )
+
+    def list_workflow_versions(self, workflow_id: str) -> List[Dict]:
+        return self._request("GET", f"/workflows/{workflow_id}/versions")
+
+    def create_workflow_version(self, workflow_id: str, label: str = "") -> Dict:
+        return self._request(
+            "POST", f"/workflows/{workflow_id}/versions", json={"label": label}
+        )
+
+    def restore_workflow_version(self, workflow_id: str, version: int) -> Dict:
+        return self._request(
+            "POST", f"/workflows/{workflow_id}/versions/{version}/restore"
+        )
+
+    def submit_run(self, workflow_id: str) -> Dict:
+        return self._request("POST", "/runs", json={"workflow_id": workflow_id})
+
+    def list_runs(self) -> List[Dict]:
+        return self._request("GET", "/runs")
+
+    def get_run(self, run_id: str) -> Dict:
+        return self._request("GET", f"/runs/{run_id}")
+
+    # ------------------------------------------------------------------ #
+    # LLM 策略助手（V1.1 N1）
+    # ------------------------------------------------------------------ #
+    def llm_status(self) -> Dict:
+        return self._request("GET", "/llm/status")
+
+    def llm_config(self) -> Dict:
+        return self._request("GET", "/llm/config")
+
+    def set_llm_config(self, payload: Dict) -> Dict:
+        return self._request("PUT", "/llm/config", json=payload)
+
+    def test_llm_config(self) -> Dict:
+        return self._request("POST", "/llm/config/test")
+
+    def llm_assist(self, prompt: str, context: Optional[Dict] = None) -> Dict:
+        return self._request(
+            "POST", "/llm/assist", json={"prompt": prompt, "context": context or {}}
+        )
+
+    # ------------------------------------------------------------------ #
+    # 交易（V1.8 / V2.0）
+    # ------------------------------------------------------------------ #
+    def trading_summary(self) -> Dict:
+        return self._request("GET", "/trading/summary")
+
+    def trading_analytics(self) -> Dict:
+        return self._request("GET", "/trading/analytics")
+
+    def trading_positions(self) -> List[Dict]:
+        return self._request("GET", "/trading/positions")
+
+    def trading_orders(self) -> List[Dict]:
+        return self._request("GET", "/trading/orders")
+
+    def submit_order(
+        self,
+        symbol: str,
+        side: str,
+        type_: str,
+        qty: float,
+        price: Optional[float] = None,
+    ) -> Dict:
+        payload: Dict[str, Any] = {
+            "symbol": symbol,
+            "side": side,
+            "type": type_,
+            "qty": qty,
+        }
+        if price is not None:
+            payload["price"] = price
+        return self._request("POST", "/trading/orders", json=payload)
+
+    def cancel_order(self, order_id: str) -> Dict:
+        return self._request("POST", f"/trading/orders/{order_id}/cancel")
+
+    def simulate_trading(self, price_overrides: Optional[Dict[str, float]] = None) -> List[str]:
+        return self._request(
+            "POST", "/trading/simulate", json={"price_overrides": price_overrides or {}}
+        )
+
+    def reset_trading(self) -> Dict:
+        return self._request("DELETE", "/trading/reset")
+
+    def trading_mode(self) -> Dict:
+        return self._request("GET", "/trading/mode")
+
+    def live_trading_status(self) -> Dict:
+        return self._request("GET", "/trading/live/status")
+
+    def submit_live_order(
+        self,
+        symbol: str,
+        side: str,
+        type_: str,
+        qty: float,
+        price: Optional[float] = None,
+    ) -> Dict:
+        payload: Dict[str, Any] = {
+            "symbol": symbol,
+            "side": side,
+            "type": type_,
+            "qty": qty,
+        }
+        if price is not None:
+            payload["price"] = price
+        return self._request("POST", "/trading/live/orders", json=payload)

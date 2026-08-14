@@ -1,7 +1,8 @@
 """QuantFlow Python SDK（V1.1 N2：API 代码式调用）。
 
 通过 API Token 或用户名/密码登录后，可在脚本中完成：
-注册/登录、创建项目、查询标的与行情、运行回测并取回报告。
+注册/登录、创建项目、查询标的与行情、运行回测并取回报告、
+因子分析、工作流 CRUD/运行、LLM 策略助手、模拟/实盘交易。
 
 示例::
 
@@ -21,4 +22,4 @@ from __future__ import annotations
 from .client import QuantFlowClient, QuantFlowError
 
 __all__ = ["QuantFlowClient", "QuantFlowError"]
-__version__ = "0.1.0"
+__version__ = "0.2.0"
