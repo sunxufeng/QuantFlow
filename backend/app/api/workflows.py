@@ -166,6 +166,117 @@ def generate_workflow(req: WorkflowGenerateRequest) -> dict:
     return result
 
 
+class BatchGenerateRequest(BaseModel):
+    prompts: list[str] = Field(..., description="多个策略描述（每行一个），最多 5 条", min_length=1)
+    use_llm: bool = Field(True, description="是否优先使用已配置的 LLM 生成")
+
+
+def _rows_of(v) -> list:
+    """从 DataTable 对象或其序列化 dict 中提取 rows。"""
+    if v is None:
+        return []
+    if hasattr(v, "rows"):
+        return list(v.rows)
+    if isinstance(v, dict):
+        rows = v.get("rows")
+        if isinstance(rows, list):
+            return rows
+    return []
+
+
+def _curve_to_pct(curve: list) -> list:
+    """净值曲线归一化为累计收益率（%），复用 V2.8 口径。"""
+    if not curve:
+        return []
+    base = (curve[0].get("total_value") if isinstance(curve[0], dict) else None) or 0.0
+    out = []
+    for p in curve:
+        tv = (p.get("total_value") if isinstance(p, dict) else None) or 0.0
+        pct = (tv / base - 1.0) * 100.0 if base else 0.0
+        out.append({"date": p.get("date") if isinstance(p, dict) else None, "pct": round(pct, 4)})
+    return out
+
+
+def _extract_backtest(full: dict):
+    """从完整运行结果（含 outputs）中提取回测节点（backtest.run）的指标与净值曲线。
+
+    序列化节点不含 ``node_type``，故按输出签名（含 summary + equity）识别回测节点。
+    """
+    for node in full.get("nodes", []):
+        outs = node.get("outputs", {}) or {}
+        cand = None
+        if isinstance(outs, dict):
+            # 回测节点输出为单端口 dict：{equity, trades, summary, attribution}
+            for val in outs.values():
+                if isinstance(val, dict) and "summary" in val and "equity" in val:
+                    cand = val
+                    break
+            if cand is None and "summary" in outs and "equity" in outs:
+                cand = outs
+        if cand is None:
+            continue
+        summary_rows = _rows_of(cand.get("summary"))
+        equity_rows = _rows_of(cand.get("equity"))
+        metrics = {r.get("metric"): r.get("value") for r in summary_rows if isinstance(r, dict)}
+        return {"metrics": metrics, "curve_pct": _curve_to_pct(equity_rows)}
+    return None
+
+
+@router.post("/workflows/batch-generate-compare", summary="批量生成并对比回测（V3.4）")
+def batch_generate_compare(req: BatchGenerateRequest) -> dict:
+    """对多个自然语言策略描述：生成工作流 → 同步运行 → 提取回测指标与净值曲线。
+
+    返回结构化的可对比 items（每条含 prompt / source / metrics / curve_pct / ok / error），
+    前端据此渲染指标对比表 + 归一化净值叠加曲线，复用 V2.8 对比思路。
+    """
+    prompts = [p.strip() for p in req.prompts if p.strip()]
+    if not prompts:
+        raise HTTPException(status_code=422, detail="prompts 不能为空")
+    if len(prompts) > 5:
+        prompts = prompts[:5]
+
+    items = []
+    for prompt in prompts:
+        item = {
+            "prompt": prompt,
+            "ok": False,
+            "error": None,
+            "source": None,
+            "name": None,
+            "nodes": [],
+            "edges": [],
+            "metrics": {},
+            "curve_pct": [],
+        }
+        try:
+            gen = generate_from_text(prompt, use_llm=req.use_llm)
+            item["source"] = gen.get("source")
+            item["name"] = gen.get("name")
+            item["nodes"] = gen.get("nodes", [])
+            item["edges"] = gen.get("edges", [])
+            if not item["nodes"] or not item["edges"]:
+                item["error"] = "生成结果为空"
+                items.append(item)
+                continue
+            validate_workflow(item["nodes"], item["edges"])
+            result = run_module.RUN_SERVICE.execute_sync(
+                item["nodes"], item["edges"], workflow_name=gen.get("name") or "batch"
+            )
+            full = result.to_dict(include_outputs=True)
+            bt = _extract_backtest(full)
+            if bt is None:
+                item["error"] = "未包含可运行的回测节点(backtest.run)"
+                items.append(item)
+                continue
+            item["metrics"] = bt["metrics"]
+            item["curve_pct"] = bt["curve_pct"]
+            item["ok"] = True
+        except Exception as exc:  # 单条失败不影响其余
+            item["error"] = str(exc)[:300]
+        items.append(item)
+    return {"items": items}
+
+
 @router.get("/workflows", response_model=list[WorkflowSummaryOut], summary="工作流列表")
 def list_workflows(
     project_id: Optional[str] = None,

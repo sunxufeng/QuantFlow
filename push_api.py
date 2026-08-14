@@ -11,7 +11,7 @@ if PROXY:
 
 REPO_ROOT = "/Users/sunxufeng/WorkBuddy/2026-08-12-14-19-17/quantflow"
 BASE = "18fbbe8"
-MESSAGE = "feat(v3.3): 多 LLM 路由——providers 列表按序 fallback + 模型选择，保持单配置路径不变 (3.3.0)"
+MESSAGE = "feat(v3.4): 批量生成并对比回测——一次提交多条 prompt，LLM 生成工作流后自动回测并归一化绘制收益曲线对比 (3.4.0)"
 
 
 def api(method, path, data=None, retries=6):

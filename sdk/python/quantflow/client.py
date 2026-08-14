@@ -407,6 +407,17 @@ class QuantFlowClient:
         """LLM provider 状态（含多模型路由链 chain）。"""
         return self._request("GET", "/llm/status")
 
+    # ---- V3.4 批量生成并对比回测 ----
+    def batch_generate_compare(
+        self, prompts: List[str], use_llm: bool = True
+    ) -> Dict:
+        """对多个自然语言策略批量生成并运行回测，返回可对比的指标与净值曲线。"""
+        return self._request(
+            "POST",
+            "/workflows/batch-generate-compare",
+            json={"prompts": prompts, "use_llm": use_llm},
+        )
+
     # ------------------------------------------------------------------ #
     # 工作流与运行（M3 / V1.1 N2）
     # ------------------------------------------------------------------ #
