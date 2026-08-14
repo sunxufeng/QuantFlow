@@ -40,6 +40,9 @@ def test_ranking_returns_sorted_rows():
     # 默认按均值 IC 降序：每行非空则单调不增
     vals = [r["mean_ic"] for r in ranked if r["mean_ic"] is not None]
     assert vals == sorted(vals, reverse=True)
+    # 缺失 IC 的因子（样本不足）必须排在末尾，与排序方向无关
+    assert ranked[-1]["mean_ic"] is None
+    assert all(r["mean_ic"] is not None for r in ranked[:-1])
 
 
 def test_ranking_metric_and_order_params():
