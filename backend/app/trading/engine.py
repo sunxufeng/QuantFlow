@@ -9,6 +9,14 @@ from __future__ import annotations
 
 from fastapi import HTTPException
 
+from ..core.broker.config import load_broker_config
+from ..execution.gateway import (
+    LiveExecutionGateway,
+    Order as LiveOrder,
+    OrderSide as LiveOrderSide,
+    GatewayNotConfigured,
+)
+
 import time
 
 from . import store as _store
@@ -179,6 +187,54 @@ def simulate_tick(user_id: str, price_overrides: dict = None):
         )
         filled.append(o["id"])
     return filled
+
+
+def live_capable() -> bool:
+    """是否具备实盘条件：配置了真实券商且已填 api_key。"""
+    cfg = load_broker_config()
+    return cfg.get("broker") in ("universal", "easytrade", "xuntou") and bool(cfg.get("api_key"))
+
+
+def live_broker() -> str:
+    return load_broker_config().get("broker", "none")
+
+
+def place_live_order(user_id, symbol, side, otype, qty, price=None):
+    """实盘下单：接入 LiveExecutionGateway；凭证/SDK 就绪前返回结构化的 4xx/5xx。"""
+    if not live_capable():
+        raise HTTPException(
+            status_code=409,
+            detail="实盘未配置：请在「券商设置」中配置真实券商凭证（universal/easytrade/xuntou）",
+        )
+    gw = LiveExecutionGateway()
+    order = LiveOrder(
+        symbol=symbol,
+        side=LiveOrderSide(side),
+        quantity=float(qty),
+        price=float(price) if price not in (None, "") else None,
+    )
+    try:
+        fill = gw.submit_order(order)
+    except NotImplementedError:
+        raise HTTPException(
+            status_code=501,
+            detail="实盘下单已接入执行网关，真实券商 SDK 待凭证就绪后启用",
+        )
+    except GatewayNotConfigured as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    # 实盘成交记录到模拟成交表（统一查询），并标记为实盘来源
+    _store.db.execute(
+        "INSERT INTO trading_fills(id, order_id, user_id, symbol, side, qty, price, ts) VALUES(?,?,?,?,?,?,?,?)",
+        (_store._uid(), "live", user_id, symbol, side, float(qty), fill.price, time.time()),
+    )
+    return {
+        "mode": "live",
+        "symbol": fill.symbol,
+        "side": fill.side,
+        "quantity": fill.quantity,
+        "price": fill.price,
+        "cost": fill.cost,
+    }
 
 
 def get_order(user_id: str, order_id: str):

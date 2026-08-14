@@ -876,7 +876,7 @@ export default function App() {
             />
           )}
           {view === 'reports' && <BacktestReports />}
-          {view === 'trade' && <Trading />}
+          {view === 'trade' && <Trading onNavigate={setView} />}
           {view === 'broker' && <BrokerSettings />}
         </main>
       </div>

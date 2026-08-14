@@ -3,14 +3,21 @@ import { brokerGetConfig, getToken } from './api.js'
 
 const SYMBOL_HINT = '示例：600519（贵州茅台）、000001（平安银行）、AAPL'
 
-export default function Trading() {
+function authHeaders() {
+  const t = getToken()
+  return t ? { Authorization: `Bearer ${t}` } : {}
+}
+
+export default function Trading({ onNavigate }) {
   const [summary, setSummary] = useState(null)
   const [positions, setPositions] = useState([])
   const [orders, setOrders] = useState([])
+  const [mode, setMode] = useState('paper')        // paper | live
+  const [liveCapable, setLiveCapable] = useState(false)
+  const [broker, setBroker] = useState(null)
   const [form, setForm] = useState({ symbol: '', side: 'buy', type: 'market', qty: '', price: '' })
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const [broker, setBroker] = useState(null)
 
   const load = useCallback(() => {
     return Promise.all([
@@ -27,14 +34,19 @@ export default function Trading() {
   useEffect(() => {
     load()
     brokerGetConfig().then(setBroker).catch(() => {})
+    fetch('/api/trading/mode', { headers: authHeaders() })
+      .then(r => r.json())
+      .then(d => setLiveCapable(!!d.live_capable))
+      .catch(() => {})
   }, [load])
 
   const submit = async (e) => {
     e.preventDefault()
     setBusy(true)
     setError('')
+    const path = mode === 'live' ? '/api/trading/live/orders' : '/api/trading/orders'
     try {
-      const res = await fetch('/api/trading/orders', {
+      const res = await fetch(path, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({
@@ -50,7 +62,7 @@ export default function Trading() {
         throw new Error(er.detail || `下单失败(${res.status})`)
       }
       setForm({ symbol: '', side: 'buy', type: 'market', qty: '', price: '' })
-      await load()
+      if (mode === 'paper') await load()
     } catch (err) {
       setError(err.message)
     } finally {
@@ -99,19 +111,40 @@ export default function Trading() {
     }
   }
 
+  const liveDisabled = mode === 'live' && !liveCapable
+
   return (
     <div className="qf-templates" style={{ height: '100%', overflowY: 'auto' }}>
-      <div className="qf-templates-head" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <h2>模拟交易</h2>
+      <div className="qf-templates-head" style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <h2>交易</h2>
+        {/* 模拟 / 实盘 切换 */}
+        <div style={{ display: 'inline-flex', borderRadius: 8, overflow: 'hidden', border: '1px solid #cbd5e1' }}>
+          <button type="button" onClick={() => setMode('paper')}
+            style={toggleStyle(mode === 'paper', '#6366f1')}>模拟</button>
+          <button type="button" onClick={() => setMode('live')}
+            style={toggleStyle(mode === 'live', liveCapable ? '#16a34a' : '#94a3b8')}>实盘</button>
+        </div>
         <span className="qf-hint">
-          模式：{broker?.broker === 'live' ? '实盘（未接入）' : '模拟撮合'} · 数据按用户隔离
+          券商：{broker?.broker || 'none'}
+          {mode === 'live' && (liveCapable ? ' · 已具备实盘条件' : ' · 未配置（请在券商设置填写真实凭证）')}
         </span>
-        <span style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
-          <button className="qf-btn qf-btn-sm" onClick={simulate} disabled={busy}>模拟行情推进</button>
-          <button className="qf-btn qf-btn-sm" onClick={reset} disabled={busy}>重置账户</button>
-        </span>
+        {mode === 'paper' && (
+          <span style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+            <button className="qf-btn qf-btn-sm" onClick={simulate} disabled={busy}>模拟行情推进</button>
+            <button className="qf-btn qf-btn-sm" onClick={reset} disabled={busy}>重置账户</button>
+          </span>
+        )}
       </div>
+
       {error && <div className="qf-error">{error}</div>}
+
+      {liveDisabled && (
+        <div className="qf-hint" style={{ background: '#fff7ed', border: '1px solid #fed7aa', padding: 10, borderRadius: 8, marginBottom: 12 }}>
+          实盘模式尚未配置。请在「券商设置」中选择 universal / easytrade / xuntou 并填写 api_key 等凭证；
+          凭证就绪后这里即可切换到真实下单。
+          <button className="qf-btn qf-btn-sm" style={{ marginLeft: 8 }} onClick={() => onNavigate && onNavigate('broker')}>去券商设置</button>
+        </div>
+      )}
 
       <div className="qf-mcards" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', marginTop: 12 }}>
         <div className="qf-mcard"><div className="qf-mcard-value">{summary ? summary.cash.toLocaleString() : '-'}</div><div className="qf-mcard-label">现金</div></div>
@@ -125,7 +158,9 @@ export default function Trading() {
       <div style={{ display: 'flex', gap: 16, marginTop: 18, flexWrap: 'wrap' }}>
         {/* 下单 */}
         <form onSubmit={submit} style={{ flex: '1 1 300px', minWidth: 280, border: '1px solid var(--border)', borderRadius: 10, padding: 14, background: '#fff' }}>
-          <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text)', marginBottom: 10 }}>下单</div>
+          <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text)', marginBottom: 10 }}>
+            下单（{mode === 'live' ? '实盘' : '模拟'}）
+          </div>
           <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
             <button type="button" onClick={() => setForm(f => ({ ...f, side: 'buy' }))}
               style={btnStyle(form.side === 'buy', '#16a34a')}>买入</button>
@@ -140,8 +175,8 @@ export default function Trading() {
           <label className="qf-prop-field" style={{ marginBottom: 10 }}>
             <span className="qf-prop-label">委托类型</span>
             <select className="qf-name-input" value={form.type} onChange={(e) => setForm(f => ({ ...f, type: e.target.value }))}>
-              <option value="market">市价（即时成交）</option>
-              <option value="limit">限价（挂单）</option>
+              <option value="market">市价</option>
+              <option value="limit">限价</option>
             </select>
           </label>
           <label className="qf-prop-field" style={{ marginBottom: 10 }}>
@@ -154,8 +189,8 @@ export default function Trading() {
               <input className="qf-name-input" type="number" min="0" step="0.01" value={form.price} onChange={(e) => setForm(f => ({ ...f, price: e.target.value }))} required />
             </label>
           )}
-          <button type="submit" className="qf-btn qf-btn-primary" disabled={busy} style={{ width: '100%' }}>
-            {busy ? '提交中…' : '提交委托'}
+          <button type="submit" className="qf-btn qf-btn-primary" disabled={busy || liveDisabled} style={{ width: '100%' }}>
+            {busy ? '提交中…' : mode === 'live' ? '实盘委托' : '提交委托'}
           </button>
         </form>
 
@@ -181,41 +216,49 @@ export default function Trading() {
         </div>
       </div>
 
-      {/* 委托 */}
-      <div style={{ marginTop: 18, border: '1px solid var(--border)', borderRadius: 10, padding: 14, background: '#fff' }}>
-        <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text)', marginBottom: 10 }}>委托记录</div>
-        {orders.length === 0 && <div className="qf-prop-hint">暂无委托</div>}
-        {orders.length > 0 && (
-          <table className="qf-state-table">
-            <thead><tr><th>时间</th><th>标的</th><th>方向</th><th>类型</th><th>数量</th><th>价格</th><th>状态</th><th>操作</th></tr></thead>
-            <tbody>
-              {orders.map((o) => (
-                <tr key={o.id}>
-                  <td className="qf-hint">{o.created_at}</td>
-                  <td>{o.symbol}</td>
-                  <td style={{ color: o.side === 'buy' ? '#16a34a' : '#e11d48' }}>{o.side === 'buy' ? '买入' : '卖出'}</td>
-                  <td>{o.type === 'market' ? '市价' : '限价'}</td>
-                  <td>{Number(o.qty).toLocaleString()}</td>
-                  <td>{o.price != null ? Number(o.price).toFixed(2) : '市价'}</td>
-                  <td>{statusLabel(o.status)}</td>
-                  <td>
-                    {o.status === 'open' && (
-                      <button className="qf-btn qf-btn-sm" onClick={() => cancel(o.id)} disabled={busy}>撤单</button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+      {/* 委托（仅模拟模式维护挂单/成交流水） */}
+      {mode === 'paper' && (
+        <div style={{ marginTop: 18, border: '1px solid var(--border)', borderRadius: 10, padding: 14, background: '#fff' }}>
+          <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text)', marginBottom: 10 }}>委托记录</div>
+          {orders.length === 0 && <div className="qf-prop-hint">暂无委托</div>}
+          {orders.length > 0 && (
+            <table className="qf-state-table">
+              <thead><tr><th>时间</th><th>标的</th><th>方向</th><th>类型</th><th>数量</th><th>价格</th><th>状态</th><th>操作</th></tr></thead>
+              <tbody>
+                {orders.map((o) => (
+                  <tr key={o.id}>
+                    <td className="qf-hint">{o.created_at}</td>
+                    <td>{o.symbol}</td>
+                    <td style={{ color: o.side === 'buy' ? '#16a34a' : '#e11d48' }}>{o.side === 'buy' ? '买入' : '卖出'}</td>
+                    <td>{o.type === 'market' ? '市价' : '限价'}</td>
+                    <td>{Number(o.qty).toLocaleString()}</td>
+                    <td>{o.price != null ? Number(o.price).toFixed(2) : '市价'}</td>
+                    <td>{statusLabel(o.status)}</td>
+                    <td>
+                      {o.status === 'open' && (
+                        <button className="qf-btn qf-btn-sm" onClick={() => cancel(o.id)} disabled={busy}>撤单</button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
     </div>
   )
 }
 
-function authHeaders() {
-  const t = getToken()
-  return t ? { Authorization: `Bearer ${t}` } : {}
+function toggleStyle(active, color) {
+  return {
+    padding: '6px 16px',
+    border: 'none',
+    background: active ? color : '#fff',
+    color: active ? '#fff' : 'var(--text)',
+    cursor: 'pointer',
+    fontSize: 13,
+  }
 }
 
 function btnStyle(active, color) {

@@ -1,3 +1,4 @@
+import pytest
 """V1.8 模拟交易引擎 + API 测试。"""
 
 from app.core.db import db
@@ -97,3 +98,51 @@ def test_reset_clears_account():
     assert summary["cash"] == 1_000_000
     assert summary["position_count"] == 0
     assert summary["open_orders"] == 0
+
+
+def test_live_mode_default_is_paper():
+    c = _authed("trade_live_mode")
+    r = c.get("/api/trading/mode")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["paper"] is True
+    assert body["live_capable"] is False
+
+
+def test_live_order_requires_config():
+    c = _authed("trade_live_401")
+    r = c.post("/api/trading/live/orders", json={"symbol": "AAPL", "side": "buy", "type": "market", "qty": 10})
+    assert r.status_code == 409
+    assert "券商设置" in r.json()["detail"]
+
+
+def test_live_order_configured_wires_gateway():
+    from app.trading import engine
+
+    class FakeFill:
+        symbol = "AAPL"
+        side = "buy"
+        quantity = 10
+        price = 123.0
+        cost = 1.0
+
+    class FakeGateway:
+        mode = "live"
+
+        def submit_order(self, order, last_price=None):
+            return FakeFill()
+
+    orig_gw = engine.LiveExecutionGateway
+    orig_cfg = engine.load_broker_config
+    engine.LiveExecutionGateway = FakeGateway
+    engine.load_broker_config = lambda: {
+        "broker": "universal", "api_key": "x", "api_secret": "", "base_url": "", "account_id": ""
+    }
+    try:
+        res = engine.place_live_order("u_demo", "AAPL", "buy", "market", 10)
+        assert res["mode"] == "live"
+        assert res["price"] == 123.0
+        assert res["symbol"] == "AAPL"
+    finally:
+        engine.LiveExecutionGateway = orig_gw
+        engine.load_broker_config = orig_cfg

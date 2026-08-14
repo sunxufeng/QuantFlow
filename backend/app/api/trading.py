@@ -30,6 +30,23 @@ class SimulateIn(BaseModel):
     price_overrides: Dict[str, float] = {}
 
 
+@router.get("/trading/mode")
+def get_mode(user: Dict[str, Any] = Depends(get_current_user)):
+    return {
+        "paper": True,
+        "live_capable": engine.live_capable(),
+        "broker": engine.live_broker(),
+    }
+
+
+@router.post("/trading/live/orders")
+def place_live(payload: OrderIn, user: Dict[str, Any] = Depends(get_current_user)):
+    fill = engine.place_live_order(
+        user["id"], payload.symbol, payload.side, payload.type, payload.qty, payload.price
+    )
+    return fill
+
+
 @router.get("/trading/summary")
 def get_summary(user: Dict[str, Any] = Depends(get_current_user)):
     return engine.summary(user["id"])
