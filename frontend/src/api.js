@@ -133,6 +133,25 @@ export const marketSyncNow = () => request('/market/sync', { method: 'POST' })
 // ---- 回测报告中心（V1.6）----
 export const backtestReports = () => request('/backtest/reports')
 export const backtestReport = (runId) => request(`/backtest/reports/${runId}`)
+export const exportBacktestReport = async (runId, format = 'csv') => {
+  const token = getToken()
+  const resp = await fetch(`${BASE}/backtest/reports/${runId}/export?format=${format}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  })
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => '')
+    throw new Error(`HTTP ${resp.status}: ${text.slice(0, 200)}`)
+  }
+  const blob = await resp.blob()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `backtest_${runId}.${format}`
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  URL.revokeObjectURL(url)
+}
 export const backtestStrategies = () => request('/backtest/strategies')
 export const runBacktest = (payload) => request('/backtest/run', { method: 'POST', body: JSON.stringify(payload) })
 export const optimizeBacktest = (payload) => request('/backtest/optimize', { method: 'POST', body: JSON.stringify(payload) })

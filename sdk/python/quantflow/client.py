@@ -164,6 +164,17 @@ class QuantFlowClient:
     def get_backtest(self, run_id: str) -> Dict:
         return self._request("GET", f"/backtest/reports/{run_id}")
 
+    def export_backtest(self, run_id: str, format: str = "csv") -> bytes:
+        """导出回测报告（csv / json），返回文件字节。"""
+        resp = self._client.get(
+            f"{self.base_url}/api/backtest/reports/{run_id}/export",
+            params={"format": format},
+            headers={"Authorization": f"Bearer {self.token}"} if self.token else {},
+        )
+        if resp.status_code >= 400:
+            raise QuantFlowError(resp.status_code, resp.text)
+        return resp.content
+
     def list_backtests(self) -> Dict:
         return self._request("GET", "/backtest/reports")
 

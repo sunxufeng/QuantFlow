@@ -154,3 +154,40 @@ class TestReportsEndpoint:
     def test_report_not_found_404(self):
         resp = client.get("/api/backtest/reports/does-not-exist")
         assert resp.status_code == 404
+
+
+class TestExportEndpoint:
+    def test_export_csv_and_json(self):
+        resp = client.post("/api/backtest/run", json={
+            "strategy": "buy_hold",
+            "params": {"shares": 1000},
+            "symbols": ["TEST.SH"],
+            "start": "2024-01-01",
+            "end": "2024-02-01",
+        })
+        run_id = resp.json()["run_id"]
+
+        csv_resp = client.get(f"/api/backtest/reports/{run_id}/export?format=csv")
+        assert csv_resp.status_code == 200
+        assert csv_resp.headers["content-type"].startswith("text/csv")
+        assert "绩效指标" in csv_resp.text
+
+        json_resp = client.get(f"/api/backtest/reports/{run_id}/export?format=json")
+        assert json_resp.status_code == 200
+        assert json_resp.json()["run_id"] == run_id
+
+    def test_export_bad_format(self):
+        resp = client.post("/api/backtest/run", json={
+            "strategy": "buy_hold",
+            "params": {"shares": 1000},
+            "symbols": ["TEST.SH"],
+            "start": "2024-01-01",
+            "end": "2024-02-01",
+        })
+        run_id = resp.json()["run_id"]
+        bad = client.get(f"/api/backtest/reports/{run_id}/export?format=xls")
+        assert bad.status_code == 422
+
+    def test_export_not_found(self):
+        resp = client.get("/api/backtest/reports/nope/export?format=csv")
+        assert resp.status_code == 404
