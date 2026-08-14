@@ -250,3 +250,67 @@ def ic_analysis(
         "symbols": symbols_order,
         "dates_count": len(dates),
     }
+
+
+# 因子排行榜可排序指标（默认按均值 IC 降序）
+RANK_METRICS = ["mean_ic", "ir", "ic_positive_ratio", "std_ic"]
+
+
+def factor_ranking(
+    symbols: Optional[List[str]] = None,
+    start: str = "2000-01-01",
+    end: str = "2100-01-01",
+    window: int = 10,
+    forward: int = 1,
+    metric: str = "mean_ic",
+    order: str = "desc",
+) -> Dict[str, object]:
+    """因子排行榜：基于 IC/IR 对所有内置因子排序。
+
+    复用 ``ic_analysis`` 计算逐因子 IC/IR，再按指定指标（默认均值 IC）
+    排序，并附带因子的方向（direction）与中文说明，便于按因子质量筛选。
+
+    ``order`` 为 ``desc``（默认，越大越好，适合 mean_ic/ir/ic_positive_ratio）
+    或 ``asc``（适合 std_ic，越小越稳定）。缺失 IC 的因子排在末尾。
+    """
+    if metric not in RANK_METRICS:
+        metric = "mean_ic"
+    descending = order != "asc"
+
+    ic = ic_analysis(
+        symbols=symbols, start=start, end=end, window=window, forward=forward
+    )
+    meta = {f["name"]: f for f in list_factors()}
+
+    rows = []
+    for f in ic["factors"]:
+        res = ic["results"].get(f, {})
+        rows.append(
+            {
+                "factor": f,
+                "direction": meta.get(f, {}).get("direction", 0),
+                "description": meta.get(f, {}).get("description", ""),
+                "mean_ic": res.get("mean_ic"),
+                "std_ic": res.get("std_ic"),
+                "ir": res.get("ir"),
+                "ic_positive_ratio": res.get("ic_positive_ratio"),
+                "observations": res.get("observations", 0),
+                "ic_series": res.get("ic_series", []),
+            }
+        )
+
+    def _sort_key(r):
+        v = r.get(metric)
+        # 缺失值始终排末尾，与排序方向无关
+        return (v is None, v if v is not None else 0.0)
+
+    rows.sort(key=_sort_key, reverse=descending)
+
+    return {
+        "metric": metric,
+        "order": order,
+        "ranked": rows,
+        "forward_days": forward,
+        "symbols": ic["symbols"],
+        "dates_count": ic["dates_count"],
+    }

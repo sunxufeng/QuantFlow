@@ -11,7 +11,7 @@ if PROXY:
 
 REPO_ROOT = "/Users/sunxufeng/WorkBuddy/2026-08-12-14-19-17/quantflow"
 BASE = "18fbbe8"
-MESSAGE = "feat(v3.1): 个人工作流模板库（模板市场）——保存/浏览/删除用户模板，持久化 SQLite，跨重启保留 (3.1.0)"
+MESSAGE = "feat(v3.2): 因子排行榜——按 IC/IR 对所有内置因子排序（打通 V2.8 排行与 V2.9 因子研究），前端排行榜 tab (3.2.0)"
 
 
 def api(method, path, data=None, retries=6):
