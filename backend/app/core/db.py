@@ -172,6 +172,20 @@ CREATE TABLE IF NOT EXISTS app_settings (
     updated_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS alert_rules (
+    id               TEXT PRIMARY KEY,
+    name             TEXT NOT NULL,
+    symbol           TEXT NOT NULL,
+    metric           TEXT NOT NULL DEFAULT 'price',
+    operator         TEXT NOT NULL DEFAULT '>',
+    threshold        REAL NOT NULL,
+    cooldown_minutes INTEGER NOT NULL DEFAULT 60,
+    enabled          INTEGER NOT NULL DEFAULT 1,
+    created_at       TEXT NOT NULL,
+    last_triggered   TEXT,
+    trigger_count    INTEGER NOT NULL DEFAULT 0
+);
+
 """
 
 

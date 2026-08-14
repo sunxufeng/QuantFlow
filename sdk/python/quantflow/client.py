@@ -175,6 +175,43 @@ class QuantFlowClient:
             raise QuantFlowError(resp.status_code, resp.text)
         return resp.content
 
+    # ------------------------------------------------------------------ #
+    # 预警规则引擎（V2.3）
+    # ------------------------------------------------------------------ #
+    def list_alerts(self) -> Dict:
+        return self._request("GET", "/alerts")
+
+    def create_alert(
+        self,
+        name: str,
+        symbol: str,
+        threshold: float,
+        *,
+        metric: str = "price",
+        operator: str = ">",
+        cooldown_minutes: int = 60,
+        enabled: bool = True,
+    ) -> Dict:
+        return self._request(
+            "POST",
+            "/alerts",
+            json={
+                "name": name,
+                "symbol": symbol,
+                "metric": metric,
+                "operator": operator,
+                "threshold": threshold,
+                "cooldown_minutes": cooldown_minutes,
+                "enabled": enabled,
+            },
+        )
+
+    def delete_alert(self, alert_id: str) -> Dict:
+        return self._request("DELETE", f"/alerts/{alert_id}")
+
+    def evaluate_alerts(self) -> Dict:
+        return self._request("POST", "/alerts/evaluate")
+
     def list_backtests(self) -> Dict:
         return self._request("GET", "/backtest/reports")
 

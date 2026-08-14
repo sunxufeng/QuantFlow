@@ -152,6 +152,13 @@ export const exportBacktestReport = async (runId, format = 'csv') => {
   a.remove()
   URL.revokeObjectURL(url)
 }
+
+// ---- 预警规则引擎（V2.3）----
+export const listAlerts = () => request('/alerts')
+export const createAlert = (payload) => request('/alerts', { method: 'POST', body: JSON.stringify(payload) })
+export const deleteAlert = (id) => request(`/alerts/${id}`, { method: 'DELETE' })
+export const toggleAlert = (id, payload) => request(`/alerts/${id}/toggle`, { method: 'POST', body: JSON.stringify(payload) })
+export const evaluateAlerts = () => request('/alerts/evaluate', { method: 'POST' })
 export const backtestStrategies = () => request('/backtest/strategies')
 export const runBacktest = (payload) => request('/backtest/run', { method: 'POST', body: JSON.stringify(payload) })
 export const optimizeBacktest = (payload) => request('/backtest/optimize', { method: 'POST', body: JSON.stringify(payload) })

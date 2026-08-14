@@ -136,5 +136,22 @@ class NotificationService:
             "enabled": sum(1 for r in rows if r["enabled"]),
         }
 
+    def notify(self, message: "NotificationMessage") -> int:
+        """向所有启用渠道广播一条通知，返回成功发送的渠道数。
+
+        用于预警规则、系统事件等通用场景（区别于工作流运行完成通知）。
+        """
+        sent = 0
+        for rec in self.list():
+            if not rec["enabled"]:
+                continue
+            try:
+                channel = build_channel(rec["type"], rec["name"], rec["config"], rec["id"])
+                channel.send(message)
+                sent += 1
+            except Exception as exc:  # 单渠道失败不影响其他渠道
+                logger.warning("通知渠道 %s 发送失败: %s", rec["id"], exc)
+        return sent
+
 
 notification_service = NotificationService()
