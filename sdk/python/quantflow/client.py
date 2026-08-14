@@ -212,6 +212,21 @@ class QuantFlowClient:
     def evaluate_alerts(self) -> Dict:
         return self._request("POST", "/alerts/evaluate")
 
+    # ------------------------------------------------------------------ #
+    # 自选股 / 行情看板（V2.4）
+    # ------------------------------------------------------------------ #
+    def get_watchlist(self) -> Dict:
+        return self._request("GET", "/market/watchlist")
+
+    def add_watchlist(self, symbol: str) -> Dict:
+        return self._request("POST", f"/market/watchlist?symbol={symbol}")
+
+    def remove_watchlist(self, symbol: str) -> Dict:
+        return self._request("DELETE", f"/market/watchlist/{symbol}")
+
+    def get_quotes(self, symbols: List[str]) -> Dict:
+        return self._request("GET", f"/market/quotes?symbols={','.join(symbols)}")
+
     def list_backtests(self) -> Dict:
         return self._request("GET", "/backtest/reports")
 

@@ -186,6 +186,11 @@ CREATE TABLE IF NOT EXISTS alert_rules (
     trigger_count    INTEGER NOT NULL DEFAULT 0
 );
 
+CREATE TABLE IF NOT EXISTS watchlists (
+    symbol     TEXT PRIMARY KEY,
+    added_at   TEXT NOT NULL
+);
+
 """
 
 

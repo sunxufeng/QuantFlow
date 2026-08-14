@@ -13,6 +13,7 @@ const navItems = [
   { key: 'templates', label: '模板库', abbr: '模' },
   { key: 'reports', label: '回测报告', abbr: '报' },
   { key: 'alerts', label: '预警规则', abbr: '警' },
+  { key: 'board', label: '行情看板', abbr: '板' },
   { key: 'trade', label: '模拟交易', abbr: '易' },
   { key: 'broker', label: '券商设置', abbr: '券', adminOnly: true },
 ]

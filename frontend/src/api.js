@@ -159,6 +159,12 @@ export const createAlert = (payload) => request('/alerts', { method: 'POST', bod
 export const deleteAlert = (id) => request(`/alerts/${id}`, { method: 'DELETE' })
 export const toggleAlert = (id, payload) => request(`/alerts/${id}/toggle`, { method: 'POST', body: JSON.stringify(payload) })
 export const evaluateAlerts = () => request('/alerts/evaluate', { method: 'POST' })
+
+// ---- 自选股监控 / 行情看板（V2.4）----
+export const getWatchlist = () => request('/market/watchlist')
+export const addWatchlist = (symbol) => request(`/market/watchlist?symbol=${encodeURIComponent(symbol)}`, { method: 'POST' })
+export const removeWatchlist = (symbol) => request(`/market/watchlist/${encodeURIComponent(symbol)}`, { method: 'DELETE' })
+export const getQuotes = (symbols) => request(`/market/quotes?symbols=${encodeURIComponent(symbols)}`)
 export const backtestStrategies = () => request('/backtest/strategies')
 export const runBacktest = (payload) => request('/backtest/run', { method: 'POST', body: JSON.stringify(payload) })
 export const optimizeBacktest = (payload) => request('/backtest/optimize', { method: 'POST', body: JSON.stringify(payload) })
