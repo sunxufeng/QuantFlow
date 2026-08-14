@@ -185,6 +185,10 @@ class QuantFlowClient:
         """
         return self._request("GET", "/export", params={"resource": resource, "format": format})
 
+    def workspace(self) -> Dict:
+        """投研总览快照（V7.0）：聚合交易账户、告警、自选股、调度、因子库。"""
+        return self._request("GET", "/workspace")
+
     # ------------------------------------------------------------------ #
     # 项目（M4）
     # ------------------------------------------------------------------ #
