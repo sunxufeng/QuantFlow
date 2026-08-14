@@ -419,6 +419,12 @@ class QuantFlowClient:
             "POST", "/workflows/validate", json={"nodes": nodes, "edges": edges}
         )
 
+    # ---- V3.0 AI 策略工作台：自然语言生成工作流 ----
+    def generate_workflow(self, prompt: str, use_llm: bool = True) -> Dict:
+        return self._request(
+            "POST", "/workflows/generate", json={"prompt": prompt, "use_llm": use_llm}
+        )
+
     def list_workflow_versions(self, workflow_id: str) -> List[Dict]:
         return self._request("GET", f"/workflows/{workflow_id}/versions")
 

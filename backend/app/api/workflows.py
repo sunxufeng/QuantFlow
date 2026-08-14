@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
+from pydantic import BaseModel, Field
 
 from ..core.auth import get_current_user, get_current_user_optional
 from ..core.dag import WorkflowValidationError, validate_workflow
@@ -23,6 +24,7 @@ from ..models.schemas import (
     WorkflowVersionCreateIn,
     WorkflowVersionOut,
 )
+from ..workflows.generate import generate_from_text
 
 router = APIRouter(dependencies=[Depends(get_current_user)])
 
@@ -74,6 +76,29 @@ def list_workflow_templates() -> list[dict]:
     from ..templates import list_templates
 
     return list_templates()
+
+
+class WorkflowGenerateRequest(BaseModel):
+    prompt: str = Field(..., description="自然语言策略描述", min_length=1)
+    use_llm: bool = Field(True, description="是否优先使用已配置的 LLM 生成（失败回退规则模板）")
+
+
+@router.post("/workflows/generate", summary="自然语言生成工作流（V3.0 AI 策略工作台）")
+def generate_workflow(req: WorkflowGenerateRequest) -> dict:
+    """把策略描述转换为工作流 JSON（nodes + edges），可直接导入编辑器。
+
+    - 配置了真实 LLM 时优先用模型生成；未配置或生成不合法则回退到规则模板。
+    - 返回包含 ``source``（rule/llm）与 ``warnings``，前端据此提示。
+    """
+    if not req.prompt.strip():
+        raise HTTPException(status_code=422, detail="策略描述不能为空")
+    result = generate_from_text(req.prompt, use_llm=req.use_llm)
+    # 再次兜底校验，确保返回的一定可导入
+    try:
+        validate_workflow(result["nodes"], result["edges"])
+    except WorkflowValidationError as exc:
+        raise HTTPException(status_code=500, detail=f"生成结果非法: {exc}") from exc
+    return result
 
 
 @router.get("/workflows", response_model=list[WorkflowSummaryOut], summary="工作流列表")

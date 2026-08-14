@@ -500,6 +500,15 @@ function Canvas({ projectId, pendingTemplate, onTemplateConsumed }) {
     }
   }, [applyWorkflow, refreshWorkflows])
 
+  // V3.0 AI 策略工作台：把生成的工作流导入编辑器并跳转
+  const importGeneratedToEditor = useCallback(async (imported) => {
+    applyWorkflow(imported)
+    setWorkflowId(imported.id)
+    setWorkflowName(imported.name)
+    await refreshWorkflows()
+    setView('editor')
+  }, [applyWorkflow, refreshWorkflows, setView])
+
   const onRestoreVersion = useCallback(async (restored) => {
     applyWorkflow(restored)
     setWorkflowId(restored.id)
@@ -871,7 +880,7 @@ export default function App() {
           {view === 'factor' && <FactorLibrary />}
           {view === 'factorScore' && <Factors />}
           {view === 'notify' && <Notifications />}
-          {view === 'llm' && <LLMAssistant />}
+          {view === 'llm' && <LLMAssistant onImported={importGeneratedToEditor} />}
           {view === 'settings' && <LLMSettings />}
           {view === 'templates' && (
             <Templates
