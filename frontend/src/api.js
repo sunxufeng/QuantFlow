@@ -228,6 +228,7 @@ export const genSynthetic = (payload) => request('/backtest/market/synthetic', {
 export const runSyntheticBacktest = (payload) => request('/backtest/synthetic-run', { method: 'POST', body: JSON.stringify(payload) })
 export const runForwardSim = (payload) => request('/backtest/forward-sim', { method: 'POST', body: JSON.stringify(payload) })
 export const runSeasonality = (payload) => request('/backtest/seasonality', { method: 'POST', body: JSON.stringify(payload) })
+export const runPortfolioOptimize = (payload) => request('/backtest/portfolio-optimize', { method: 'POST', body: JSON.stringify(payload) })
 
 // ---- 因子库 CRUD（V1.1 N3）----
 export const factorLibraryList = (category) => request(

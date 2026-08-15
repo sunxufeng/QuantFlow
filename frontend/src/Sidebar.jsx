@@ -22,6 +22,7 @@ const navItems = [
   { key: 'synth', label: '合成行情', abbr: '成' },
   { key: 'fwd', label: '前向模拟', abbr: '前' },
   { key: 'season', label: '季节性', abbr: '季' },
+  { key: 'portopt', label: '组合优化', abbr: '优' },
   { key: 'factorScore', label: '因子评分', abbr: '评' },
   { key: 'notify', label: '通知渠道', abbr: '通' },
   { key: 'llm', label: 'LLM 助手', abbr: '助' },

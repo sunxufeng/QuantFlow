@@ -35,6 +35,11 @@ from ..backtest.analysis import (
 )
 from ..backtest.optimizer import OptimizeConfigError, optimize
 from ..backtest.portfolio import PortfolioBacktest
+from ..backtest.portfolio_opt import (
+    efficient_frontier as _efficient_frontier,
+    min_variance_portfolio as _min_variance_portfolio,
+    max_sharpe_portfolio as _max_sharpe_portfolio,
+)
 from ..backtest.strategies import STRATEGY_REGISTRY, default_factors
 from ..core.auth import get_current_user
 from ..factors import research as factor_research
@@ -1063,6 +1068,81 @@ def seasonality_analysis(payload: SeasonalityRequest) -> dict:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     result["source"] = "synthetic" if payload.synthetic is not None else "live"
     return result
+
+
+# --------------------------------------------------------------------------- #
+# 投资组合优化（V23）
+# --------------------------------------------------------------------------- #
+class PortfolioOptimizeRequest(BaseModel):
+    symbols: List[str] = Field(..., min_length=2, description="至少 2 个资产标的")
+    start: str = Field(..., description="起始日期 YYYY-MM-DD")
+    end: str = Field(..., description="结束日期 YYYY-MM-DD")
+    interval: str = Field(default="daily", description="行情频率")
+    long_only: bool = Field(default=True, description="是否限制多头（权重>=0）")
+    rf: float = Field(default=0.0, ge=0.0, description="无风险年化收益率（用于夏普）")
+    n_points: int = Field(default=20, ge=2, le=60, description="有效前沿采样点数")
+    synthetic: Optional[Dict[str, object]] = Field(
+        default=None,
+        description="可选：提供则改用 GBM 合成行情（mu_annual/sigma_annual/seed/regime），无需真实行情源",
+    )
+
+
+def _asset_returns_from_bars(symbols: List[str], bars_map: Dict[str, List[Any]]) -> List[List[float]]:
+    """由各标的 Bar 序列计算对齐的日收益率矩阵（每资产一条）。"""
+    out: List[List[float]] = []
+    for sym in symbols:
+        bars = bars_map.get(sym) or []
+        rets: List[float] = []
+        for i in range(1, len(bars)):
+            prev = float(bars[i - 1].close)
+            cur = float(bars[i].close)
+            if prev > 0:
+                rets.append(cur / prev - 1.0)
+        out.append(rets)
+    return out
+
+
+@router.post("/portfolio-optimize", summary="投资组合优化（最小方差/最大夏普/有效前沿，V23）")
+def portfolio_optimize(payload: PortfolioOptimizeRequest) -> dict:
+    if payload.end < payload.start:
+        raise HTTPException(status_code=422, detail="end 不得早于 start")
+    if len(payload.symbols) < 2:
+        raise HTTPException(status_code=422, detail="至少需要 2 个资产")
+    try:
+        if payload.synthetic is not None:
+            sg = dict(payload.synthetic)
+            bars_map = synthetic.generate_universe(
+                symbols=payload.symbols,
+                start=payload.start,
+                end=payload.end,
+                mu_annual=float(sg.get("mu_annual", 0.08)),
+                sigma_annual=float(sg.get("sigma_annual", 0.20)),
+                seed=(None if sg.get("seed") is None else int(sg["seed"])),
+                regime=bool(sg.get("regime", False)),
+            )
+        else:
+            bars_map = {}
+            for sym in payload.symbols:
+                bars_map[sym] = market_service.bars(sym, payload.start, payload.end, interval=payload.interval)
+        assets_returns = _asset_returns_from_bars(payload.symbols, bars_map)
+        if any(len(r) < 2 for r in assets_returns):
+            raise ValueError("某资产在区间内日收益样本不足（至少需要 2 期）")
+    except (ValueError, RuntimeError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    try:
+        ef = _efficient_frontier(
+            assets_returns, n_points=payload.n_points,
+            long_only=payload.long_only, rf=payload.rf,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    ef["symbols"] = payload.symbols
+    ef["source"] = "synthetic" if payload.synthetic is not None else "live"
+    ef["long_only"] = payload.long_only
+    ef["rf"] = payload.rf
+    return ef
 
 
 class MetricsExtendedRequest(BaseModel):
