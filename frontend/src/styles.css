@@ -199,8 +199,9 @@
 .qf-handle-label {
   position: absolute; top: -2px; font-size: 7px; color: var(--text-dim);
   background: rgba(255,255,255,.9); padding: 0 2px; border-radius: 2px;
-  white-space: normal; word-break: break-all; line-height: 1.15;
-  max-width: 56px; font-family: ui-monospace, monospace;
+  white-space: normal; word-break: normal; overflow-wrap: break-word;
+  line-height: 1.15; max-width: 60px; width: max-content;
+  font-family: ui-monospace, monospace;
 }
 .qf-handle-label-target { left: 14px; text-align: left; }
 .qf-handle-label-source { right: 14px; text-align: right; }
