@@ -217,6 +217,9 @@ export const optimizeBacktest = (payload) => request('/backtest/optimize', { met
 export const runPortfolioBacktest = (payload) => request('/backtest/portfolio', { method: 'POST', body: JSON.stringify(payload) })
 export const runSensitivity = (payload) => request('/backtest/sensitivity', { method: 'POST', body: JSON.stringify(payload) })
 export const runMonteCarlo = (payload) => request('/backtest/montecarlo', { method: 'POST', body: JSON.stringify(payload) })
+export const runSensitivityGrid = (payload) => request('/backtest/sensitivity-grid', { method: 'POST', body: JSON.stringify(payload) })
+export const runWalkForward = (payload) => request('/backtest/walkforward', { method: 'POST', body: JSON.stringify(payload) })
+export const runBenchmarkCompare = (payload) => request('/backtest/benchmark-compare', { method: 'POST', body: JSON.stringify(payload) })
 
 // ---- 因子库 CRUD（V1.1 N3）----
 export const factorLibraryList = (category) => request(

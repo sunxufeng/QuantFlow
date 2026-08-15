@@ -41,7 +41,10 @@ import Optimizer from './Optimizer.jsx'
 import MarketData from './MarketData.jsx'
 import Portfolio from './Portfolio.jsx'
 import Sensitivity from './Sensitivity.jsx'
+import ParamGrid from './ParamGrid.jsx'
 import MonteCarlo from './MonteCarlo.jsx'
+import WalkForward from './WalkForward.jsx'
+import BenchmarkCompare from './BenchmarkCompare.jsx'
 import LoginScreen from './LoginScreen.jsx'
 import { useGraphHistory } from './useHistory.js'
 import {
@@ -1077,7 +1080,10 @@ export default function App() {
           {view === 'market' && <MarketData />}
           {view === 'portfolio' && <Portfolio />}
           {view === 'sensitivity' && <Sensitivity />}
+          {view === 'paramgrid' && <ParamGrid />}
           {view === 'montecarlo' && <MonteCarlo />}
+          {view === 'walkforward' && <WalkForward />}
+          {view === 'benchcmp' && <BenchmarkCompare />}
          </ErrorBoundary>
         </main>
       </div>

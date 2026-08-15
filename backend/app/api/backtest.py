@@ -22,6 +22,11 @@ from pydantic import BaseModel, Field
 from ..backtest import BacktestEngine, BacktestError, BacktestReportStore, build_report
 from ..backtest.metrics import PerformanceMetrics
 from ..backtest.montecarlo import monte_carlo
+from ..backtest.analysis import (
+    sensitivity_grid as _sensitivity_grid,
+    walk_forward as _walk_forward,
+    build_benchmark_values as _build_benchmark_values,
+)
 from ..backtest.optimizer import OptimizeConfigError, optimize
 from ..backtest.portfolio import PortfolioBacktest
 from ..backtest.strategies import STRATEGY_REGISTRY, default_factors
@@ -511,6 +516,184 @@ def montecarlo_analysis(payload: MonteCarloRequest) -> dict:
     mc["strategy"] = strat
     mc["run_id"] = run_id
     return mc
+
+
+# --------------------------------------------------------------------------- #
+# 多参数敏感性网格（V16）
+# --------------------------------------------------------------------------- #
+class SensitivityGridRequest(BaseModel):
+    strategy: str = Field(..., description="策略名称（见 /strategies）")
+    params: Dict[str, object] = Field(default_factory=dict, description="固定参数（不参与扫描的部分）")
+    grid: Dict[str, List[object]] = Field(
+        ..., min_length=1, description="待扫描的两个参数的取值网格 {param_a: [...], param_b: [...]}"
+    )
+    symbols: List[str] = Field(..., min_length=1, description="回测标的")
+    start: str = Field(..., description="起始日期 YYYY-MM-DD")
+    end: str = Field(..., description="结束日期 YYYY-MM-DD")
+    initial_cash: float = Field(default=1_000_000.0, gt=0, description="初始资金")
+    asset_types: Dict[str, str] = Field(default_factory=dict, description="标的资产类型覆盖")
+    multipliers: Dict[str, float] = Field(default_factory=dict, description="期货合约乘数覆盖")
+    interval: str = Field(default="daily", description="行情频率：daily / minute")
+    metric: str = Field(
+        default="total_return",
+        description="扫描指标：total_return / annual_return / sharpe / max_drawdown / win_rate / final_value",
+    )
+
+
+@router.post("/sensitivity-grid", summary="多参数敏感性网格（双参数扫描热力图，V16）")
+def sensitivity_grid_analysis(payload: SensitivityGridRequest) -> dict:
+    if payload.end < payload.start:
+        raise HTTPException(status_code=422, detail="end 不得早于 start")
+    if payload.interval not in ("daily", "minute"):
+        raise HTTPException(status_code=422, detail=f"不支持的行情频率 {payload.interval!r}")
+    if payload.strategy not in STRATEGY_REGISTRY:
+        raise HTTPException(
+            status_code=422, detail=f"未知策略 {payload.strategy!r}，可选: {sorted(STRATEGY_REGISTRY)}"
+        )
+    if payload.metric not in ("total_return", "annual_return", "sharpe", "max_drawdown", "win_rate", "final_value"):
+        raise HTTPException(status_code=422, detail=f"不支持的指标 {payload.metric!r}")
+    try:
+        return _sensitivity_grid(
+            strategy=payload.strategy,
+            params=dict(payload.params),
+            grid={k: list(v) for k, v in payload.grid.items()},
+            symbols=payload.symbols,
+            start=payload.start,
+            end=payload.end,
+            initial_cash=payload.initial_cash,
+            asset_types=payload.asset_types,
+            multipliers=payload.multipliers,
+            interval=payload.interval,
+            metric=payload.metric,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+# --------------------------------------------------------------------------- #
+# Walk-forward 样本外验证（V16）
+# --------------------------------------------------------------------------- #
+class WalkForwardRequest(BaseModel):
+    strategy: str = Field(..., description="策略名称（见 /strategies）")
+    params: Dict[str, object] = Field(default_factory=dict, description="固定参数")
+    symbols: List[str] = Field(..., min_length=1, description="回测标的")
+    start: str = Field(..., description="起始日期 YYYY-MM-DD")
+    end: str = Field(..., description="结束日期 YYYY-MM-DD")
+    initial_cash: float = Field(default=1_000_000.0, gt=0, description="初始资金")
+    asset_types: Dict[str, str] = Field(default_factory=dict, description="标的资产类型覆盖")
+    multipliers: Dict[str, float] = Field(default_factory=dict, description="期货合约乘数覆盖")
+    interval: str = Field(default="daily", description="行情频率：daily / minute")
+    n_folds: int = Field(default=5, ge=2, le=20, description="折数（扩张窗口：训练从起点增长，测试为第 k 折）")
+
+
+@router.post("/walkforward", summary="Walk-forward 样本外验证（V16）")
+def walkforward_analysis(payload: WalkForwardRequest) -> dict:
+    if payload.end < payload.start:
+        raise HTTPException(status_code=422, detail="end 不得早于 start")
+    if payload.interval not in ("daily", "minute"):
+        raise HTTPException(status_code=422, detail=f"不支持的行情频率 {payload.interval!r}")
+    if payload.strategy not in STRATEGY_REGISTRY:
+        raise HTTPException(
+            status_code=422, detail=f"未知策略 {payload.strategy!r}，可选: {sorted(STRATEGY_REGISTRY)}"
+        )
+    try:
+        return _walk_forward(
+            strategy=payload.strategy,
+            params=dict(payload.params),
+            symbols=payload.symbols,
+            start=payload.start,
+            end=payload.end,
+            initial_cash=payload.initial_cash,
+            asset_types=payload.asset_types,
+            multipliers=payload.multipliers,
+            interval=payload.interval,
+            n_folds=payload.n_folds,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+# --------------------------------------------------------------------------- #
+# 自定义基准对比（V16）
+# --------------------------------------------------------------------------- #
+class BenchmarkDef(BaseModel):
+    name: str = Field(..., description="基准名称（用于展示）")
+    symbols: Optional[List[str]] = Field(
+        default=None, description="基准篮子标的（与 weights 配合，加权买入持有）"
+    )
+    weights: Optional[List[float]] = Field(
+        default=None, description="篮子权重（默认等权）；长度需与 symbols 一致"
+    )
+    values: Optional[List[float]] = Field(
+        default=None, description="显式基准序列（按策略净值曲线逐日对齐，长度需一致）"
+    )
+
+
+class BenchmarkCompareRequest(BaseModel):
+    run_id: str = Field(..., description="已存回测报告 run_id（策略曲线来源）")
+    benchmarks: List[BenchmarkDef] = Field(
+        ..., min_length=1, description="自定义基准列表（篮子或显式序列）"
+    )
+
+
+@router.post("/benchmark-compare", summary="自定义基准对比（篮子/显式序列 vs 已存报告，V16）")
+def benchmark_compare(payload: BenchmarkCompareRequest) -> dict:
+    try:
+        report = report_store.load(payload.run_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    report = _normalize_report(report)
+    curve = report.get("equity_curve") or []
+    if not curve:
+        raise HTTPException(status_code=422, detail="该报告无净值曲线，无法对比")
+    dates = [p.get("date") for p in curve]
+    initial = curve[0].get("total_value") or payload.initial_cash or 1_000_000.0
+    trades = report.get("trades") or []
+    strat_values = [p.get("total_value") for p in curve]
+
+    results = []
+    for b in payload.benchmarks:
+        bd = b.model_dump()
+        try:
+            bv = _build_benchmark_values(bd, dates, initial, report.get("interval", "daily"))
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=f"基准「{b.name}」: {exc}") from exc
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail=f"基准「{b.name}」: {exc}") from exc
+        # 相对绩效：复用 PerformanceMetrics 的基准归因（beta/alpha/TE/IR/超额）
+        from ..backtest.engine import EquityPoint  # noqa: F401
+        eq_points = [
+            EquityPoint(
+                date=p.get("date"),
+                cash=p.get("cash", 0.0),
+                market_value=p.get("market_value", 0.0),
+                total_value=p.get("total_value", 0.0),
+                daily_return=p.get("daily_return", 0.0) or 0.0,
+            )
+            for p in curve
+        ]
+        m = PerformanceMetrics(eq_points, initial, trades, benchmark_values=bv)
+        rel = dict(m._attribution.get("benchmark", {}))
+        results.append({
+            "name": b.name,
+            "relative": rel,
+            "curve": [{"date": d, "value": round(v, 2)} for d, v in zip(dates, bv)],
+        })
+
+    return {
+        "run_id": payload.run_id,
+        "strategy": report.get("strategy") or report.get("strategy_name"),
+        "symbols": report.get("symbols"),
+        "start_date": dates[0] if dates else None,
+        "end_date": dates[-1] if dates else None,
+        "interval": report.get("interval", "daily"),
+        "strategy_curve": [{"date": d, "value": round(v, 2)} for d, v in zip(dates, strat_values)],
+        "benchmarks": results,
+    }
 
 
 def _normalize_report(r: dict) -> dict:
