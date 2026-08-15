@@ -18,6 +18,7 @@ from .api import (
     auth,
     backtest,
     execution,
+    execution_cost,
     export as export_api,
     factor_scoring,
     factors,
@@ -136,6 +137,7 @@ app.include_router(strategies_ext.router, prefix="/api")
 app.include_router(alerts.router, prefix="/api")
 app.include_router(workspace_api.router, prefix="/api")
 app.include_router(export_api.router, prefix="/api")
+app.include_router(execution_cost.router, prefix="/api")
 
 _START_TIME = time.time()
 

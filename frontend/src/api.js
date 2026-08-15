@@ -295,6 +295,14 @@ export const runMlAnomaly = (payload) => _ml('anomaly', payload)
 export const runMlImportance = (payload) => _ml('importance', payload)
 export const runMlFeatures = (payload) => _ml('features', payload)
 
+// ---- 执行成本与最优执行（V62–V66）----
+const _exec = (path, payload) => request(`/execution/${path}`, { method: 'POST', body: JSON.stringify(payload) })
+export const runExecCost = (payload) => _exec('cost', payload)
+export const runExecImpact = (payload) => _exec('impact', payload)
+export const runExecTwap = (payload) => _exec('twap', payload)
+export const runExecVwap = (payload) => _exec('vwap', payload)
+export const runExecSlippage = (payload) => _exec('slippage', payload)
+
 // ---- 因子库 CRUD（V1.1 N3）----
 export const factorLibraryList = (category) => request(
   `/factors/library${category ? `?category=${encodeURIComponent(category)}` : ''}`,
