@@ -42,6 +42,8 @@ from ..backtest.portfolio_opt import (
     max_sharpe_portfolio as _max_sharpe_portfolio,
 )
 from ..backtest.trade_analysis import analyze_from_dicts as _analyze_trades
+from ..backtest.attribution import performance_attribution as _performance_attribution
+from ..backtest.data_quality import validate_bars as _validate_bars
 from ..backtest.benchmark_store import benchmark_store as _benchmark_store
 from ..backtest.strategies import STRATEGY_REGISTRY, default_factors
 from ..core.auth import get_current_user
@@ -1644,5 +1646,96 @@ def trade_analysis(payload: TradeAnalysisRequest) -> dict:
     result["run_id"] = payload.run_id
     result["strategy"] = report.get("strategy") or report.get("strategy_name")
     result["symbols"] = report.get("symbols")
+    return result
+
+
+# --------------------------------------------------------------------------- #
+# V27：绩效归因增强（Brinson / 因子 / 持仓贡献）
+# --------------------------------------------------------------------------- #
+class _BrinsonGroup(BaseModel):
+    name: str = Field(..., description="板块/资产类别名称")
+    portfolio_weight: float = Field(..., description="组合权重")
+    benchmark_weight: float = Field(..., description="基准权重")
+    portfolio_return: float = Field(..., description="组合在该板块的收益")
+    benchmark_return: float = Field(..., description="基准在该板块的收益")
+
+
+class _FactorInput(BaseModel):
+    name: str = Field(..., description="因子名称")
+    exposure: float = Field(..., description="组合因子暴露(β)")
+    factor_return: float = Field(..., description="因子区间收益")
+
+
+class _HoldingInput(BaseModel):
+    symbol: str = Field(..., description="标的代码")
+    weight: float = Field(..., description="持仓权重")
+    contribution: Optional[float] = Field(default=None, description="直接给出的收益贡献")
+    return_: Optional[float] = Field(default=None, description="标的收益(用于推导贡献)")
+
+
+class PerformanceAttributionRequest(BaseModel):
+    method: str = Field(..., description="归因方法：brinson / factor / holdings")
+    name: Optional[str] = Field(default=None, description="可选：归因名称")
+    groups: Optional[List[_BrinsonGroup]] = Field(default=None, description="Brinson 分组")
+    factors: Optional[List[_FactorInput]] = Field(default=None, description="因子列表")
+    holdings: Optional[List[_HoldingInput]] = Field(default=None, description="持仓列表")
+    specific_return: float = Field(default=0.0, description="因子归因的特异性收益(α)")
+
+
+@router.post("/performance-attribution", summary="绩效归因增强（Brinson/因子/持仓贡献，V27）")
+def performance_attribution(payload: PerformanceAttributionRequest) -> dict:
+    """将组合收益拆解到板块/因子/持仓层面，定位收益来源。"""
+    try:
+        groups = [g.model_dump() for g in payload.groups] if payload.groups else None
+        factors = [f.model_dump() for f in payload.factors] if payload.factors else None
+        holdings = [h.model_dump() for h in payload.holdings] if payload.holdings else None
+        result = _performance_attribution(
+            method=payload.method,
+            groups=groups,
+            factors=factors,
+            holdings=holdings,
+            specific_return=payload.specific_return,
+            name=payload.name,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return result
+
+
+# --------------------------------------------------------------------------- #
+# V27：行情数据质量校验
+# --------------------------------------------------------------------------- #
+class _BarInput(BaseModel):
+    timestamp: Optional[str] = Field(default=None, description="时间戳(ISO 或 YYYY-MM-DD)")
+    date: Optional[str] = Field(default=None, description="兼容字段：日期")
+    open: Optional[float] = None
+    high: Optional[float] = None
+    low: Optional[float] = None
+    close: Optional[float] = None
+    volume: Optional[float] = None
+
+
+class DataQualityRequest(BaseModel):
+    symbol: Optional[str] = Field(default=None, description="标的代码(仅用于报告标注)")
+    bars: List[_BarInput] = Field(..., min_length=1, description="待校验的 bar 序列")
+    expected_interval_days: Optional[float] = Field(default=None, description="期望相邻间隔(天)，用于缺口检测")
+    as_of: Optional[str] = Field(default=None, description="校验基准日，用于陈旧性检测")
+    outlier_z: float = Field(default=5.0, description="异常收益 z 分数阈值")
+
+
+@router.post("/data-quality", summary="行情数据质量校验（缺失/OHLC/重复/缺口/异常，V27）")
+def data_quality(payload: DataQualityRequest) -> dict:
+    """对一段行情做结构化体检，返回质量分(0-100)、问题清单与分类汇总。"""
+    try:
+        bars = [b.model_dump() for b in payload.bars]
+        result = _validate_bars(
+            bars=bars,
+            symbol=payload.symbol,
+            expected_interval_days=payload.expected_interval_days,
+            as_of=payload.as_of,
+            outlier_z=payload.outlier_z,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     return result
 

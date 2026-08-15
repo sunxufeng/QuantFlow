@@ -49,6 +49,8 @@ import FactorDecay from './FactorDecay.jsx'
 import Robustness from './Robustness.jsx'
 import WeightedBenchmarks from './WeightedBenchmarks.jsx'
 import RiskReport from './RiskReport.jsx'
+import Attribution from './Attribution.jsx'
+import DataQuality from './DataQuality.jsx'
 import StrategyLibrary from './StrategyLibrary.jsx'
 import SyntheticLab from './SyntheticLab.jsx'
 import Seasonality from './Seasonality.jsx'
@@ -1106,6 +1108,8 @@ export default function App() {
           {view === 'portopt' && <PortfolioOpt />}
           {view === 'blotter' && <TradeAnalysis />}
           {view === 'benchmark' && <BenchmarkLibrary />}
+          {view === 'attrib' && <Attribution />}
+          {view === 'dq' && <DataQuality />}
          </ErrorBoundary>
         </main>
       </div>
