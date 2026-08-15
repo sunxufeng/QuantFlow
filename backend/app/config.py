@@ -12,7 +12,7 @@ class Settings:
     DEBUG: bool = os.getenv("QF_DEBUG", "1") == "1"
     CORS_ORIGINS: list[str] = os.getenv(
         "QF_CORS_ORIGINS",
-        "http://localhost:5173,http://127.0.0.1:5173,http://localhost:8080,https://acqf.areteailab.com,https://acqw.areteailab.com",
+        "http://localhost:5173,http://127.0.0.1:5173,http://localhost:8080,https://acqf.areteailab.com",
     ).split(",")
     # V2.0：MongoDB/Redis 连接串（M1 原型暂用内存态）
     MONGO_URI: str = os.getenv("QF_MONGO_URI", "mongodb://localhost:27017")
