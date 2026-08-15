@@ -25,6 +25,7 @@ from .api import (
     logs,
     llm,
     market,
+    market_regime,
     monitoring,
     notifications,
     portfolio_opt_ext,
@@ -127,6 +128,7 @@ app.include_router(settings_api.router, prefix="/api")
 app.include_router(trading.router, prefix="/api")
 app.include_router(portfolio_opt_ext.router, prefix="/api")
 app.include_router(risk_analytics.router, prefix="/api")
+app.include_router(market_regime.router, prefix="/api")
 app.include_router(alerts.router, prefix="/api")
 app.include_router(workspace_api.router, prefix="/api")
 app.include_router(export_api.router, prefix="/api")

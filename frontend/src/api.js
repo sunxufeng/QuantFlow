@@ -266,6 +266,14 @@ export const runTailRisk = (payload) => _risk('tail', payload)
 export const runLiquidity = (payload) => _risk('liquidity', payload)
 export const runConcentration = (payload) => _risk('concentration', payload)
 export const getLivePositions = () => request('/trading/live/positions')
+
+// ---- 市场状态与择时（V47–V51）----
+const _mkt = (path, payload) => request(`/market/${path}`, { method: 'POST', body: JSON.stringify(payload) })
+export const runRegime = (payload) => _mkt('regime', payload)
+export const runVolForecast = (payload) => _mkt('vol-forecast', payload)
+export const runSectorRotation = (payload) => _mkt('sector-rotation', payload)
+export const runCorrelationNetwork = (payload) => _mkt('correlation-network', payload)
+export const runEtfRotation = (payload) => _mkt('etf-rotation', payload)
 export const getLiveFills = () => request('/trading/live/fills')
 
 // ---- 因子库 CRUD（V1.1 N3）----
