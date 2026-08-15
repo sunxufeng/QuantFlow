@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+import math
 from typing import Any, Callable, Dict, List
 
 from .engine import BacktestContext, Strategy
@@ -96,6 +97,144 @@ class MaCrossStrategy(Strategy):
                     ctx.order(sym, pos.shares, "sell")
         self.prev_diff = diff
         self.have_prev = True
+
+
+def _std(bars, n: int) -> float:
+    closes = [b.close for b in bars]
+    if len(closes) < n:
+        return float("nan")
+    window = closes[-n:]
+    mean = sum(window) / n
+    var = sum((x - mean) ** 2 for x in window) / n
+    return math.sqrt(var)
+
+
+def _rsi(bars, n: int) -> float:
+    closes = [b.close for b in bars]
+    if len(closes) < n + 1:
+        return float("nan")
+    window = closes[-(n + 1):]
+    gains = 0.0
+    losses = 0.0
+    for i in range(1, len(window)):
+        ch = window[i] - window[i - 1]
+        if ch >= 0:
+            gains += ch
+        else:
+            losses += -ch
+    avg_gain = gains / n
+    avg_loss = losses / n
+    if avg_loss == 0:
+        return 100.0
+    rs = avg_gain / avg_loss
+    return 100.0 - 100.0 / (1.0 + rs)
+
+
+class MomentumStrategy(Strategy):
+    """动量：过去 lookback 日收益率 > 阈值则持有/买入，否则空仓（股票）。"""
+
+    def __init__(self, lookback: int = 20, threshold: float = 0.0, symbol: str = "") -> None:
+        self.lookback = int(lookback)
+        self.threshold = float(threshold)
+        self.symbol = symbol
+
+    def handle_data(self, ctx: BacktestContext) -> None:
+        sym = self.symbol or ctx.symbols()[0]
+        bars = ctx.history(sym, self.lookback + 1)
+        if len(bars) < self.lookback + 1:
+            return
+        mom = bars[-1].close / bars[0].close - 1.0
+        pos = ctx.account.positions.get(sym)
+        if mom > self.threshold and not pos:
+            shares = _lot_floor(ctx.account.cash)
+            if shares > 0:
+                ctx.order(sym, shares, "buy")
+        elif mom <= self.threshold and pos:
+            ctx.order(sym, pos.shares, "sell")
+
+
+class MeanReversionStrategy(Strategy):
+    """均值回归：价格低于 rolling_mean - k*std 买入，高于 rolling_mean + k*std 卖出（股票）。"""
+
+    def __init__(self, window: int = 20, k: float = 2.0, symbol: str = "") -> None:
+        self.window = int(window)
+        self.k = float(k)
+        self.symbol = symbol
+
+    def handle_data(self, ctx: BacktestContext) -> None:
+        sym = self.symbol or ctx.symbols()[0]
+        bars = ctx.history(sym, self.window)
+        if len(bars) < self.window:
+            return
+        mean = _ma(bars, self.window)
+        sd = _std(bars, self.window)
+        if mean != mean or sd != sd or sd <= 1e-9:
+            return
+        price = bars[-1].close
+        lower = mean - self.k * sd
+        upper = mean + self.k * sd
+        pos = ctx.account.positions.get(sym)
+        if price <= lower and not pos:
+            shares = _lot_floor(ctx.account.cash)
+            if shares > 0:
+                ctx.order(sym, shares, "buy")
+        elif price >= upper and pos:
+            ctx.order(sym, pos.shares, "sell")
+
+
+class RsiStrategy(Strategy):
+    """RSI：RSI < oversold 买入，RSI > overbought 卖出（股票）。"""
+
+    def __init__(self, period: int = 14, oversold: float = 30.0, overbought: float = 70.0, symbol: str = "") -> None:
+        self.period = int(period)
+        self.oversold = float(oversold)
+        self.overbought = float(overbought)
+        self.symbol = symbol
+
+    def handle_data(self, ctx: BacktestContext) -> None:
+        sym = self.symbol or ctx.symbols()[0]
+        bars = ctx.history(sym, self.period + 1)
+        if len(bars) < self.period + 1:
+            return
+        rsi = _rsi(bars, self.period)
+        if rsi != rsi:
+            return
+        pos = ctx.account.positions.get(sym)
+        if rsi < self.oversold and not pos:
+            shares = _lot_floor(ctx.account.cash)
+            if shares > 0:
+                ctx.order(sym, shares, "buy")
+        elif rsi > self.overbought and pos:
+            ctx.order(sym, pos.shares, "sell")
+
+
+class BollingerStrategy(Strategy):
+    """布林带：收盘价跌破下轨买入，突破上轨卖出（股票）。"""
+
+    def __init__(self, window: int = 20, num_std: float = 2.0, symbol: str = "") -> None:
+        self.window = int(window)
+        self.num_std = float(num_std)
+        self.symbol = symbol
+
+    def handle_data(self, ctx: BacktestContext) -> None:
+        sym = self.symbol or ctx.symbols()[0]
+        bars = ctx.history(sym, self.window)
+        if len(bars) < self.window:
+            return
+        mean = _ma(bars, self.window)
+        sd = _std(bars, self.window)
+        if mean != mean or sd != sd or sd <= 1e-9:
+            return
+        price = bars[-1].close
+        lower = mean - self.num_std * sd
+        upper = mean + self.num_std * sd
+        pos = ctx.account.positions.get(sym)
+        if price <= lower and not pos:
+            shares = _lot_floor(ctx.account.cash)
+            if shares > 0:
+                ctx.order(sym, shares, "buy")
+        elif price >= upper and pos:
+            ctx.order(sym, pos.shares, "sell")
 
 
 class FundDingTouStrategy(Strategy):
@@ -269,6 +408,39 @@ def _futures_ma_cross_factory(params: Dict[str, Any]) -> Strategy:
     )
 
 
+def _momentum_factory(params: Dict[str, Any]) -> Strategy:
+    return MomentumStrategy(
+        lookback=int(params.get("lookback", 20)),
+        threshold=float(params.get("threshold", 0.0)),
+        symbol=str(params.get("symbol", "")),
+    )
+
+
+def _mean_reversion_factory(params: Dict[str, Any]) -> Strategy:
+    return MeanReversionStrategy(
+        window=int(params.get("window", 20)),
+        k=float(params.get("k", 2.0)),
+        symbol=str(params.get("symbol", "")),
+    )
+
+
+def _rsi_factory(params: Dict[str, Any]) -> Strategy:
+    return RsiStrategy(
+        period=int(params.get("period", 14)),
+        oversold=float(params.get("oversold", 30.0)),
+        overbought=float(params.get("overbought", 70.0)),
+        symbol=str(params.get("symbol", "")),
+    )
+
+
+def _bollinger_factory(params: Dict[str, Any]) -> Strategy:
+    return BollingerStrategy(
+        window=int(params.get("window", 20)),
+        num_std=float(params.get("num_std", 2.0)),
+        symbol=str(params.get("symbol", "")),
+    )
+
+
 # 策略注册表：名称 -> 工厂（由 params 构建策略实例）
 STRATEGY_REGISTRY: Dict[str, Callable[[Dict[str, Any]], Strategy]] = {
     "buy_hold": _buy_hold_factory,
@@ -276,6 +448,10 @@ STRATEGY_REGISTRY: Dict[str, Callable[[Dict[str, Any]], Strategy]] = {
     "fund_dingtou": _fund_dingtou_factory,
     "fund_value_avg": _fund_value_avg_factory,
     "futures_ma_cross": _futures_ma_cross_factory,
+    "momentum": _momentum_factory,
+    "mean_reversion": _mean_reversion_factory,
+    "rsi": _rsi_factory,
+    "bollinger": _bollinger_factory,
 }
 
 
@@ -294,6 +470,10 @@ FACTOR_MAP: Dict[str, List[str]] = {
     "fund_dingtou": ["sharpe", "volatility"],
     "fund_value_avg": ["sharpe", "volatility"],
     "futures_ma_cross": ["momentum", "mean_reversion"],
+    "momentum": ["momentum", "volatility"],
+    "mean_reversion": ["mean_reversion", "volatility"],
+    "rsi": ["mean_reversion", "volatility"],
+    "bollinger": ["volatility", "mean_reversion"],
 }
 
 

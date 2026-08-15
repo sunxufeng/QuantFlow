@@ -36,7 +36,7 @@ def run(strategy: Strategy, closes: List[float], *, instruments=None, symbol="TE
 
 class TestRegistry:
     def test_known_strategies(self):
-        assert set(STRATEGY_REGISTRY) == {"buy_hold", "ma_cross", "fund_dingtou", "fund_value_avg", "futures_ma_cross"}
+        assert set(STRATEGY_REGISTRY) == {"buy_hold", "ma_cross", "fund_dingtou", "fund_value_avg", "futures_ma_cross", "momentum", "mean_reversion", "rsi", "bollinger"}
 
     def test_unknown_strategy_raises(self):
         with pytest.raises(KeyError):

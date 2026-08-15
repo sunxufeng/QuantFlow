@@ -105,6 +105,10 @@ def _strategy_description(name: str) -> str:
         "fund_dingtou": "场外基金定投：每月首个交易日申购固定金额（基金）",
         "fund_value_avg": "价值平均定投：目标市值线性增长，每月补足/赎回差额（基金）",
         "futures_ma_cross": "期货均线金叉做多、死叉做空（多空净仓，V1.3）",
+        "momentum": "动量策略：过去 N 日收益率超过阈值则持有，否则空仓（股票）",
+        "mean_reversion": "均值回归：价格跌破 rolling_mean-k*std 买入，突破上轨卖出（股票）",
+        "rsi": "RSI 策略：RSI 低于超卖线买入，高于超买线卖出（股票）",
+        "bollinger": "布林带策略：收盘价跌破下轨买入，突破上轨卖出（股票）",
     }
     return docs.get(name, "")
 

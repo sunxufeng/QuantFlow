@@ -59,7 +59,7 @@ class TestStrategiesEndpoint:
         resp = client.get("/api/backtest/strategies")
         assert resp.status_code == 200
         names = {i["name"] for i in resp.json()["items"]}
-        assert names == {"buy_hold", "ma_cross", "fund_dingtou", "fund_value_avg", "futures_ma_cross"}
+        assert names == {"buy_hold", "ma_cross", "fund_dingtou", "fund_value_avg", "futures_ma_cross", "momentum", "mean_reversion", "rsi", "bollinger"}
 
 
 class TestRunBacktest:
