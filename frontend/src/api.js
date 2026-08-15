@@ -274,6 +274,17 @@ export const runVolForecast = (payload) => _mkt('vol-forecast', payload)
 export const runSectorRotation = (payload) => _mkt('sector-rotation', payload)
 export const runCorrelationNetwork = (payload) => _mkt('correlation-network', payload)
 export const runEtfRotation = (payload) => _mkt('etf-rotation', payload)
+
+// ---- 策略库扩展（V52–V56）----
+const _stx = (path, payload) => request(`/strategy/${path}`, { method: 'POST', body: JSON.stringify(payload) })
+export const runPairsCoint = (payload) => _stx('pairs-coint', payload)
+export const runPairsBacktest = (payload) => _stx('pairs-backtest', payload)
+export const runOptionPrice = (payload) => _stx('option-price', payload)
+export const runOptionGreeks = (payload) => _stx('option-greeks', payload)
+export const runOptionIV = (payload) => _stx('option-implied-vol', payload)
+export const runGridBacktest = (payload) => _stx('grid-backtest', payload)
+export const runDcaBacktest = (payload) => _stx('dca-backtest', payload)
+export const runMultiTrend = (payload) => _stx('multi-trend', payload)
 export const getLiveFills = () => request('/trading/live/fills')
 
 // ---- 因子库 CRUD（V1.1 N3）----

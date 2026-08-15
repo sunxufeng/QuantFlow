@@ -51,6 +51,7 @@ import WeightedBenchmarks from './WeightedBenchmarks.jsx'
 import RiskReport from './RiskReport.jsx'
 import RiskAnalytics from './RiskAnalytics.jsx'
 import MarketRegime from './MarketRegime.jsx'
+import StrategyExt from './StrategyExt.jsx'
 import Attribution from './Attribution.jsx'
 import StressTest from './StressTest.jsx'
 import FactorBacktest from './FactorBacktest.jsx'
@@ -1110,6 +1111,7 @@ export default function App() {
           {view === 'risk' && <RiskReport />}
           {view === 'riskanalytics' && <RiskAnalytics />}
           {view === 'marketreg' && <MarketRegime />}
+          {view === 'stragext' && <StrategyExt />}
           {view === 'stratelib' && <StrategyLibrary />}
           {view === 'synth' && <SyntheticLab />}
           {view === 'fwd' && <ForwardSim />}
