@@ -55,6 +55,7 @@ import StrategyExt from './StrategyExt.jsx'
 import MLAanalytics from './MLAanalytics.jsx'
 import ExecutionCost from './ExecutionCost.jsx'
 import ReportsHub from './ReportsHub.jsx'
+import PortfolioI from './PortfolioI.jsx'
 import Attribution from './Attribution.jsx'
 import StressTest from './StressTest.jsx'
 import FactorBacktest from './FactorBacktest.jsx'
@@ -1118,6 +1119,7 @@ export default function App() {
           {view === 'mlanalytics' && <MLAanalytics />}
           {view === 'execution' && <ExecutionCost />}
           {view === 'reports' && <ReportsHub />}
+          {view === 'portfolioi' && <PortfolioI />}
           {view === 'stratelib' && <StrategyLibrary />}
           {view === 'synth' && <SyntheticLab />}
           {view === 'fwd' && <ForwardSim />}

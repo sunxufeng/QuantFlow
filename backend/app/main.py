@@ -31,6 +31,7 @@ from .api import (
     monitoring,
     notifications,
     portfolio_opt_ext,
+    portfolio_i,
     projects,
     reports_analytics,
     risk_analytics,
@@ -131,6 +132,7 @@ app.include_router(execution.router, prefix="/api")
 app.include_router(settings_api.router, prefix="/api")
 app.include_router(trading.router, prefix="/api")
 app.include_router(portfolio_opt_ext.router, prefix="/api")
+app.include_router(portfolio_i.router, prefix="/api")
 app.include_router(risk_analytics.router, prefix="/api")
 app.include_router(reports_analytics.router, prefix="/api")
 app.include_router(market_regime.router, prefix="/api")

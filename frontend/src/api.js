@@ -311,6 +311,14 @@ export const runReportMulti = (payload) => _rep('multi-compare', payload)
 export const runReportPeriodic = (payload) => _rep('periodic', payload)
 export const runReportDashboard = (payload) => _rep('dashboard', payload)
 
+// ---- 组合层面增强（V72–V76）----
+const _pi = (path, payload) => request(`/portfolioi/${path}`, { method: 'POST', body: JSON.stringify(payload) })
+export const runPIBlackLitterman = (payload) => _pi('black-litterman', payload)
+export const runPIFactorPortfolio = (payload) => _pi('factor-portfolio', payload)
+export const runPIStressTest = (payload) => _pi('stress-test', payload)
+export const runPIRebalance = (payload) => _pi('rebalance', payload)
+export const runPIAggregate = (payload) => _pi('aggregate', payload)
+
 // ---- 因子库 CRUD（V1.1 N3）----
 export const factorLibraryList = (category) => request(
   `/factors/library${category ? `?category=${encodeURIComponent(category)}` : ''}`,
