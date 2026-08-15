@@ -45,6 +45,9 @@ import ParamGrid from './ParamGrid.jsx'
 import MonteCarlo from './MonteCarlo.jsx'
 import WalkForward from './WalkForward.jsx'
 import BenchmarkCompare from './BenchmarkCompare.jsx'
+import FactorDecay from './FactorDecay.jsx'
+import Robustness from './Robustness.jsx'
+import WeightedBenchmarks from './WeightedBenchmarks.jsx'
 import LoginScreen from './LoginScreen.jsx'
 import { useGraphHistory } from './useHistory.js'
 import {
@@ -1084,6 +1087,9 @@ export default function App() {
           {view === 'montecarlo' && <MonteCarlo />}
           {view === 'walkforward' && <WalkForward />}
           {view === 'benchcmp' && <BenchmarkCompare />}
+          {view === 'factordecay' && <FactorDecay />}
+          {view === 'robustness' && <Robustness />}
+          {view === 'wbench' && <WeightedBenchmarks />}
          </ErrorBoundary>
         </main>
       </div>

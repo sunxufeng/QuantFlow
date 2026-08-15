@@ -26,6 +26,9 @@ from ..backtest.analysis import (
     sensitivity_grid as _sensitivity_grid,
     walk_forward as _walk_forward,
     build_benchmark_values as _build_benchmark_values,
+    factor_decay as _factor_decay,
+    parameter_robustness as _parameter_robustness,
+    weighted_benchmark_compare as _weighted_benchmark_compare,
 )
 from ..backtest.optimizer import OptimizeConfigError, optimize
 from ..backtest.portfolio import PortfolioBacktest
@@ -693,6 +696,145 @@ def benchmark_compare(payload: BenchmarkCompareRequest) -> dict:
         "interval": report.get("interval", "daily"),
         "strategy_curve": [{"date": d, "value": round(v, 2)} for d, v in zip(dates, strat_values)],
         "benchmarks": results,
+    }
+
+
+# --------------------------------------------------------------------------- #
+# V17 高级分析三件套（因子衰减 / 参数稳健性 / 多基准加权）
+# --------------------------------------------------------------------------- #
+class FactorDecayRequest(BaseModel):
+    symbols: List[str] = Field(
+        default_factory=list, description="研究标的池（默认内置合成标的池）"
+    )
+    start: str = Field(default="2000-01-01", description="起始日期 YYYY-MM-DD")
+    end: str = Field(default="2100-01-01", description="结束日期 YYYY-MM-DD")
+    window: int = Field(default=10, ge=2, description="因子计算回看窗口")
+    forward: int = Field(default=1, ge=1, description="收益前瞻天数")
+    roll_window: int = Field(default=10, ge=2, description="滚动均值窗口（期数）")
+
+
+@router.post("/factor-decay", summary="因子 IC 衰减/稳定性分析（滚动 IC 趋势，V17）")
+def factor_decay_analysis(payload: FactorDecayRequest) -> dict:
+    try:
+        return _factor_decay(
+            symbols=payload.symbols or None,
+            start=payload.start,
+            end=payload.end,
+            window=payload.window,
+            forward=payload.forward,
+            roll_window=payload.roll_window,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+class RobustnessRequest(BaseModel):
+    strategy: str = Field(..., description="策略名称（见 /strategies）")
+    params: Dict[str, object] = Field(default_factory=dict, description="固定参数（不参与扫描的部分）")
+    grid: Dict[str, List[object]] = Field(
+        ..., min_length=1, description="待扫描的两个参数的取值网格 {param_a: [...], param_b: [...]}"
+    )
+    symbols: List[str] = Field(..., min_length=1, description="回测标的")
+    start: str = Field(..., description="起始日期 YYYY-MM-DD")
+    end: str = Field(..., description="结束日期 YYYY-MM-DD")
+    initial_cash: float = Field(default=1_000_000.0, gt=0, description="初始资金")
+    asset_types: Dict[str, str] = Field(default_factory=dict, description="标的资产类型覆盖")
+    multipliers: Dict[str, float] = Field(default_factory=dict, description="期货合约乘数覆盖")
+    interval: str = Field(default="daily", description="行情频率：daily / minute")
+    n_folds: int = Field(default=5, ge=2, le=20, description="walk-forward 折数")
+    metric: str = Field(
+        default="total_return",
+        description="扫描指标：total_return / annual_return / sharpe / max_drawdown / win_rate / final_value",
+    )
+
+
+@router.post("/robustness", summary="参数最优区间稳健性（grid×walk-forward 联动，V17）")
+def robustness_analysis(payload: RobustnessRequest) -> dict:
+    if payload.end < payload.start:
+        raise HTTPException(status_code=422, detail="end 不得早于 start")
+    if payload.interval not in ("daily", "minute"):
+        raise HTTPException(status_code=422, detail=f"不支持的行情频率 {payload.interval!r}")
+    if payload.strategy not in STRATEGY_REGISTRY:
+        raise HTTPException(
+            status_code=422, detail=f"未知策略 {payload.strategy!r}，可选: {sorted(STRATEGY_REGISTRY)}"
+        )
+    if payload.metric not in ("total_return", "annual_return", "sharpe", "max_drawdown", "win_rate", "final_value"):
+        raise HTTPException(status_code=422, detail=f"不支持的指标 {payload.metric!r}")
+    try:
+        return _parameter_robustness(
+            strategy=payload.strategy,
+            params=dict(payload.params),
+            grid={k: list(v) for k, v in payload.grid.items()},
+            symbols=payload.symbols,
+            start=payload.start,
+            end=payload.end,
+            initial_cash=payload.initial_cash,
+            asset_types=payload.asset_types,
+            multipliers=payload.multipliers,
+            interval=payload.interval,
+            n_folds=payload.n_folds,
+            metric=payload.metric,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+class WeightedBenchmarkDef(BaseModel):
+    name: str = Field(..., description="基准名称")
+    weight: float = Field(default=1.0, gt=0, description="在复合基准中的权重")
+    symbols: Optional[List[str]] = Field(default=None, description="基准篮子标的")
+    weights: Optional[List[float]] = Field(default=None, description="篮子内权重（默认等权）")
+    values: Optional[List[float]] = Field(default=None, description="显式基准序列（长度需与策略曲线一致）")
+
+
+class WeightedBenchmarkRequest(BaseModel):
+    run_id: str = Field(..., description="已存回测报告 run_id（策略曲线来源）")
+    benchmarks: List[WeightedBenchmarkDef] = Field(
+        ..., min_length=1, description="多个基准（各自带 weight），组成加权复合基准"
+    )
+    initial_cash: float = Field(default=0.0, gt=0, description="初始资金（默认取报告首点净值）")
+
+
+@router.post("/benchmark-weighted", summary="多基准加权对比（复合加权基准 vs 已存报告，V17）")
+def benchmark_weighted(payload: WeightedBenchmarkRequest) -> dict:
+    try:
+        report = report_store.load(payload.run_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    report = _normalize_report(report)
+    curve = report.get("equity_curve") or []
+    if not curve:
+        raise HTTPException(status_code=422, detail="该报告无净值曲线，无法对比")
+    initial = payload.initial_cash or curve[0].get("total_value") or 1_000_000.0
+    try:
+        cmp = _weighted_benchmark_compare(
+            run_equity_curve=curve,
+            benchmarks=[b.model_dump() for b in payload.benchmarks],
+            initial_cash=initial,
+            interval=report.get("interval", "daily"),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    dates = [p.get("date") for p in curve]
+    strat_values = [p.get("total_value") for p in curve]
+    return {
+        "run_id": payload.run_id,
+        "strategy": report.get("strategy") or report.get("strategy_name"),
+        "symbols": report.get("symbols"),
+        "start_date": dates[0] if dates else None,
+        "end_date": dates[-1] if dates else None,
+        "interval": report.get("interval", "daily"),
+        "strategy_curve": [{"date": d, "value": round(v, 2)} for d, v in zip(dates, strat_values)],
+        "composite_relative": cmp["composite_relative"],
+        "composite_curve": cmp["composite_curve"],
+        "benchmarks": cmp["benchmarks"],
     }
 
 
