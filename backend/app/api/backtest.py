@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import csv
+import datetime as dt
 import io
 import json
 import logging
@@ -41,6 +42,7 @@ from ..backtest.portfolio_opt import (
     max_sharpe_portfolio as _max_sharpe_portfolio,
 )
 from ..backtest.trade_analysis import analyze_from_dicts as _analyze_trades
+from ..backtest.benchmark_store import benchmark_store as _benchmark_store
 from ..backtest.strategies import STRATEGY_REGISTRY, default_factors
 from ..core.auth import get_current_user
 from ..factors import research as factor_research
@@ -1144,6 +1146,50 @@ def portfolio_optimize(payload: PortfolioOptimizeRequest) -> dict:
     ef["long_only"] = payload.long_only
     ef["rf"] = payload.rf
     return ef
+
+
+# --------------------------------------------------------------------------- #
+# 自定义基准持久化（V26）
+# --------------------------------------------------------------------------- #
+class BenchmarkSaveRequest(BaseModel):
+    name: str = Field(..., description="基准名称（如 '沪深300等权篮子'）")
+    symbols: Optional[List[str]] = Field(default=None, description="篮子标的（与 values 二选一）")
+    weights: Optional[List[float]] = Field(default=None, description="篮子权重（默认等权）")
+    values: Optional[List[float]] = Field(default=None, description="显式净值序列（与 symbols 二选一）")
+    initial_price: Optional[float] = Field(default=None, description="仅用于前端展示占位")
+
+
+@router.post("/benchmarks", summary="保存自定义基准（持久化，V26）")
+def save_benchmark(payload: BenchmarkSaveRequest) -> dict:
+    if not payload.symbols and not payload.values:
+        raise HTTPException(status_code=422, detail="symbols 与 values 至少提供一项")
+    if payload.symbols and payload.weights and len(payload.weights) != len(payload.symbols):
+        raise HTTPException(status_code=422, detail="weights 长度需与 symbols 一致")
+    rec = payload.model_dump()
+    rec["created_at"] = dt.datetime.now().isoformat(timespec="seconds")
+    bid = _benchmark_store.save(rec)
+    return {"bench_id": bid, "name": payload.name, "mode": "explicit" if payload.values else "basket"}
+
+
+@router.get("/benchmarks", summary="列举已保存的自定义基准（V26）")
+def list_benchmarks() -> dict:
+    return {"items": _benchmark_store.summarize()}
+
+
+@router.get("/benchmarks/{bench_id}", summary="读取单个自定义基准定义（V26）")
+def get_benchmark(bench_id: str) -> dict:
+    try:
+        return _benchmark_store.load(bench_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.delete("/benchmarks/{bench_id}", summary="删除自定义基准（V26）")
+def delete_benchmark(bench_id: str) -> dict:
+    ok = _benchmark_store.delete(bench_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail=f"基准不存在: {bench_id}")
+    return {"deleted": bench_id}
 
 
 class MetricsExtendedRequest(BaseModel):

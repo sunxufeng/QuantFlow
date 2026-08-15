@@ -24,6 +24,7 @@ const navItems = [
   { key: 'season', label: '季节性', abbr: '季' },
   { key: 'portopt', label: '组合优化', abbr: '优' },
   { key: 'blotter', label: '成交分析', abbr: '交' },
+  { key: 'benchmark', label: '基准库', abbr: '准' },
   { key: 'factorScore', label: '因子评分', abbr: '评' },
   { key: 'notify', label: '通知渠道', abbr: '通' },
   { key: 'llm', label: 'LLM 助手', abbr: '助' },
