@@ -66,7 +66,7 @@ docker compose -f deploy/docker-compose.yml up -d --build
 
 ### 方式三：生产部署（systemd + venv + Node 静态服务）
 
-国内服务器拉 Docker Hub 镜像常受阻，实际生产采用「venv 直跑后端 + Node 静态服务」方案，已上线 `https://acqw.areteailab.com`：
+国内服务器拉 Docker Hub 镜像常受阻，实际生产采用「venv 直跑后端 + Node 静态服务」方案，已上线 `https://acqf.areteailab.com`：
 
 ```bash
 cd quantflow
@@ -78,7 +78,7 @@ systemd 单元（`deploy/systemd/`）：
 - `quantflow.service` — uvicorn 监听 `127.0.0.1:8100`（后端）
 - `quantflow-frontend.service` — `node server.mjs` 监听 `0.0.0.0:8080`，静态托管前端并反代 `/api/*` 到后端
 
-对外域名建议用 Nginx Proxy Manager 反代 443（HTTPS 证书 acme.sh DNS-01 + 自动续期），示例：`acqw.areteailab.com → http://172.17.0.1:8080`。
+对外域名建议用 Nginx Proxy Manager 反代 443（HTTPS 证书 acme.sh DNS-01 + 自动续期），示例：`acqf.areteailab.com → http://172.17.0.1:8080`。
 
 ### 环境变量（常用）
 

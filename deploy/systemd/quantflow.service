@@ -6,7 +6,7 @@ After=network.target
 Type=simple
 WorkingDirectory=/opt/quantflow/QuantFlow/backend
 Environment=QF_DEBUG=0
-Environment=QF_CORS_ORIGINS=http://localhost:8080
+Environment=QF_CORS_ORIGINS=https://acqf.areteailab.com,http://116.62.188.165:8080,http://localhost:8080,http://localhost:5173,http://127.0.0.1:5173
 ExecStart=/opt/quantflow/QuantFlow/backend/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8100
 Restart=on-failure
 RestartSec=3
