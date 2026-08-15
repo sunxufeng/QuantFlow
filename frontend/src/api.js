@@ -256,6 +256,15 @@ export const runFactorTiming = (payload) => _facEng('timing', payload)
 export const runFactorCrowding = (payload) => _facEng('crowding', payload)
 export const runCombineFactors = (payload) => _facEng('combine', payload)
 export const runFactorTurnover = (payload) => _facEng('turnover', payload)
+
+// ---- 风险分析（V42–V46）----
+const _risk = (path, payload) => request(`/risk/${path}`, { method: 'POST', body: JSON.stringify(payload) })
+export const runVarCvar = (payload) => _risk('var', payload)
+export const runVarBacktest = (payload) => _risk('var-backtest', payload)
+export const runDrawdown = (payload) => _risk('drawdown', payload)
+export const runTailRisk = (payload) => _risk('tail', payload)
+export const runLiquidity = (payload) => _risk('liquidity', payload)
+export const runConcentration = (payload) => _risk('concentration', payload)
 export const getLivePositions = () => request('/trading/live/positions')
 export const getLiveFills = () => request('/trading/live/fills')
 
