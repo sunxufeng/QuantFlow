@@ -235,6 +235,8 @@ export const runPortfolioOptimize = (payload) => request('/backtest/portfolio-op
 export const runTradeAnalysis = (payload) => request('/backtest/trade-analysis', { method: 'POST', body: JSON.stringify(payload) })
 export const runAttribution = (payload) => request('/backtest/performance-attribution', { method: 'POST', body: JSON.stringify(payload) })
 export const runDataQuality = (payload) => request('/backtest/data-quality', { method: 'POST', body: JSON.stringify(payload) })
+export const getStressScenarios = () => request('/backtest/stress-scenarios')
+export const runStressTest = (payload) => request('/backtest/stress-test', { method: 'POST', body: JSON.stringify(payload) })
 
 // ---- 因子库 CRUD（V1.1 N3）----
 export const factorLibraryList = (category) => request(

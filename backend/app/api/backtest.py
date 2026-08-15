@@ -44,6 +44,7 @@ from ..backtest.portfolio_opt import (
 from ..backtest.trade_analysis import analyze_from_dicts as _analyze_trades
 from ..backtest.attribution import performance_attribution as _performance_attribution
 from ..backtest.data_quality import validate_bars as _validate_bars
+from ..backtest.stress_test import run_stress_test as _run_stress_test, list_scenarios as _list_scenarios
 from ..backtest.benchmark_store import benchmark_store as _benchmark_store
 from ..backtest.strategies import STRATEGY_REGISTRY, default_factors
 from ..core.auth import get_current_user
@@ -1717,6 +1718,46 @@ def performance_attribution(payload: PerformanceAttributionRequest) -> dict:
             holdings=holdings,
             specific_return=payload.specific_return,
             name=payload.name,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return result
+
+
+# --------------------------------------------------------------------------- #
+# V29：压力测试 / 情景分析
+# --------------------------------------------------------------------------- #
+class _HoldingIn(BaseModel):
+    symbol: str = Field(..., description="标的代码")
+    asset_class: str = Field(..., description="资产类别：equity/bond/gold/cash/reit/em/commodity/oil/tech/growth/value")
+    weight: float = Field(..., gt=0, description="组合权重(0~1，可未归一化)")
+
+
+class StressTestRequest(BaseModel):
+    holdings: List[_HoldingIn] = Field(..., min_length=1, description="持仓组合")
+    scenarios: Optional[List[str]] = Field(default=None, description="要跑的预置情景名；缺省全部")
+    custom_shocks: Optional[Dict[str, float]] = Field(default=None, description="自定义冲击：{symbol 或 asset_class: 冲击收益率}")
+    custom_name: str = Field(default="自定义情景", description="自定义情景展示名")
+    base_value: float = Field(default=1_000_000.0, gt=0, description="组合基准市值")
+
+
+@router.get("/stress-scenarios", summary="预置压力测试情景清单（V29）")
+def stress_scenarios() -> dict:
+    """返回内置历史危机情景库，供前端勾选。"""
+    return {"scenarios": _list_scenarios()}
+
+
+@router.post("/stress-test", summary="压力测试/情景分析（历史冲击组合 P&L 影响，V29）")
+def stress_test(payload: StressTestRequest) -> dict:
+    """对持仓组合施加历史危机/自定义冲击，计算组合损益影响与最差情景。"""
+    try:
+        holdings = [h.model_dump() for h in payload.holdings]
+        result = _run_stress_test(
+            holdings=holdings,
+            scenarios=payload.scenarios,
+            custom_shocks=payload.custom_shocks,
+            custom_name=payload.custom_name,
+            base_value=payload.base_value,
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc

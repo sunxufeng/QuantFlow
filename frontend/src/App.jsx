@@ -50,6 +50,7 @@ import Robustness from './Robustness.jsx'
 import WeightedBenchmarks from './WeightedBenchmarks.jsx'
 import RiskReport from './RiskReport.jsx'
 import Attribution from './Attribution.jsx'
+import StressTest from './StressTest.jsx'
 import DataQuality from './DataQuality.jsx'
 import StrategyLibrary from './StrategyLibrary.jsx'
 import SyntheticLab from './SyntheticLab.jsx'
@@ -1110,6 +1111,7 @@ export default function App() {
           {view === 'benchmark' && <BenchmarkLibrary />}
           {view === 'attrib' && <Attribution />}
           {view === 'dq' && <DataQuality />}
+          {view === 'stress' && <StressTest />}
          </ErrorBoundary>
         </main>
       </div>

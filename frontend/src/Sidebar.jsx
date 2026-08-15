@@ -27,6 +27,7 @@ const navItems = [
   { key: 'benchmark', label: '基准库', abbr: '准' },
   { key: 'attrib', label: '绩效归因', abbr: '归' },
   { key: 'dq', label: '数据质量', abbr: '质' },
+  { key: 'stress', label: '情景分析', abbr: '景' },
   { key: 'factorScore', label: '因子评分', abbr: '评' },
   { key: 'notify', label: '通知渠道', abbr: '通' },
   { key: 'llm', label: 'LLM 助手', abbr: '助' },
