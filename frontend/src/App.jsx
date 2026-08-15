@@ -48,6 +48,7 @@ import BenchmarkCompare from './BenchmarkCompare.jsx'
 import FactorDecay from './FactorDecay.jsx'
 import Robustness from './Robustness.jsx'
 import WeightedBenchmarks from './WeightedBenchmarks.jsx'
+import RiskReport from './RiskReport.jsx'
 import LoginScreen from './LoginScreen.jsx'
 import { useGraphHistory } from './useHistory.js'
 import {
@@ -1090,6 +1091,7 @@ export default function App() {
           {view === 'factordecay' && <FactorDecay />}
           {view === 'robustness' && <Robustness />}
           {view === 'wbench' && <WeightedBenchmarks />}
+          {view === 'risk' && <RiskReport />}
          </ErrorBoundary>
         </main>
       </div>

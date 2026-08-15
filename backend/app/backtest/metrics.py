@@ -97,6 +97,8 @@ class PerformanceMetrics:
 
         # 绩效归因（V1.5）：交易层面 + 曲线层面 + 基准对比
         self._attribution = self._compute_attribution()
+        # 扩展风险指标（V18）：CVaR / Calmar / Omega / 期望收益 / 水下曲线
+        self._extended_risk = self._compute_extended_risk()
 
     # ------------------------------------------------------------------ #
     def _compute_attribution(self) -> Dict[str, Any]:
@@ -270,6 +272,65 @@ class PerformanceMetrics:
         return attr
 
     # ------------------------------------------------------------------ #
+    def _compute_extended_risk(self) -> Dict[str, Any]:
+        """扩展风险指标（V18）：CVaR、Calmar、Omega、期望收益。
+
+        全部基于日收益序列，非交易日零收益已剔除（见 _compute）。
+        """
+        res: Dict[str, Any] = {}
+        rets = self.daily_returns
+        n = len(rets)
+
+        # 水下曲线（每个交易日的回撤深度，<=0），供水下图使用
+        if self.days >= 1:
+            values = [p.total_value for p in self.equity]
+            peak = values[0]
+            underwater = []
+            for v in values:
+                peak = max(peak, v)
+                underwater.append(round(v / peak - 1.0, 6) if peak else 0.0)
+            res["underwater"] = underwater
+
+        if n >= 2:
+            # 日收益 VaR / CVaR（95% 历史法）
+            srt = sorted(rets)
+            k = max(1, int(math.ceil(0.05 * n)))
+            var95_daily = srt[k - 1] if k <= n else srt[0]
+            cvar95_daily = sum(srt[:k]) / k
+            res["var95_daily"] = round(var95_daily, 6)
+            res["cvar95_daily"] = round(cvar95_daily, 6)
+            res["var95_annual"] = round(var95_daily * math.sqrt(TRADING_DAYS_PER_YEAR), 6)
+            res["cvar95_annual"] = round(cvar95_daily * math.sqrt(TRADING_DAYS_PER_YEAR), 6)
+            # Calmar：年化收益 / |最大回撤|
+            if abs(self.max_drawdown) > 1e-9:
+                res["calmar"] = round(self.annual_return / abs(self.max_drawdown), 6)
+            else:
+                res["calmar"] = 0.0
+            # Omega（阈值 0）：正收益和 / |负收益和|
+            pos = [r for r in rets if r > 0]
+            neg = [r for r in rets if r < 0]
+            sum_pos = sum(pos)
+            sum_neg = sum(neg)
+            res["omega"] = round(sum_pos / abs(sum_neg), 6) if sum_neg < 0 else 0.0
+
+        # 交易层面期望收益 = 胜率×平均盈利 − 败率×平均亏损
+        closed = [
+            t for t in self.trades
+            if getattr(t, "side", None) in ("sell", "redeem")
+            and (getattr(t, "pnl", None) is not None)
+        ]
+        if closed:
+            wins = [float(getattr(t, "pnl", 0) or 0) for t in closed if (getattr(t, "pnl", 0) or 0) > 0]
+            losses = [float(getattr(t, "pnl", 0) or 0) for t in closed if (getattr(t, "pnl", 0) or 0) <= 0]
+            nw, nl = len(wins), len(losses)
+            avg_win = sum(wins) / nw if nw else 0.0
+            avg_loss = sum(losses) / nl if nl else 0.0
+            win_rate = nw / len(closed)
+            res["expectancy"] = round(win_rate * avg_win - (1 - win_rate) * avg_loss, 4)
+
+        return res
+
+    # ------------------------------------------------------------------ #
     def to_dict(self) -> Dict[str, Any]:
         def _fmt(v: Optional[float], nd: int = 4) -> Any:
             if v is None:
@@ -286,7 +347,12 @@ class PerformanceMetrics:
             "days": self.days,
             "final_value": _fmt(self.equity[-1].total_value) if self.equity else None,
             "attribution": self._attribution,
+            "extended_risk": self._extended_risk,
         }
+
+    @property
+    def extended_risk(self) -> Dict[str, Any]:
+        return self._extended_risk
 
     def __repr__(self) -> str:
         return f"PerformanceMetrics(total_return={self.total_return:.4f}, " \

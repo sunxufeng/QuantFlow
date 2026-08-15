@@ -21,6 +21,8 @@ from pydantic import BaseModel, Field
 
 from ..backtest import BacktestEngine, BacktestError, BacktestReportStore, build_report
 from ..backtest.metrics import PerformanceMetrics
+from ..backtest.engine import EquityPoint
+from ..backtest.account import Trade
 from ..backtest.montecarlo import monte_carlo
 from ..backtest.analysis import (
     sensitivity_grid as _sensitivity_grid,
@@ -835,6 +837,52 @@ def benchmark_weighted(payload: WeightedBenchmarkRequest) -> dict:
         "composite_relative": cmp["composite_relative"],
         "composite_curve": cmp["composite_curve"],
         "benchmarks": cmp["benchmarks"],
+    }
+
+
+class MetricsExtendedRequest(BaseModel):
+    run_id: str = Field(..., description="已存回测报告 run_id")
+    benchmark_symbol: Optional[str] = Field(
+        default=None, description="可选：叠加该基准（买入持有）计算 alpha/beta 等"
+    )
+    start: Optional[str] = Field(default=None, description="可选：基准区间起点（默认取报告起点）")
+    end: Optional[str] = Field(default=None, description="可选：基准区间终点（默认取报告终点）")
+
+
+@router.post("/metrics-extended", summary="扩展风险指标（CVaR/Calmar/Omega/期望收益/水下曲线，V18）")
+def metrics_extended(payload: MetricsExtendedRequest) -> dict:
+    """基于已存回测报告的净值曲线与成交记录，计算 V18 扩展风险指标。"""
+    try:
+        report = report_store.load(payload.run_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    report = _normalize_report(report)
+    curve = report.get("equity_curve") or []
+    if not curve:
+        raise HTTPException(status_code=422, detail="该报告无净值曲线，无法计算指标")
+    eq_points = [EquityPoint(**p) for p in curve]
+    trades = [Trade(**t) for t in report.get("trades", [])]
+
+    benchmark_values = None
+    if payload.benchmark_symbol:
+        # 复用 analysis 的篮子构建（单标的等权买入持有）
+        from .analysis import build_benchmark_values as _bbv
+        dates = [p.get("date") for p in curve]
+        initial = curve[0].get("total_value") or 1_000_000.0
+        try:
+            benchmark_values = _bbv(
+                {"symbols": [payload.benchmark_symbol]}, dates, initial,
+                report.get("interval", "daily"),
+            )
+        except (ValueError, RuntimeError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    m = PerformanceMetrics(eq_points, eq_points[0].total_value, trades, benchmark_values=benchmark_values)
+    return {
+        "run_id": payload.run_id,
+        "strategy": report.get("strategy") or report.get("strategy_name"),
+        "symbols": report.get("symbols"),
+        "metrics": m.to_dict(),
     }
 
 

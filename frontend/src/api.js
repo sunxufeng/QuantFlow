@@ -223,6 +223,7 @@ export const runBenchmarkCompare = (payload) => request('/backtest/benchmark-com
 export const runFactorDecay = (payload) => request('/backtest/factor-decay', { method: 'POST', body: JSON.stringify(payload) })
 export const runRobustness = (payload) => request('/backtest/robustness', { method: 'POST', body: JSON.stringify(payload) })
 export const runBenchmarkWeighted = (payload) => request('/backtest/benchmark-weighted', { method: 'POST', body: JSON.stringify(payload) })
+export const runMetricsExtended = (payload) => request('/backtest/metrics-extended', { method: 'POST', body: JSON.stringify(payload) })
 
 // ---- 因子库 CRUD（V1.1 N3）----
 export const factorLibraryList = (category) => request(
