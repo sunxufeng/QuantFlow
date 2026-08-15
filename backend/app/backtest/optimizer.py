@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import itertools
 import logging
+import random
 from typing import Any, Dict, List, Optional
 
 from .engine import BacktestEngine, BacktestError
@@ -80,6 +81,10 @@ def optimize(
     strategy: str,
     fixed_params: Optional[Dict[str, Any]] = None,
     grid: Optional[Dict[str, List[Any]]] = None,
+    distributions: Optional[Dict[str, Dict[str, Any]]] = None,
+    method: str = "grid",
+    n_samples: int = 30,
+    seed: Optional[int] = None,
     symbols: List[str],
     start: str,
     end: str,
@@ -118,21 +123,29 @@ def optimize(
         raise OptimizeConfigError(
             f"不支持的优化目标 {objective!r}，可选: {OBJECTIVE_METRICS}"
         )
+    if method not in ("grid", "random"):
+        raise OptimizeConfigError(f"不支持的搜索方式 {method!r}，可选: grid / random")
 
     fixed_params = fixed_params or {}
     grid = grid or {}
+    distributions = distributions or {}
     asset_types = asset_types or {}
     multipliers = multipliers or {}
 
-    # 笛卡尔积展开
-    grid_items = list(grid.items())
-    if grid_items:
-        keys = [k for k, _ in grid_items]
-        value_lists = [v for _, v in grid_items]
-        combos = [dict(zip(keys, vals)) for vals in itertools.product(*value_lists)]
+    # 展开参数组合：grid=笛卡尔积；random=按分布随机抽样（去重）
+    if method == "random":
+        combos = _sample_random_combos(
+            distributions, n_samples, seed, max_combos
+        )
     else:
-        # 无网格：仅跑一组固定参数（等价于单次回测 + 排序脚手架）
-        combos = [{}]
+        grid_items = list(grid.items())
+        if grid_items:
+            keys = [k for k, _ in grid_items]
+            value_lists = [v for _, v in grid_items]
+            combos = [dict(zip(keys, vals)) for vals in itertools.product(*value_lists)]
+        else:
+            # 无网格：仅跑一组固定参数（等价于单次回测 + 排序脚手架）
+            combos = [{}]
 
     total_combos = len(combos)
     if total_combos > max_combos:
@@ -191,6 +204,7 @@ def optimize(
 
     return {
         "strategy": strategy,
+        "method": method,
         "objective": objective,
         "objective_direction": "higher",
         "symbols": symbols,
@@ -202,3 +216,63 @@ def optimize(
         "top": top,
         "failures": failures,
     }
+
+
+def _sample_random_combos(
+    distributions: Dict[str, Dict[str, Any]],
+    n_samples: int,
+    seed: Optional[int],
+    max_combos: int,
+) -> List[Dict[str, Any]]:
+    """按参数分布随机抽样 ``n_samples`` 组（去重），用于随机搜索。
+
+    ``distributions`` 每个参数支持三种分布::
+
+        {"type": "int", "low": 2, "high": 20}          # 整数均匀
+        {"type": "float", "low": 0.1, "high": 0.5}      # 浮点均匀
+        {"type": "choice", "values": [3, 5, 8, 13]}     # 离散候选
+
+    返回抽样的参数组合列表（长度 <= n_samples）。
+    """
+    if not distributions:
+        raise OptimizeConfigError("随机搜索需提供 distributions 参数分布定义")
+    if n_samples < 1:
+        raise OptimizeConfigError("n_samples 必须 >= 1")
+    if n_samples > max_combos:
+        raise OptimizeConfigError(
+            f"随机样本数过多（{n_samples} > 上限 {max_combos}），请减小 n_samples 或提高 max_combos"
+        )
+
+    rng = random.Random(seed)
+    samples: List[Dict[str, Any]] = []
+    seen: set = set()
+    attempts = 0
+    max_attempts = max(n_samples * 50, 2000)
+    while len(samples) < n_samples and attempts < max_attempts:
+        attempts += 1
+        combo: Dict[str, Any] = {}
+        for name, spec in distributions.items():
+            stype = spec.get("type")
+            if stype == "choice":
+                values = spec.get("values") or []
+                if not values:
+                    raise OptimizeConfigError(f"分布 {name!r} 的 choice 需提供 values")
+                combo[name] = rng.choice(values)
+            elif stype in ("int", "float"):
+                low = spec.get("low")
+                high = spec.get("high")
+                if low is None or high is None:
+                    raise OptimizeConfigError(f"分布 {name!r} 需 low/high")
+                if high < low:
+                    raise OptimizeConfigError(f"分布 {name!r} 的 high 不得小于 low")
+                val = low + (high - low) * rng.random()
+                combo[name] = int(round(val)) if stype == "int" else float(val)
+            else:
+                raise OptimizeConfigError(
+                    f"分布 {name!r} 未知 type={stype!r}（可选 int/float/choice）"
+                )
+        key = tuple(sorted(combo.items()))
+        if key not in seen:
+            seen.add(key)
+            samples.append(combo)
+    return samples

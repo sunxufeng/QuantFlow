@@ -34,6 +34,20 @@ export default function Optimizer() {
   const [gridText, setGridText] = useState(
     JSON.stringify({ fast: [2, 3, 5], slow: [6, 8, 10, 12] }, null, 2)
   )
+  const [mode, setMode] = useState('grid')
+  const [distText, setDistText] = useState(
+    JSON.stringify(
+      {
+        fast: { type: 'int', low: 2, high: 20 },
+        slow: { type: 'int', low: 10, high: 40 },
+        threshold: { type: 'float', low: 0.1, high: 0.5 },
+      },
+      null,
+      2
+    )
+  )
+  const [nSamples, setNSamples] = useState(30)
+  const [seed, setSeed] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [result, setResult] = useState(null)
@@ -52,6 +66,36 @@ export default function Optimizer() {
 
   const run = () => {
     setError('')
+    const base = {
+      strategy,
+      symbols: symbol.split(',').map((s) => s.trim()).filter(Boolean),
+      start,
+      end,
+      objective,
+      top_n: topN,
+    }
+    if (mode === 'random') {
+      let distributions
+      try {
+        distributions = JSON.parse(distText)
+      } catch (e) {
+        setError('参数分布不是合法 JSON（示例：{"fast":{"type":"int","low":2,"high":20}}）')
+        return
+      }
+      setLoading(true)
+      setResult(null)
+      optimizeBacktest({
+        ...base,
+        method: 'random',
+        distributions,
+        n_samples: nSamples,
+        seed: seed === '' ? null : Number(seed),
+      })
+        .then(setResult)
+        .catch((e) => setError(`优化失败: ${e.message}`))
+        .finally(() => setLoading(false))
+      return
+    }
     let grid
     try {
       grid = JSON.parse(gridText)
@@ -61,15 +105,7 @@ export default function Optimizer() {
     }
     setLoading(true)
     setResult(null)
-    optimizeBacktest({
-      strategy,
-      symbols: symbol.split(',').map((s) => s.trim()).filter(Boolean),
-      start,
-      end,
-      objective,
-      top_n: topN,
-      grid,
-    })
+    optimizeBacktest({ ...base, method: 'grid', grid })
       .then(setResult)
       .catch((e) => setError(`优化失败: ${e.message}`))
       .finally(() => setLoading(false))
@@ -86,10 +122,17 @@ export default function Optimizer() {
         </button>
       </div>
       <div className="qf-hint" style={{ marginBottom: 12 }}>
-        在给定参数网格上做笛卡尔积遍历，对每组参数运行回测并按目标指标排序返回 Top-N。纯离线，无需券商凭证。
+        在给定参数空间上搜索，对每组参数运行回测并按目标指标排序返回 Top-N。支持两种搜索方式：<b>网格</b>（笛卡尔积全遍历）与 <b>随机</b>（按分布抽样，适合高维/大空间）。纯离线，无需券商凭证。
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, maxWidth: 720 }}>
+        <label className="qf-field">
+          <span>搜索方式</span>
+          <select value={mode} onChange={(e) => setMode(e.target.value)}>
+            <option value="grid">网格（笛卡尔积）</option>
+            <option value="random">随机（分布抽样）</option>
+          </select>
+        </label>
         <label className="qf-field">
           <span>策略</span>
           <select value={strategy} onChange={(e) => setStrategy(e.target.value)}>
@@ -138,12 +181,38 @@ export default function Optimizer() {
         />
       </div>
 
+      {mode === 'random' && (
+        <div style={{ marginTop: 12, maxWidth: 720 }}>
+          <span className="qf-field-label">参数分布（JSON · int/float/choice）</span>
+          <textarea
+            value={distText}
+            onChange={(e) => setDistText(e.target.value)}
+            rows={6}
+            style={{ width: '100%', fontFamily: 'monospace', fontSize: 12, padding: 8 }}
+          />
+          <div style={{ display: 'flex', gap: 12, marginTop: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+            <label className="qf-field" style={{ width: 150 }}>
+              <span>抽样组数 n_samples</span>
+              <input type="number" min={1} max={2000} value={nSamples}
+                onChange={(e) => setNSamples(Number(e.target.value) || 30)} />
+            </label>
+            <label className="qf-field" style={{ width: 150 }}>
+              <span>随机种子 seed（可选）</span>
+              <input value={seed} placeholder="留空=随机" onChange={(e) => setSeed(e.target.value)} />
+            </label>
+          </div>
+          <div className="qf-hint" style={{ marginTop: 6 }}>
+            分布示例：<code>{'{"fast":{"type":"int","low":2,"high":20},"slow":{"type":"choice","values":[10,20,30]}}'}</code>
+          </div>
+        </div>
+      )}
+
       {error && <div className="qf-error" style={{ marginTop: 12 }}>{error}</div>}
 
       {result && (
         <div className="qf-an-block" style={{ marginTop: 16 }}>
           <div className="qf-an-title">
-            优化结果 · 目标={result.objective} · 组合 {result.total_combos} 组
+            优化结果 · 方式={result.method || 'grid'} · 目标={result.objective} · 组合 {result.total_combos} 组
             （成功 {result.completed} / 失败 {result.failed}）· 排序：{result.objective_direction === 'higher' ? '越大越好' : ''}
           </div>
           {result.top.length === 0 ? (

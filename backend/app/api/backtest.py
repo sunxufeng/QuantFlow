@@ -283,7 +283,24 @@ class OptimizeRequest(BaseModel):
     )
     top_n: int = Field(default=10, gt=0, le=100, description="返回 Top-N 组参数")
     max_combos: int = Field(
-        default=200, gt=0, le=2000, description="网格组合上限（防止笛卡尔积爆炸）"
+        default=200, gt=0, le=2000, description="网格/随机组合上限（防止爆炸）"
+    )
+    method: str = Field(
+        default="grid",
+        description="搜索方式：grid（笛卡尔积网格） / random（按分布随机抽样）",
+    )
+    distributions: Dict[str, Dict[str, object]] = Field(
+        default_factory=dict,
+        description="随机搜索参数分布定义，例如 "
+        '{"fast": {"type": "int", "low": 2, "high": 20}, '
+        '"threshold": {"type": "float", "low": 0.1, "high": 0.5}, '
+        '"slow": {"type": "choice", "values": [10, 20, 30]}}',
+    )
+    n_samples: int = Field(
+        default=30, gt=0, le=2000, description="随机搜索抽样组数"
+    )
+    seed: Optional[int] = Field(
+        default=None, description="随机搜索随机种子（指定后结果可复现）"
     )
 
 
@@ -300,6 +317,10 @@ def optimize_backtest(payload: OptimizeRequest) -> dict:
             strategy=payload.strategy,
             fixed_params=payload.fixed_params,
             grid=payload.grid,
+            distributions=payload.distributions,
+            method=payload.method,
+            n_samples=payload.n_samples,
+            seed=payload.seed,
             symbols=payload.symbols,
             start=payload.start,
             end=payload.end,
