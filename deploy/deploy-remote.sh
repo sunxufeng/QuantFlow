@@ -47,21 +47,25 @@ if [[ "$SKIP_BACKEND" != "1" ]]; then
 fi
 
 if [[ "$SKIP_FRONTEND" != "1" ]]; then
-  echo "==> [2] 同步前端 src/ + dist/ 到 $QF_DIR/frontend"
-  if [[ ! -d "$REPO_DIR/frontend/dist" ]]; then
-    echo "⚠️  未找到 frontend/dist，请先在本地执行 npm run build" >&2
-    exit 4
-  fi
-  tar czf - --exclude='node_modules' -C "$REPO_DIR/frontend" src dist \
-    | $SSH "mkdir -p $QF_DIR/frontend && cd $QF_DIR/frontend && tar xzf -"
-  echo "✅ 前端同步完成"
+  echo "==> [2] 本地构建前端（产物落 assets/，文件名带内容哈希，天然防陈旧缓存）"
+  APP_VER="$(grep -m1 'APP_VERSION' "$REPO_DIR/backend/app/config.py" | sed -E 's/.*"([0-9.]+)".*/\1/')"
+  BUILD_ID="$(date +%s)"
+  export QF_BUILD_ID="$BUILD_ID"
+  (cd "$REPO_DIR/frontend" && npm run build)
+  printf '{"build":"%s","version":"%s"}\n' "$BUILD_ID" "$APP_VER" > "$REPO_DIR/frontend/dist/version.json"
+  echo "   构建号=$BUILD_ID  版本=$APP_VER  产物路径=assets/（内容哈希文件名）"
+
+  echo "==> [3] 同步前端 src/ + dist/ + server.mjs 到 $QF_DIR/frontend"
+  tar czf - --exclude='node_modules' -C "$REPO_DIR/frontend" src dist server.mjs \
+    | $SSH "mkdir -p $QF_DIR/frontend && cd $QF_DIR/frontend && rm -rf dist && tar xzf -"
+  echo "✅ 前端同步完成（已清理旧 dist 残留的陈旧 bundle）"
 fi
 
-echo "==> [3] 重启服务"
+echo "==> [4] 重启服务"
 $SSH "systemctl restart quantflow.service quantflow-frontend.service"
 echo "✅ 服务已重启"
 
-echo "==> [4] 探测健康端点 /api/health"
+echo "==> [5] 探测健康端点 /api/health"
 HEALTH=""
 for i in $(seq 1 10); do
   HEALTH="$($SSH "curl -fsS http://127.0.0.1:${QF_FE_PORT}/api/health" 2>/dev/null || true)"

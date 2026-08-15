@@ -37,43 +37,74 @@ function PortHandles({ ports, side, type }) {
   ))
 }
 
-function ParamField({ spec, value, onChange }) {
+function ParamField({ spec, value, onChange, outputSpec }) {
   const common = {
     value: value ?? spec.default ?? '',
     onChange: (e) => onChange(spec.name, e.target.value),
   }
+  const label = outputSpec ? outputSpec.name : spec.label
   if (spec.type === 'boolean') {
     return (
-      <label className="qf-param">
+      <label className={`qf-param ${outputSpec ? 'qf-param-output' : ''}`}>
         <input
           type="checkbox"
           checked={!!value}
           onChange={(e) => onChange(spec.name, e.target.checked)}
         />
-        <span>{spec.label}</span>
+        <span>{label}</span>
+        {outputSpec && (
+          <Handle
+            type="source"
+            position={Position.Right}
+            id={outputSpec.name}
+            className="qf-inline-handle"
+            style={{ background: PORT_COLOR[outputSpec.type] || PORT_COLOR.default }}
+            data-port-type={outputSpec.type}
+          />
+        )}
       </label>
     )
   }
   if (spec.options?.length) {
     return (
-      <label className="qf-param">
-        <span>{spec.label}</span>
+      <label className={`qf-param ${outputSpec ? 'qf-param-output' : ''}`}>
+        <span>{label}</span>
         <select {...common}>
           {spec.options.map((o) => (
             <option key={o} value={o}>{o}</option>
           ))}
         </select>
+        {outputSpec && (
+          <Handle
+            type="source"
+            position={Position.Right}
+            id={outputSpec.name}
+            className="qf-inline-handle"
+            style={{ background: PORT_COLOR[outputSpec.type] || PORT_COLOR.default }}
+            data-port-type={outputSpec.type}
+          />
+        )}
       </label>
     )
   }
   return (
-    <label className="qf-param">
-      <span>{spec.label}</span>
+    <label className={`qf-param ${outputSpec ? 'qf-param-output' : ''}`}>
+      <span>{label}</span>
       <input
         type={spec.type === 'number' ? 'number' : 'text'}
         {...common}
         placeholder={spec.description}
       />
+      {outputSpec && (
+        <Handle
+          type="source"
+          position={Position.Right}
+          id={outputSpec.name}
+          className="qf-inline-handle"
+          style={{ background: PORT_COLOR[outputSpec.type] || PORT_COLOR.default }}
+          data-port-type={outputSpec.type}
+        />
+      )}
     </label>
   )
 }
@@ -103,6 +134,8 @@ function OutputValue({ value }) {
 
 function WorkflowNode({ data, selected }) {
   const spec = data.spec
+  const outputByName = Object.fromEntries((spec.outputs || []).map((o) => [o.name, o]))
+  const claimedOutputNames = new Set()
   return (
     <div className={`qf-node ${selected ? 'qf-node-selected' : ''}`}>
       <PortHandles ports={spec.inputs} side={Position.Left} type="target" />
@@ -112,9 +145,19 @@ function WorkflowNode({ data, selected }) {
       </div>
       <div className="qf-node-cat">{spec.category} · {spec.node_type}</div>
       <div className="qf-node-body">
-        {spec.params.map((p) => (
-          <ParamField key={p.name} spec={p} value={data.params[p.name]} onChange={data.onChange} />
-        ))}
+        {spec.params.map((p) => {
+          const outputSpec = outputByName[p.name]
+          if (outputSpec) claimedOutputNames.add(outputSpec.name)
+          return (
+            <ParamField
+              key={p.name}
+              spec={p}
+              value={data.params[p.name]}
+              onChange={data.onChange}
+              outputSpec={outputSpec}
+            />
+          )
+        })}
         {data.outputs && Object.keys(data.outputs).length > 0 && (
           <div className="qf-node-outputs">
             {Object.entries(data.outputs).map(([k, v]) => (
@@ -126,7 +169,11 @@ function WorkflowNode({ data, selected }) {
           </div>
         )}
       </div>
-      <PortHandles ports={spec.outputs} side={Position.Right} type="source" />
+      <PortHandles
+        ports={(spec.outputs || []).filter((o) => !claimedOutputNames.has(o.name))}
+        side={Position.Right}
+        type="source"
+      />
     </div>
   )
 }

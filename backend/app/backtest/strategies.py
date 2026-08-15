@@ -12,7 +12,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable, Dict
+from typing import Any, Callable, Dict, List
 
 from .engine import BacktestContext, Strategy
 
@@ -284,3 +284,19 @@ def get_strategy(name: str) -> Callable[[Dict[str, Any]], Strategy]:
     if name not in STRATEGY_REGISTRY:
         raise KeyError(f"未知策略: {name}")
     return STRATEGY_REGISTRY[name]
+
+
+# V3.2 因子 IC/IR 进策略排行榜：内置策略与因子库的默认映射。
+# 用户可在 POST /backtest/run 时通过 factors 字段覆盖。
+FACTOR_MAP: Dict[str, List[str]] = {
+    "buy_hold": ["sharpe", "volatility"],
+    "ma_cross": ["momentum", "mean_reversion"],
+    "fund_dingtou": ["sharpe", "volatility"],
+    "fund_value_avg": ["sharpe", "volatility"],
+    "futures_ma_cross": ["momentum", "mean_reversion"],
+}
+
+
+def default_factors(strategy_name: str) -> List[str]:
+    """返回策略默认关联的因子名列表（用于报告展示 IC/IR）。"""
+    return FACTOR_MAP.get(strategy_name, [])

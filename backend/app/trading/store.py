@@ -1,7 +1,7 @@
 """V1.8 模拟交易持久化层（SQLite）。
 
 表结构幂等创建；首次访问时确保存在。模拟账户以用户维度隔离：
-- ``trading_cash``：现金余额（初始 1,000,000）
+- ``trading_cash``：现金余额 + 账户初始资金（initial_cash，可自定义，默认 1,000,000）
 - ``trading_positions``：持仓（qty 有正负，正为多/long，负为空/short）
 - ``trading_orders``：委托单（market 即时成交；limit 挂单，可撤）
 - ``trading_fills``：成交明细
@@ -18,7 +18,8 @@ from ..core.db import db
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS trading_cash (
     user_id TEXT PRIMARY KEY,
-    cash REAL NOT NULL DEFAULT 1000000
+    cash REAL NOT NULL DEFAULT 1000000,
+    initial_cash REAL NOT NULL DEFAULT 1000000
 );
 CREATE TABLE IF NOT EXISTS trading_positions (
     user_id TEXT NOT NULL,
@@ -81,6 +82,10 @@ def init() -> None:
         cols = [r["name"] for r in db.query("PRAGMA table_info(trading_fills)")]
         if "fee" not in cols:
             db.execute("ALTER TABLE trading_fills ADD COLUMN fee REAL NOT NULL DEFAULT 0")
+        # 兼容旧库：补齐 initial_cash 列（V6.0 账户可配置初始资金）
+        ccols = [r["name"] for r in db.query("PRAGMA table_info(trading_cash)")]
+        if "initial_cash" not in ccols:
+            db.execute("ALTER TABLE trading_cash ADD COLUMN initial_cash REAL NOT NULL DEFAULT 1000000")
         _initialized = True
 
 
@@ -92,26 +97,50 @@ def _uid() -> str:
     return uuid.uuid4().hex
 
 
-def reset(user_id: str) -> None:
-    """重置某用户的模拟账户（现金/持仓/委托/成交/权益快照）。"""
+def reset(user_id: str, initial_cash: float = None) -> float:
+    """重置某用户的模拟账户（现金/持仓/委托/成交/权益快照）。
+
+    V6.0：``initial_cash`` 可指定账户初始资金并持久化；缺省时沿用账户既有的
+    initial_cash（或默认 1,000,000）。返回最终生效的初始资金。
+    """
     init()
+    if initial_cash is None:
+        initial_cash = get_initial_cash(user_id)
+    initial_cash = float(initial_cash)
     with _lock:
         db.execute("DELETE FROM trading_fills WHERE user_id=?", (user_id,))
         db.execute("DELETE FROM trading_orders WHERE user_id=?", (user_id,))
         db.execute("DELETE FROM trading_positions WHERE user_id=?", (user_id,))
         db.execute("DELETE FROM trading_cash WHERE user_id=?", (user_id,))
         db.execute("DELETE FROM trading_equity_snapshots WHERE user_id=?", (user_id,))
+        db.execute(
+            "INSERT INTO trading_cash(user_id, cash, initial_cash) VALUES(?, ?, ?)",
+            (user_id, initial_cash, initial_cash),
+        )
     # 重置后记录基线快照，权益曲线从初始资金重新开始
-    record_equity_snapshot(user_id, 1_000_000.0, 1_000_000.0, 0.0, 0.0)
+    record_equity_snapshot(user_id, initial_cash, initial_cash, 0.0, 0.0)
+    return initial_cash
 
 
 def get_cash(user_id: str) -> float:
     init()
     row = db.query_one("SELECT cash FROM trading_cash WHERE user_id=?", (user_id,))
     if row is None:
-        db.execute("INSERT INTO trading_cash(user_id, cash) VALUES(?, 1000000)", (user_id,))
+        db.execute(
+            "INSERT INTO trading_cash(user_id, cash, initial_cash) VALUES(?, 1000000, 1000000)",
+            (user_id,),
+        )
         return 1_000_000.0
     return float(row["cash"])
+
+
+def get_initial_cash(user_id: str) -> float:
+    """返回账户初始资金（V6.0 可配置）；缺省时默认 1,000,000。"""
+    init()
+    row = db.query_one("SELECT initial_cash FROM trading_cash WHERE user_id=?", (user_id,))
+    if row is None or row["initial_cash"] is None:
+        return 1_000_000.0
+    return float(row["initial_cash"])
 
 
 def last_price(symbol: str):

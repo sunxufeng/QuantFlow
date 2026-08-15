@@ -151,6 +151,12 @@ export const fetchBars = (symbol, start, end) => request(
 )
 export const marketSyncStatus = () => request('/market/sync/status')
 export const marketSyncNow = () => request('/market/sync', { method: 'POST' })
+// ---- V5.0 行情缓存 / 数据源管理 ----
+export const marketCache = () => request('/market/cache')
+export const marketRefresh = (payload = {}) =>
+  request('/market/cache/refresh', { method: 'POST', body: JSON.stringify(payload) })
+// ---- V5.1 自选股监控 + 价格预警 ----
+export const watchlistMonitor = () => request('/market/watchlist/monitor')
 
 // ---- 回测报告中心（V1.6）----
 export const backtestReports = () => request('/backtest/reports')
@@ -188,6 +194,17 @@ export const toggleAlert = (id, payload) => request(`/alerts/${id}/toggle`, { me
 export const evaluateAlerts = () => request('/alerts/evaluate', { method: 'POST' })
 export const alertSchedulerStatus = () => request('/alerts/scheduler')
 export const triggerAlertScheduler = () => request('/alerts/scheduler/trigger', { method: 'POST' })
+// ---- V5.2 调度中心 ----
+export const schedulerCenter = () => request('/schedules/center')
+export const listSchedules = () => request('/schedules')
+export const createSchedule = (payload) =>
+  request('/schedules', { method: 'POST', body: JSON.stringify(payload) })
+export const runSchedule = (id) => request(`/schedules/${id}/run`, { method: 'POST' })
+export const toggleSchedule = (id, enabled) =>
+  request(`/schedules/${id}/toggle`, { method: 'POST', body: JSON.stringify({ enabled }) })
+export const deleteSchedule = (id) => request(`/schedules/${id}`, { method: 'DELETE' })
+export const listWorkflows = (scope = 'all') =>
+  request(`/workflows?scope=${scope}`)
 
 // ---- 自选股监控 / 行情看板（V2.4）----
 export const getWatchlist = () => request('/market/watchlist')
@@ -197,6 +214,7 @@ export const getQuotes = (symbols) => request(`/market/quotes?symbols=${encodeUR
 export const backtestStrategies = () => request('/backtest/strategies')
 export const runBacktest = (payload) => request('/backtest/run', { method: 'POST', body: JSON.stringify(payload) })
 export const optimizeBacktest = (payload) => request('/backtest/optimize', { method: 'POST', body: JSON.stringify(payload) })
+export const runPortfolioBacktest = (payload) => request('/backtest/portfolio', { method: 'POST', body: JSON.stringify(payload) })
 
 // ---- 因子库 CRUD（V1.1 N3）----
 export const factorLibraryList = (category) => request(
@@ -280,3 +298,70 @@ export const brokerTestConfig = (cfg) => request('/settings/broker/test', {
   method: 'POST',
   body: JSON.stringify(cfg || {}),
 })
+
+// ---- V6.1 系统设置 + 用户偏好 ----
+export const getSettings = () => request('/settings')
+export const updateSettings = (prefs = {}) => request('/settings', {
+  method: 'PUT',
+  body: JSON.stringify(prefs),
+})
+
+// ---- V7.0 投研工作区总览快照 ----
+export const fetchWorkspace = () => request('/workspace')
+
+// ---- V6.2 批量导出中心 ----
+export const exportData = (resource, format = 'json') =>
+  fetch(`/api/export?resource=${encodeURIComponent(resource)}&format=${encodeURIComponent(format)}`, {
+    headers: { Authorization: `Bearer ${getToken() || ''}` },
+  })
+
+// ---- V7.1 用户行情导入 ----
+export const uploadMarket = (payload) => request('/market/upload', {
+  method: 'POST',
+  body: JSON.stringify(payload),
+})
+export const listUploaded = () => request('/market/uploaded')
+export const deleteUploaded = (symbol) => request(`/market/uploaded/${encodeURIComponent(symbol)}`, {
+  method: 'DELETE',
+})
+
+// ---- V8.0 公共模板市场 ----
+export const templateMarket = () => request('/workflows/templates/market')
+export const shareTemplate = (id, publicFlag) => request(`/workflows/templates/${id}/share`, {
+  method: 'POST',
+  body: JSON.stringify({ public: publicFlag }),
+})
+
+// ---- V9.0 回测实验追踪（标签 / 备注）----
+export const patchReport = (runId, payload) => request(`/backtest/reports/${runId}`, {
+  method: 'PATCH',
+  body: JSON.stringify(payload),
+})
+export const reportTags = () => request('/backtest/tags')
+export const reportFactors = (runId) => request(`/backtest/reports/${runId}/factors`)
+
+// ---- V10.0 模拟交易（paper trading，无真实券商）----
+export const tradingMode = () => request('/trading/mode')
+export const tradingLiveStatus = () => request('/trading/live/status')
+export const tradingAccount = () => request('/trading/account')
+export const tradingSummary = () => request('/trading/summary')
+export const tradingAnalytics = () => request('/trading/analytics')
+export const tradingPositions = () => request('/trading/positions')
+export const tradingOrders = (status = '') =>
+  request(`/trading/orders${status ? `?status=${status}` : ''}`)
+export const placeTradingOrder = (payload) => request('/trading/orders', {
+  method: 'POST',
+  body: JSON.stringify(payload),
+})
+export const cancelTradingOrder = (id) => request(`/trading/orders/${id}/cancel`, {
+  method: 'POST',
+})
+export const simulateTrading = (priceOverrides = {}) => request('/trading/simulate', {
+  method: 'POST',
+  body: JSON.stringify({ price_overrides: priceOverrides }),
+})
+export const resetTrading = (initialCash = null) => request('/trading/reset', {
+  method: 'DELETE',
+  body: JSON.stringify(initialCash != null ? { initial_cash: initialCash } : {}),
+})
+

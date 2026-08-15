@@ -172,6 +172,13 @@ CREATE TABLE IF NOT EXISTS app_settings (
     updated_at TEXT NOT NULL
 );
 
+-- V6.1 用户级偏好（按用户隔离；整体以 JSON 持久化）
+CREATE TABLE IF NOT EXISTS user_preferences (
+    user_id  TEXT PRIMARY KEY,
+    prefs    TEXT NOT NULL DEFAULT '{}',
+    updated_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS alert_rules (
     id               TEXT PRIMARY KEY,
     name             TEXT NOT NULL,
@@ -205,6 +212,9 @@ CREATE TABLE IF NOT EXISTS workflow_templates (
     updated_at  TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_workflow_templates_owner ON workflow_templates(owner_id);
+-- 注意：is_public 列及 idx_workflow_templates_public 索引由 TemplateStore._ensure()
+-- 惰性补齐（ALTER TABLE ADD COLUMN），避免对「已存在旧表」重复执行 CREATE TABLE 时
+-- 因列缺失导致 CREATE INDEX 失败。详见 core/template_store.py。
 
 """
 

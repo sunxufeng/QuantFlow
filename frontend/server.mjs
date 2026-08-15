@@ -1,7 +1,7 @@
 // QuantFlow 生产静态服务 + /api 反向代理（零依赖 Node 实现）
 // 用法：node server.mjs  （监听 8080，/api 转发到 QF_BACKEND_URL 默认 http://127.0.0.1:8100）
 // 支持 /api/ws/* WebSocket 升级转发（运行状态实时推送）
-import { createReadStream, existsSync, statSync } from "node:fs";
+import { createReadStream, existsSync, readFileSync, statSync } from "node:fs";
 import { createServer, request } from "node:http";
 import { dirname, extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 const PORT = Number(process.env.QF_PORT || 8080);
 const BACKEND_URL = process.env.QF_BACKEND_URL || "http://127.0.0.1:8100";
 const root = join(dirname(fileURLToPath(import.meta.url)), "dist");
+
 const types = {
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
@@ -21,6 +22,10 @@ const types = {
 
 const server = createServer((req, res) => {
   const url = new URL(req.url, "http://localhost");
+
+  // 入口直接服务：裸根 / 与 /<buildid>/ 都直接返回 index.html（SPA 入口），
+  // index.html 走 no-store，保证 CDN/浏览器永远拿最新；bundle 用内容哈希文件名天然防旧缓存。
+  // 不再做 302 跳转到构建号专属路径。
 
   // /api/* 反向代理到后端
   if (url.pathname.startsWith("/api/")) {
@@ -40,9 +45,11 @@ const server = createServer((req, res) => {
   if (!file.startsWith(root) || !existsSync(file) || statSync(file).isDirectory()) {
     file = join(root, "index.html");
   }
+  // version.json 携带前端构建号，供看门狗比对，必须 no-store（禁止 CDN/浏览器缓存）以免误判陈旧
+  const isNoStore = file.endsWith("index.html") || file.endsWith("version.json");
   res.writeHead(200, {
     "Content-Type": types[extname(file)] || "application/octet-stream",
-    "Cache-Control": file.endsWith("index.html") ? "no-cache" : "public, max-age=31536000, immutable",
+    "Cache-Control": isNoStore ? "no-store" : "public, max-age=31536000, immutable",
   });
   createReadStream(file).pipe(res);
 });

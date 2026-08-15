@@ -87,7 +87,7 @@ export default function LLMAssistant() {
       {status && status.routing && status.chain && (
         <div className="qf-hint" style={{ marginBottom: 8 }}>
           多模型路由（按序 fallback）：
-          {status.chain.map((c, i) => (
+          {(status.chain || []).map((c, i) => (
             <span key={i} style={{ marginLeft: i === 0 ? 6 : 4 }}>
               {i > 0 && <span style={{ color: '#94a3b8' }}> → </span>}
               <b>{c.name}</b>

@@ -25,6 +25,9 @@ class CacheBackend:
     def set(self, key: str, value: Any, ttl: int) -> None:  # pragma: no cover
         raise NotImplementedError
 
+    def delete(self, key: str) -> None:  # pragma: no cover - 抽象
+        raise NotImplementedError
+
 
 class MemoryCache(CacheBackend):
     """进程内 TTL 缓存（默认降级方案）。"""
@@ -51,6 +54,9 @@ class MemoryCache(CacheBackend):
         else:
             expires = time.time() + ttl if ttl > 0 else 0
         self._store[key] = (value, expires)
+
+    def delete(self, key: str) -> None:
+        self._store.pop(key, None)
 
 
 class RedisCache(CacheBackend):
@@ -94,6 +100,15 @@ class RedisCache(CacheBackend):
         except Exception as exc:  # pragma: no cover - 依赖环境
             logger.warning("Redis 写入失败（%s），降级内存缓存", exc)
             self._memory.set(key, value, ttl)
+
+    def delete(self, key: str) -> None:
+        self._memory.delete(key)
+        if self._redis is None:
+            return
+        try:
+            self._redis.delete(key)
+        except Exception:  # pragma: no cover - 依赖环境
+            pass
 
 
 def default_cache() -> CacheBackend:

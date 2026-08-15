@@ -78,6 +78,84 @@ class MarketService:
     def instruments(self) -> List[Instrument]:
         return self.primary.symbols()
 
+    # ------------------------------------------------------------------ #
+    # 用户行情导入（V7.1）：用户上传 CSV -> 落库，回测/行情可直接使用
+    # ------------------------------------------------------------------ #
+    def upload_bars(self, symbol: str, bars: List[Bar]) -> int:
+        """把用户上传的日线写入持久化层（source='upload'），返回写入条数。"""
+        if not bars:
+            return 0
+        written = self.repository.upsert_daily(bars)
+        # 让缓存失效（旧 provider 缓存可能已含该 symbol 的空/错误结果）
+        self.cache.delete(
+            cache_key(self.primary.name, symbol, DEFAULT_START, DEFAULT_END, "daily")
+        )
+        return written
+
+    def uploaded_symbols(self) -> List[dict]:
+        """返回所有用户导入（source='upload'）的标的快照。"""
+        return [s for s in self.repository.list_symbols() if s.get("source") == "upload"]
+
+    def delete_uploaded(self, symbol: str) -> int:
+        """删除用户导入的标的（同时清缓存）。"""
+        n = self.repository.delete_symbol(symbol)
+        self.cache.delete(
+            cache_key(self.primary.name, symbol, DEFAULT_START, DEFAULT_END, "daily")
+        )
+        return n
+
+    # ------------------------------------------------------------------ #
+    # 缓存/数据源管理（V5.0）：可见性 + 强制刷新
+    # ------------------------------------------------------------------ #
+    def cache_summary(self) -> dict:
+        """快照：数据源模式、缓存后端、库中总 K 线、各标的中继情况。"""
+        import os
+
+        return {
+            "provider_mode": os.getenv("QF_MARKET_PROVIDER", "tushare"),
+            "provider": self.primary.name,
+            "adjustment": self.primary.adjustment,
+            "cache_backend": self.cache.name,
+            "total_bars": self.repository.count(),
+            "cache_ttl_seconds": CACHE_TTL,
+            "symbols": self.repository.list_symbols(),
+        }
+
+    def refresh(
+        self,
+        symbols: Optional[List[str]] = None,
+        start: Optional[str] = None,
+        end: Optional[str] = None,
+    ) -> dict:
+        """强制从数据源重新拉取并落库（绕过热缓存），返回刷新摘要。
+
+        - symbols 为空时默认刷新当前数据源支持的全部标的；
+        - tushare 数据源不支持 ``symbols()``，必须显式传入 symbols。
+        """
+        start = start or DEFAULT_START
+        end = end or DEFAULT_END
+        if not symbols:
+            try:
+                instruments = self.primary.symbols()
+            except DataSourceError as exc:
+                raise DataSourceError(
+                    "该数据源不支持自动列举标的，请在刷新时显式指定 symbols"
+                ) from exc
+            symbols = [i.symbol for i in instruments]
+        refreshed: List[dict] = []
+        for sym in symbols:
+            bars = self._fetch(self.primary, sym, start, end)
+            if bars:
+                self.repository.upsert_daily(bars)
+            refreshed.append({"symbol": sym, "count": len(bars)})
+        return {
+            "refreshed": refreshed,
+            "total_bars": self.repository.count(),
+            "provider": self.primary.name,
+            "start": start,
+            "end": end,
+        }
+
     def _fetch(self, source: MarketDataSource, symbol: str, start: str, end: str) -> List[Bar]:
         try:
             return source.fetch_daily(symbol, start, end)

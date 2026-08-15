@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import ErrorBoundary from './ErrorBoundary.jsx'
 import ReactFlow, {
   Background,
   Controls,
@@ -29,8 +30,16 @@ import BacktestResultView from './BacktestResultView.jsx'
 import BacktestReports from './BacktestReports.jsx'
 import Alerts from './Alerts.jsx'
 import MarketBoard from './MarketBoard.jsx'
+import Watchlist from './Watchlist.jsx'
+import SchedulerCenter from './SchedulerCenter.jsx'
+import Settings from './Settings.jsx'
+import ExportCenter from './ExportCenter.jsx'
 import Factors from './Factors.jsx'
 import BrokerSettings from './BrokerSettings.jsx'
+import FuturesBacktest from './FuturesBacktest.jsx'
+import Optimizer from './Optimizer.jsx'
+import MarketData from './MarketData.jsx'
+import Portfolio from './Portfolio.jsx'
 import LoginScreen from './LoginScreen.jsx'
 import { useGraphHistory } from './useHistory.js'
 import {
@@ -49,6 +58,7 @@ import {
   restoreWorkflowVersion,
   getMe,
   getToken,
+  getSettings,
   importWorkflow,
   listRuns,
   runWsUrl,
@@ -222,7 +232,7 @@ function VersionHistoryModal({ workflowId, onClose, onRestore, setError }) {
   )
 }
 
-function Canvas({ projectId, pendingTemplate, onTemplateConsumed }) {
+function Canvas({ projectId, pendingTemplate, onTemplateConsumed, setView }) {
   const [specs, setSpecs] = useState([])
   const [nodes, setNodes, onNodesChange] = useNodesState([])
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
@@ -507,15 +517,6 @@ function Canvas({ projectId, pendingTemplate, onTemplateConsumed }) {
     }
   }, [applyWorkflow, refreshWorkflows])
 
-  // V3.0 AI 策略工作台：把生成的工作流导入编辑器并跳转
-  const importGeneratedToEditor = useCallback(async (imported) => {
-    applyWorkflow(imported)
-    setWorkflowId(imported.id)
-    setWorkflowName(imported.name)
-    await refreshWorkflows()
-    setView('editor')
-  }, [applyWorkflow, refreshWorkflows, setView])
-
   const onRestoreVersion = useCallback(async (restored) => {
     applyWorkflow(restored)
     setWorkflowId(restored.id)
@@ -747,6 +748,9 @@ function Canvas({ projectId, pendingTemplate, onTemplateConsumed }) {
             onPaneClick={onPaneClick}
             onNodesDelete={onNodesDelete}
             fitView
+            fitViewOptions={{ padding: 0.2, maxZoom: 1 }}
+            minZoom={0.4}
+            maxZoom={1.5}
           >
             <Background gap={16} />
             <Controls />
@@ -883,6 +887,71 @@ export default function App() {
     refreshProjects()
   }, [user, refreshProjects])
 
+  // V6.1：登录后按用户偏好设置默认进入视图（仅首次进入时应用一次）
+  const _appliedDefaultView = useRef(false)
+  useEffect(() => {
+    if (!user || _appliedDefaultView.current) return
+    _appliedDefaultView.current = true
+    getSettings()
+      .then((s) => {
+        const dv = s?.preferences?.default_view
+        if (dv && dv !== view) setView(dv)
+      })
+      .catch(() => {})
+    // 仅在登录态首次就绪时应用一次
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user])
+
+  // 版本看门狗：部署新版本后自动刷新页面，避免长期打开的标签页一直运行陈旧 bundle。
+  // 两层保护：
+  // 1) 后端 /api/health 的 version 变化 → 普通刷新即可；
+  // 2) 前端构建号（/version.json 的 build）与当前 bundle 内嵌 __QF_BUILD_ID__ 不一致
+  //    → 说明 CDN/浏览器缓存了旧 bundle，直接强制刷新当前路径（index.html 走 no-store + bundle 内容哈希，天然拉到最新）。
+  useEffect(() => {
+    let alive = true
+    let latestBuild = null
+    const goFresh = () => {
+      try {
+        const url = new URL(window.location.href)
+        url.searchParams.set('_cb', String(Date.now()))
+        window.location.replace(url.pathname + url.search + url.hash)
+        return
+      } catch {
+        try { window.location.reload(true) } catch { /* ignore */ }
+      }
+    }
+    const probe = () => {
+      fetch('/api/health')
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => {
+          if (!alive || !d || !d.version) return
+          if (window.__QF_BACKEND_VERSION && window.__QF_BACKEND_VERSION !== d.version) {
+            goFresh()
+          } else {
+            window.__QF_BACKEND_VERSION = d.version
+          }
+        })
+        .catch(() => {})
+      // 前端构建号比对（version.json 由部署脚本写入，server.mjs 以 no-store 提供）
+      fetch('/version.json', { cache: 'no-store' })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((v) => {
+          if (!alive || !v || !v.build) return
+          latestBuild = v.build
+          if (typeof __QF_BUILD_ID__ !== 'undefined' && __QF_BUILD_ID__ !== v.build) {
+            goFresh()
+          }
+        })
+        .catch(() => {})
+    }
+    probe()
+    const t = setInterval(probe, 60000)
+    return () => {
+      alive = false
+      clearInterval(t)
+    }
+  }, [])
+
   const handleAuthed = () => {
     getMe().then(setUser).catch(() => {})
     refreshProjects()
@@ -953,6 +1022,7 @@ export default function App() {
           onLogout={handleLogout}
         />
         <main className="qf-main">
+         <ErrorBoundary>
           {view === 'home' && (
             <Dashboard onNavigate={setView} />
           )}
@@ -961,6 +1031,7 @@ export default function App() {
               projectId={projectId}
               pendingTemplate={pendingTemplate}
               onTemplateConsumed={() => setPendingTemplate(null)}
+              setView={setView}
             />
           )}
           {view === 'chart' && <ChartView />}
@@ -968,7 +1039,17 @@ export default function App() {
           {view === 'factor' && <FactorLibrary />}
           {view === 'factorScore' && <Factors />}
           {view === 'notify' && <Notifications />}
-          {view === 'llm' && <LLMAssistant onImported={importGeneratedToEditor} />}
+          {view === 'llm' && (
+            <LLMAssistant
+              onImported={async (imported) => {
+                applyWorkflow(imported)
+                setWorkflowId(imported.id)
+                setWorkflowName(imported.name)
+                await refreshWorkflows()
+                setView('editor')
+              }}
+            />
+          )}
           {view === 'settings' && <LLMSettings />}
           {view === 'templates' && (
             <Templates
@@ -982,9 +1063,18 @@ export default function App() {
           {view === 'compare' && <Compare />}
           {view === 'alerts' && <Alerts />}
           {view === 'board' && <MarketBoard />}
+          {view === 'watch' && <Watchlist />}
+          {view === 'sched' && <SchedulerCenter />}
           {view === 'trade' && <Trading onNavigate={setView} />}
+          {view === 'prefs' && <Settings />}
+          {view === 'export' && <ExportCenter />}
           {view === 'broker' && <BrokerSettings />}
           {view === 'data' && <DataSync />}
+          {view === 'futures' && <FuturesBacktest />}
+          {view === 'optimizer' && <Optimizer />}
+          {view === 'market' && <MarketData />}
+          {view === 'portfolio' && <Portfolio />}
+         </ErrorBoundary>
         </main>
       </div>
     </ReactFlowProvider>

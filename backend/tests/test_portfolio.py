@@ -40,10 +40,19 @@ def _run_leg(leg: Dict[str, Any], initial: float, start: str, end: str) -> Any:
 
 
 def _point_at(result, date: str, allocated: float) -> EquityPoint:
-    for p in result.equity_curve:
-        if p.date == date:
-            return p
-    return EquityPoint(date=date, cash=allocated, market_value=0.0, total_value=allocated, daily_return=0.0)
+    """前向填充取某腿在指定日期的净值（非交易日沿用上一交易日；早于首交易日用分配资金）。
+
+    与组合回测引擎的 _leg_value_series 口径一致（修复 end 落在最后交易日之后净值被重置为
+    分配资金的异常），同时保持「组合净值 == 各腿独立运行净值之前向填充求和」的核心不变量。
+    """
+    nav = {p.date: p.total_value for p in result.equity_curve}
+    if date in nav:
+        return EquityPoint(date=date, cash=allocated, market_value=nav[date], total_value=nav[date], daily_return=0.0)
+    cand = [d for d in nav if d <= date]
+    if cand:
+        v = nav[max(cand)]
+        return EquityPoint(date=date, cash=allocated, market_value=v, total_value=v, daily_return=0.0)
+    return EquityPoint(date=date, cash=allocated, market_value=allocated, total_value=allocated, daily_return=0.0)
 
 
 FUND_LEG = {
@@ -192,3 +201,52 @@ class TestPortfolioApi:
             },
         )
         assert resp.status_code == 422
+
+
+class TestPortfolioAttribution:
+    """V12 绩效归因：各腿累计贡献之和精确等于组合总收益（再平衡前后均成立）。"""
+
+    def _report(self, rebalance: str) -> Dict[str, Any]:
+        legs = [{**FUND_LEG, "weight": 0.5}, {**STOCK_LEG, "weight": 0.5}]
+        return PortfolioBacktest(
+            legs, initial_cash=200_000, start=START, end=END, rebalance=rebalance
+        ).run()
+
+    def test_leg_curves_shape(self):
+        report = self._report("none")
+        assert "leg_curves" in report
+        assert len(report["leg_curves"]) == 2
+        n_days = len(report["calendar"])
+        for lc in report["leg_curves"]:
+            assert len(lc["series"]) == n_days
+            assert lc["series"][0]["date"] == report["calendar"][0]
+
+    def test_attribution_sum_equals_total_return_buyhold(self):
+        report = self._report("none")
+        contrib_sum = sum(b["final_contrib"] for b in report["attribution"]["by_leg"])
+        assert contrib_sum == pytest.approx(report["metrics"]["total_return"], abs=1e-4)
+        assert report["attribution"]["total_return"] == pytest.approx(
+            report["metrics"]["total_return"], abs=1e-6
+        )
+
+    def test_attribution_sum_equals_total_return_rebalanced(self):
+        # 再平衡下用真实权重还原的归因仍应精确求和到总收益
+        report = self._report("M")
+        contrib_sum = sum(b["final_contrib"] for b in report["attribution"]["by_leg"])
+        assert contrib_sum == pytest.approx(report["metrics"]["total_return"], abs=1e-4)
+
+    def test_attribution_exposed_via_api(self, client):
+        resp = client.post(
+            "/api/backtest/portfolio",
+            json={
+                "legs": [{**FUND_LEG, "weight": 0.5}, {**STOCK_LEG, "weight": 0.5}],
+                "initial_cash": 200_000,
+                "start": START,
+                "end": END,
+                "rebalance": "none",
+            },
+        )
+        d = resp.json()
+        assert "attribution" in d
+        assert "leg_curves" in d
+        assert len(d["attribution"]["by_leg"]) == 2

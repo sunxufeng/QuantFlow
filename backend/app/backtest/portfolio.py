@@ -1,12 +1,13 @@
-"""组合回测（V1.2）。
+"""组合回测（V1.2 → V12 绩效归因）。
 
 将多个「腿」（策略 + 标的 + 权重）各自独立回测后，按权重合并为组合净值曲线，
-输出组合净值、各腿配置占比（随时间）、各腿贡献与组合绩效指标。
+输出组合净值、各腿配置占比（随时间）、各腿净值曲线与组合绩效归因。
 
 设计要点：
-- 每条腿以「分配资金 = 总资金 × 归一化权重」独立运行现有回test引擎，互不影响
-- 组合净值 = 各腿净值按日对齐后求和（买入持有、无再平衡，V1.2 基线）
-- 再平衡（rebalance）当前仅支持 "none"；周期性再平衡为后续增强项
+- 每条腿以「分配资金 = 总资金 × 归一化权重」独立运行现有回测引擎，互不影响
+- 组合净值 = 各腿市值按日对齐后合并，支持周期性再平衡（none/D/W/M/Q/Y）
+- 绩效归因（V12）：以再平衡后的真实权重还原每腿在组合内的市值，逐日盈亏对
+  组合总收益的贡献累加，各腿累计贡献之和精确等于组合总收益
 - 复用 STRATEGY_REGISTRY / market_service / PerformanceMetrics，零新依赖
 """
 
@@ -109,7 +110,7 @@ class PortfolioBacktest:
             result = engine.run()
             leg_results.append({"leg": leg, "allocated": allocated, "result": result})
 
-        # 2. 按日对齐合并净值
+        # 2. 按日对齐合并净值（支持周期性再平衡）
         all_dates: set = set()
         for r in leg_results:
             for p in r["result"].equity_curve:
@@ -120,40 +121,16 @@ class PortfolioBacktest:
             all_dates.add(self.end)
         dates = sorted(all_dates)
 
-        combined_points: List[EquityPoint] = []   # 供绩效指标计算
-        combined_curve: List[Dict[str, Any]] = []  # 输出（含配置占比）
-        prev_total = self.initial_cash
-        for d in dates:
-            cash = mv = total = 0.0
-            leg_vals: List[float] = []
-            for r in leg_results:
-                pt = _point_at(r["result"], d, r["allocated"])
-                cash += pt.cash
-                mv += pt.market_value
-                total += pt.total_value
-                leg_vals.append(pt.total_value)
-            daily = total / prev_total - 1.0 if prev_total else 0.0
-            combined_points.append(
-                EquityPoint(
-                    date=d, cash=cash, market_value=mv,
-                    total_value=total, daily_return=daily,
-                )
-            )
-            allocation = {
-                str(i): round(v / total, 6) if total else 0.0
-                for i, v in enumerate(leg_vals)
-            }
-            combined_curve.append(
-                {
-                    "date": d,
-                    "cash": round(cash, 4),
-                    "market_value": round(mv, 4),
-                    "total_value": round(total, 4),
-                    "daily_return": round(daily, 6),
-                    "allocation": allocation,
-                }
-            )
-            prev_total = total
+        # 每条腿在统一日期序列上的前向填充净值
+        leg_value_series = [
+            _leg_value_series(r["result"], dates, r["allocated"])
+            for r in leg_results
+        ]
+        weights = [leg["weight"] for leg in self.legs]
+
+        combined_curve, combined_points = _combine_with_rebalance(
+            dates, leg_value_series, weights, self.initial_cash, self.rebalance
+        )
 
         # 3. 组合绩效指标
         all_trades = []
@@ -191,6 +168,59 @@ class PortfolioBacktest:
         end_date = self.end or (combined_curve[-1]["date"] if combined_curve else "")
         interval = self.legs[0].get("interval", "daily") if self.legs else "daily"
 
+        # 5. 各腿净值曲线（对齐统一日期序列，便于前端叠加展示）
+        leg_curves = [
+            {
+                "index": k,
+                "strategy": leg_results[k]["leg"]["strategy"],
+                "weight": round(weights[k], 6),
+                "series": [
+                    {"date": dates[i], "value": round(leg_value_series[k][i], 4)}
+                    for i in range(len(dates))
+                ],
+            }
+            for k in range(len(leg_results))
+        ]
+
+        # 6. 绩效归因（V12）：把组合总收益按各腿实际盈亏贡献分解。
+        #    用再平衡后的真实权重（combined_curve[i].allocation）还原每腿在组合内的
+        #    市值，逐日盈亏对组合总收益的贡献累加，各腿累计贡献之和精确等于总收益。
+        n = len(leg_results)
+        by_leg_contrib: List[List[float]] = [[] for _ in range(n)]
+        cum_contrib = [0.0] * n
+        prev_port_leg = [self.initial_cash * weights[k] for k in range(n)]
+        for i in range(len(dates)):
+            alloc = combined_curve[i]["allocation"] if combined_curve else {
+                str(k): weights[k] for k in range(n)
+            }
+            port_leg = [
+                combined_points[i].total_value * alloc.get(str(k), 0.0)
+                for k in range(n)
+            ]
+            if i == 0:
+                for k in range(n):
+                    by_leg_contrib[k].append(0.0)
+            else:
+                for k in range(n):
+                    pnl = port_leg[k] - prev_port_leg[k]
+                    cum_contrib[k] += (pnl / self.initial_cash) if self.initial_cash else 0.0
+                    by_leg_contrib[k].append(round(cum_contrib[k], 6))
+            prev_port_leg = port_leg
+        attribution = {
+            "dates": dates,
+            "total_return": round(metrics.total_return, 6),
+            "by_leg": [
+                {
+                    "index": k,
+                    "strategy": leg_results[k]["leg"]["strategy"],
+                    "weight": round(weights[k], 6),
+                    "cumulative_return_contrib": by_leg_contrib[k],
+                    "final_contrib": round(cum_contrib[k], 6),
+                }
+                for k in range(n)
+            ],
+        }
+
         return {
             "type": "portfolio",
             "run_id": uuid.uuid4().hex[:12],
@@ -203,6 +233,8 @@ class PortfolioBacktest:
             "initial_cash": self.initial_cash,
             "rebalance": self.rebalance,
             "legs": leg_summaries,
+            "leg_curves": leg_curves,
+            "attribution": attribution,
             "metrics": metrics.to_dict(),
             "equity_curve": combined_curve,
             "calendar": dates,
@@ -218,3 +250,103 @@ def _point_at(result, date: str, allocated: float) -> EquityPoint:
         date=date, cash=allocated, market_value=0.0,
         total_value=allocated, daily_return=0.0,
     )
+
+
+# 支持的再平衡频率
+REBALANCE_FREQS = ("none", "D", "W", "M", "Q", "Y")
+
+
+def _leg_value_series(result, dates: List[str], allocated: float) -> List[float]:
+    """把单腿回测净值前向填充到统一日期序列（停牌/非交易日沿用上一日）。"""
+    nav = {p.date: float(p.total_value) for p in result.equity_curve}
+    first_date = min(nav) if nav else None
+    out: List[float] = []
+    last = allocated
+    for d in dates:
+        if d in nav:
+            last = nav[d]
+        elif first_date is not None and d < first_date:
+            last = allocated
+        # d >= first_date 且非该腿交易日：沿用 last（净值不变）
+        out.append(last)
+    return out
+
+
+def _is_rebalance_date(date_str: str, prev_str: str, freq: str) -> bool:
+    """判断 date_str 是否为再平衡日（freq 见 REBALANCE_FREQS）。"""
+    from datetime import date as _date
+
+    if freq == "D":
+        return True
+    if prev_str is None:
+        return True
+    cur = _date.fromisoformat(date_str)
+    prev = _date.fromisoformat(prev_str)
+    if freq == "W":
+        return cur.isocalendar()[1] != prev.isocalendar()[1]
+    if freq == "M":
+        return (cur.year, cur.month) != (prev.year, prev.month)
+    if freq == "Q":
+        return (cur.year, (cur.month - 1) // 3) != (prev.year, (prev.month - 1) // 3)
+    if freq == "Y":
+        return cur.year != prev.year
+    return False
+
+
+def _combine_with_rebalance(
+    dates: List[str],
+    leg_series: List[List[float]],
+    weights: List[float],
+    initial_cash: float,
+    rebalance: str,
+) -> "tuple[List[Dict[str, Any]], List[EquityPoint]]":
+    """按目标权重合并多腿净值，支持周期性再平衡。
+
+    - rebalance='none'：买入持有，各腿净值直接相加（与 V1.2 基线一致）。
+    - 其它频率（D/W/M/Q/Y）：在再平衡日把各腿净值重置为目标权重 × 当前总值，
+      其余交易日按各腿自身收益自然漂移。
+    """
+    combined_curve: List[Dict[str, Any]] = []
+    combined_points: List[EquityPoint] = []
+    n = len(leg_series)
+    if n == 0:
+        return combined_curve, combined_points
+
+    leg_vals = [leg_series[k][0] for k in range(n)]
+    prev_total = sum(leg_vals)
+    prev_date = None
+    for i, d in enumerate(dates):
+        if i > 0:
+            for k in range(n):
+                prev_v = leg_series[k][i - 1]
+                cur_v = leg_series[k][i]
+                r = (cur_v / prev_v - 1.0) if prev_v else 0.0
+                leg_vals[k] *= (1.0 + r)
+            if _is_rebalance_date(d, prev_date, rebalance):
+                total = sum(leg_vals)
+                leg_vals = [w * total for w in weights]
+        total = sum(leg_vals)
+        daily = (total / prev_total - 1.0) if (i > 0 and prev_total) else 0.0
+        allocation = {
+            str(k): round(leg_vals[k] / total, 6) if total else 0.0
+            for k in range(n)
+        }
+        combined_points.append(
+            EquityPoint(
+                date=d, cash=0.0, market_value=total,
+                total_value=total, daily_return=daily,
+            )
+        )
+        combined_curve.append(
+            {
+                "date": d,
+                "cash": 0.0,
+                "market_value": round(total, 4),
+                "total_value": round(total, 4),
+                "daily_return": round(daily, 6),
+                "allocation": allocation,
+            }
+        )
+        prev_total = total
+        prev_date = d
+    return combined_curve, combined_points

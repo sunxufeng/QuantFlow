@@ -10,7 +10,50 @@
     </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div id="qf-boot" style="height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#f8fafc;color:#334155;font-family:-apple-system,'PingFang SC','Microsoft YaHei',sans-serif;">
+        <div style="font-size:24px;margin-bottom:12px;">⚡ QuantFlow</div>
+        <div id="qf-boot-msg" style="font-size:14px;color:#64748b;">正在加载应用…</div>
+      </div>
+    </div>
+    <script>
+      // 启动诊断：如果 React 未能挂载或发生致命错误，把信息直接显示在页面上，
+      // 避免用户看到完全空白而不知道原因。
+      (function () {
+        var errs = []
+        window.onerror = function (msg, url, line, col, err) {
+          errs.push(String(msg) + (url ? ' @ ' + url + ':' + line : ''))
+          showBootErr()
+        }
+        window.addEventListener('error', function (e) {
+          if (e && e.message) errs.push(String(e.message))
+          showBootErr()
+        }, true)
+        window.addEventListener('unhandledrejection', function (e) {
+          errs.push('Unhandled Promise: ' + (e.reason && e.reason.message ? e.reason.message : String(e.reason)))
+          showBootErr()
+        })
+        function showBootErr() {
+          var el = document.getElementById('qf-boot-msg')
+          if (el) {
+            el.innerHTML = '<div style="color:#b91c1c;font-weight:600;margin-bottom:8px;">页面加载遇到错误</div>' +
+              errs.slice(-3).map(function (m) { return '<div style="font-size:12px;color:#7f1d1d;max-width:600px;word-break:break-all;margin:4px 0;">' + m + '</div>' }).join('') +
+              '<div style="margin-top:10px;font-size:12px;color:#64748b;">请尝试强制刷新（Cmd/Ctrl + Shift + R）或清空缓存后重试。</div>'
+          }
+        }
+        setTimeout(function () {
+          var root = document.getElementById('root')
+          var boot = document.getElementById('qf-boot')
+          if (boot && root && root.contains(boot)) {
+            var el = document.getElementById('qf-boot-msg')
+            if (el && errs.length === 0) {
+              el.innerHTML = '<div style="color:#b91c1c;font-weight:600;margin-bottom:8px;">加载超时</div>' +
+                '<div style="font-size:12px;color:#64748b;">应用资源加载时间过长或网络中断。请检查网络后强制刷新。</div>'
+            }
+          }
+        }, 8000)
+      })()
+    </script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

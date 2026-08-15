@@ -112,6 +112,20 @@ def save_template(
     )
 
 
+@router.get("/workflows/templates/market", summary="公共模板市场（V8.0）")
+def template_market(user: Optional[dict] = Depends(get_current_user)) -> list[dict]:
+    """返回可复用的公共模板：内置示例 + 其他用户已发布的模板。
+
+    注意：必须定义在本路由组里「/workflows/templates/{template_id}」之前，
+    否则 `market` 会被当成 template_id 匹配到单模板路由而 404。
+    """
+    from ..templates import list_templates
+
+    builtin = list_templates()
+    public = TEMPLATE_STORE.list_public(exclude_owner_id=user["id"] if user else None)
+    return builtin + public
+
+
 @router.get("/workflows/templates/{template_id}", summary="获取单个用户模板")
 def get_user_template(
     template_id: str,
@@ -123,6 +137,25 @@ def get_user_template(
     if tpl["owner_id"] != user["id"]:
         raise HTTPException(status_code=403, detail="无权访问该模板")
     return tpl
+
+
+class TemplateShareRequest(BaseModel):
+    public: bool = Field(True, description="true=发布到模板市场，false=取消发布")
+
+
+@router.post("/workflows/templates/{template_id}/share", summary="发布/取消发布到模板市场（V8.0）")
+def share_template(
+    template_id: str,
+    body: TemplateShareRequest,
+    user: Optional[dict] = Depends(get_current_user),
+) -> dict:
+    """把个人模板发布到公共模板市场（或取消发布）。仅 owner 可操作。"""
+    try:
+        return TEMPLATE_STORE.set_public(template_id, user["id"], body.public)
+    except TemplateNotFoundError:
+        raise HTTPException(status_code=404, detail="模板不存在") from None
+    except TemplatePermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from None
 
 
 @router.delete(
@@ -141,6 +174,10 @@ def delete_user_template(
     except TemplatePermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from None
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+class TemplateShareRequest(BaseModel):
+    public: bool = Field(True, description="true=发布到模板市场，false=取消发布")
 
 
 class WorkflowGenerateRequest(BaseModel):

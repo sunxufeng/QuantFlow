@@ -10,8 +10,8 @@ if PROXY:
     )
 
 REPO_ROOT = "/Users/sunxufeng/WorkBuddy/2026-08-12-14-19-17/quantflow"
-BASE = "18fbbe8"
-MESSAGE = "feat(v4.2): 多因子组合回测闭环——/factors/research/multifactor 按权重 winsorize+zscore 合成综合信号并回测，前端因子库新增『多因子组合』面板(因子权重表+综合分/仓位图) (4.2.0)"
+BASE = "a802d59c5555b8519d8c62301cd6ff52ddf54153"
+MESSAGE = "style(workflow): 缩小默认工作流节点与字体，提升画布协调性。\n\n- frontend/src/styles.css: .qf-node min-width 150->120px，标题/分类/参数/端口字号整体下调 1-2px，header/body 内边距收紧，handle 由 12->10px。\n- frontend/src/App.jsx: ReactFlow 增加 minZoom=0.4、maxZoom=1.5、fitViewOptions.maxZoom=1，防止单节点默认被过度放大。"
 
 
 def api(method, path, data=None, retries=6):

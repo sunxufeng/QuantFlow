@@ -17,6 +17,8 @@ from pydantic import BaseModel, Field
 
 from ..core.auth import get_current_user
 from ..core.scheduler import ScheduleValidationError, workflow_scheduler
+from ..market.scheduler import data_sync_service
+from ..alerts import scheduler as alert_scheduler
 
 router = APIRouter()
 
@@ -73,3 +75,13 @@ def toggle(schedule_id: str, body: ToggleIn, _user=Depends(get_current_user)) ->
     if rec is None:
         raise HTTPException(status_code=404, detail="计划不存在")
     return rec
+
+
+@router.get("/schedules/center", summary="调度中心总览（V5.2）")
+def center(_user=Depends(get_current_user)) -> dict:
+    """聚合三类调度：工作流定时计划 + 行情自动同步 + 预警自动巡检。"""
+    return {
+        "workflow_schedules": workflow_scheduler.list_schedules(),
+        "data_sync": data_sync_service.status(),
+        "alert_eval": alert_scheduler.status(),
+    }

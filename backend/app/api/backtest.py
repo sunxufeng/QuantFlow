@@ -22,8 +22,10 @@ from pydantic import BaseModel, Field
 from ..backtest import BacktestEngine, BacktestError, BacktestReportStore, build_report
 from ..backtest.optimizer import OptimizeConfigError, optimize
 from ..backtest.portfolio import PortfolioBacktest
-from ..backtest.strategies import STRATEGY_REGISTRY
+from ..backtest.strategies import STRATEGY_REGISTRY, default_factors
 from ..core.auth import get_current_user
+from ..factors import research as factor_research
+from ..factors.registry import list_factors
 from ..market.models import Bar, Instrument
 from ..market.service import market_service
 
@@ -62,6 +64,10 @@ class BacktestRunRequest(BaseModel):
     )
     strategy_name: str = Field(default="", description="报告显示用策略名（默认取 strategy）")
     benchmark_symbol: Optional[str] = Field(default=None, description="基准标的（预留）")
+    factors: Optional[List[str]] = Field(
+        default=None,
+        description="策略关联因子（用于报告 IC/IR 展示）；留空使用内置策略默认因子",
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -154,11 +160,14 @@ def run_backtest(payload: BacktestRunRequest) -> dict:
     result = engine.run()
 
     # 4. 生成报告并落盘
+    strategy_display = payload.strategy_name or payload.strategy
+    factors = list(payload.factors) if payload.factors else default_factors(payload.strategy)
     report = build_report(
         result,
-        strategy_name=payload.strategy_name or payload.strategy,
+        strategy_name=strategy_display,
         strategy_config=payload.params,
         benchmark_symbol=payload.benchmark_symbol,
+        factors=factors,
     )
     report_store.save(report)
     logger.info("backtest report %s generated (%s)", report["run_id"], payload.strategy)
@@ -269,11 +278,15 @@ def list_reports() -> dict:
                 "symbols": r.get("symbols"),
                 "start_date": r.get("start_date"),
                 "end_date": r.get("end_date"),
+                "tags": r.get("tags") or [],
+                "notes": r.get("notes") or "",
                 "total_return": m.get("total_return"),
                 "annual_return": m.get("annual_return"),
                 "sharpe": m.get("sharpe"),
                 "max_drawdown": m.get("max_drawdown"),
                 "win_rate": m.get("win_rate"),
+                "factors": r.get("factors") or [],
+                "factor_count": len(r.get("factors") or []),
             }
         )
     return {"items": ids, "summaries": summaries}
@@ -286,6 +299,90 @@ def get_report(run_id: str) -> dict:
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return _normalize_report(r)
+
+
+@router.get("/reports/{run_id}/factors", summary="报告关联因子的 IC/IR（V3.2 策略排行榜）")
+def report_factors(run_id: str) -> dict:
+    """按报告记录的 symbols / 日期区间 / factors，计算并返回各因子 IC/IR。
+
+    - 若报告无 factors，按 strategy 取内置策略默认因子；
+    - 若因子不在因子库，自动过滤并提示；
+    - 窗口使用默认值 10，forward=1。
+    """
+    try:
+        r = report_store.load(run_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    r = _normalize_report(r)
+    factors = list(r.get("factors") or default_factors(r.get("strategy") or ""))
+    symbols = r.get("symbols") or []
+    if not factors:
+        return {"factors": [], "items": [], "symbols": symbols, "notice": "未配置关联因子"}
+    if not symbols:
+        return {"factors": factors, "items": [], "symbols": [], "notice": "报告无标的"}
+
+    valid_factors = {f["name"] for f in list_factors()}
+    unknown = [f for f in factors if f not in valid_factors]
+    factors = [f for f in factors if f in valid_factors]
+
+    start = r.get("start_date") or "2000-01-01"
+    end = r.get("end_date") or "2100-01-01"
+    try:
+        ic = factor_research.ic_analysis(symbols=symbols, start=start, end=end, window=10, forward=1)
+    except Exception as exc:
+        logger.warning("report %s factor ic failed: %s", run_id, exc)
+        raise HTTPException(status_code=503, detail=f"因子 IC 计算失败: {exc}") from exc
+
+    items = []
+    for f in factors:
+        res = ic["results"].get(f, {})
+        items.append(
+            {
+                "factor": f,
+                "mean_ic": res.get("mean_ic"),
+                "std_ic": res.get("std_ic"),
+                "ir": res.get("ir"),
+                "ic_positive_ratio": res.get("ic_positive_ratio"),
+                "observations": res.get("observations", 0),
+            }
+        )
+    return {
+        "factors": factors,
+        "items": items,
+        "symbols": symbols,
+        "start_date": start,
+        "end_date": end,
+        "forward_days": 1,
+        "unknown": unknown,
+    }
+
+
+class ReportPatchRequest(BaseModel):
+    tags: Optional[List[str]] = Field(None, description="实验标签（如 基线/参数组A）")
+    notes: Optional[str] = Field(None, description="实验备注")
+
+
+@router.patch("/reports/{run_id}", summary="更新报告标签/备注（V9.0 实验追踪）")
+def patch_report(run_id: str, body: ReportPatchRequest) -> dict:
+    try:
+        return report_store.patch(run_id, tags=body.tags, notes=body.notes)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get("/tags", summary="回测实验标签全集（V9.0）")
+def list_tags() -> dict:
+    """聚合所有报告的标签，供前端筛选。"""
+    ids = report_store.list()
+    tag_set: Dict[str, int] = {}
+    for rid in ids:
+        try:
+            r = report_store.load(rid)
+        except Exception:
+            continue
+        for t in (r.get("tags") or []):
+            tag_set[t] = tag_set.get(t, 0) + 1
+    return {"items": sorted(tag_set.items(), key=lambda kv: (-kv[1], kv[0]))}
 
 
 # --------------------------------------------------------------------------- #
@@ -483,16 +580,20 @@ class PortfolioRunRequest(BaseModel):
     initial_cash: float = Field(default=1_000_000.0, gt=0, description="总初始资金")
     start: str = Field(..., description="起始日期 YYYY-MM-DD")
     end: str = Field(..., description="结束日期 YYYY-MM-DD")
-    rebalance: str = Field(default="none", description="再平衡方式（当前仅支持 none）")
+    rebalance: str = Field(
+        default="none",
+        description="再平衡频率：none(买入持有) / D(日) / W(周) / M(月) / Q(季) / Y(年)",
+    )
 
 
-@router.post("/portfolio", summary="组合回测（多腿合并净值）")
+@router.post("/portfolio", summary="组合回测（多腿合并净值，支持再平衡）")
 def run_portfolio(payload: PortfolioRunRequest) -> dict:
     if payload.end < payload.start:
         raise HTTPException(status_code=422, detail="end 不得早于 start")
-    if payload.rebalance != "none":
+    if payload.rebalance not in ("none", "D", "W", "M", "Q", "Y"):
         raise HTTPException(
-            status_code=422, detail=f"暂不支持再平衡方式 {payload.rebalance!r}（当前仅 none）"
+            status_code=422,
+            detail=f"不支持的再平衡频率 {payload.rebalance!r}（可选 none/D/W/M/Q/Y）",
         )
     legs = [l.model_dump() for l in payload.legs]
     try:

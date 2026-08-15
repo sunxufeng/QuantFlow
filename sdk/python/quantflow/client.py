@@ -123,6 +123,72 @@ class QuantFlowClient:
     def sync_now(self) -> Dict:
         return self._request("POST", "/market/sync")
 
+    # ---- V5.0 行情缓存 / 数据源管理 ----
+    def market_cache(self) -> Dict:
+        """行情缓存与数据源快照（V5.0）：数据源模式、缓存后端、各标的中继情况。"""
+        return self._request("GET", "/market/cache")
+
+    def market_refresh(
+        self,
+        symbols: Optional[List[str]] = None,
+        start: Optional[str] = None,
+        end: Optional[str] = None,
+    ) -> Dict:
+        """强制从数据源重新拉取并落库（V5.0）。tushare 源需显式指定 symbols。"""
+        payload: Dict[str, Any] = {}
+        if symbols is not None:
+            payload["symbols"] = symbols
+        if start is not None:
+            payload["start"] = start
+        if end is not None:
+            payload["end"] = end
+        return self._request("POST", "/market/cache/refresh", json=payload or None)
+
+    # ---- V6.0 模拟交易账户（paper，纯本地） ----
+    def trading_account(self) -> Dict:
+        """账户概览（V6.0）：初始资金（可配置）、当前现金/权益与持仓/挂单数。"""
+        return self._request("GET", "/trading/account")
+
+    def trading_reset(self, initial_cash: Optional[float] = None) -> Dict:
+        """重置模拟账户；initial_cash 可指定新的账户初始资金并持久化（V6.0）。"""
+        payload: Dict[str, Any] = {}
+        if initial_cash is not None:
+            payload["initial_cash"] = initial_cash
+        return self._request("DELETE", "/trading/reset", json=payload or None)
+
+    # ---- V6.1 系统设置 + 用户偏好 ----
+    def settings(self) -> Dict:
+        """读取系统信息与当前用户偏好（V6.1）：版本/数据源/缓存后端/券商 + 偏好。"""
+        return self._request("GET", "/settings")
+
+    def update_settings(
+        self,
+        default_view: Optional[str] = None,
+        theme: Optional[str] = None,
+        preferred_data_source: Optional[str] = None,
+    ) -> Dict:
+        """更新当前用户偏好（V6.1，部分字段合并）。"""
+        payload: Dict[str, Any] = {}
+        if default_view is not None:
+            payload["default_view"] = default_view
+        if theme is not None:
+            payload["theme"] = theme
+        if preferred_data_source is not None:
+            payload["preferred_data_source"] = preferred_data_source
+        return self._request("PUT", "/settings", json=payload or None)
+
+    # ---- V6.2 批量导出中心 ----
+    def export_data(self, resource: str, format: str = "json") -> Dict:
+        """批量导出（V6.2）：resource=factors|templates|backtests，format=csv|json。
+
+        JSON 格式返回解析后的 dict；CSV 格式返回带 BOM 的文本（便于 Excel）。
+        """
+        return self._request("GET", "/export", params={"resource": resource, "format": format})
+
+    def workspace(self) -> Dict:
+        """投研总览快照（V7.0）：聚合交易账户、告警、自选股、调度、因子库。"""
+        return self._request("GET", "/workspace")
+
     # ------------------------------------------------------------------ #
     # 项目（M4）
     # ------------------------------------------------------------------ #

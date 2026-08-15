@@ -21,6 +21,9 @@ export default function Trading({ onNavigate }) {
   const [form, setForm] = useState({ symbol: '', side: 'buy', type: 'market', qty: '', price: '' })
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [account, setAccount] = useState(null)
+  const [resetCash, setResetCash] = useState('')
+  const [resetMsg, setResetMsg] = useState('')
 
   const load = useCallback(() => {
     return Promise.all([
@@ -28,11 +31,16 @@ export default function Trading({ onNavigate }) {
       fetch('/api/trading/positions', { headers: authHeaders() }).then(r => r.json()).catch(() => []),
       fetch('/api/trading/orders', { headers: authHeaders() }).then(r => r.json()).catch(() => []),
       fetch('/api/trading/analytics', { headers: authHeaders() }).then(r => r.json()).catch(() => null),
-    ]).then(([s, p, o, a]) => {
+      fetch('/api/trading/account', { headers: authHeaders() }).then(r => r.json()).catch(() => null),
+    ]).then(([s, p, o, a, acct]) => {
       setSummary(s)
       setPositions(p || [])
       setOrders(o || [])
       setAnalytics(a)
+      if (acct) {
+        setAccount(acct)
+        if (!resetCash) setResetCash(String(acct.initial_cash))
+      }
     })
   }, [])
 
@@ -108,10 +116,40 @@ export default function Trading({ onNavigate }) {
   }
 
   const reset = async () => {
-    if (!window.confirm('确认重置模拟账户？现金/持仓/委托/成交将清空。')) return
+    if (!window.confirm('确认重置模拟账户？现金/持仓/委托/成交将清空（初始资金保持当前值）。')) return
     setBusy(true)
     try {
       await fetch('/api/trading/reset', { method: 'DELETE', headers: authHeaders() })
+      setResetMsg('')
+      await load()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const resetToCash = async () => {
+    const cash = Number(resetCash)
+    if (!cash || cash <= 0) {
+      setError('请输入有效的初始资金（正数）')
+      return
+    }
+    if (!window.confirm(`确认将模拟账户重置为初始资金 ${cash.toLocaleString()}？所有现金/持仓/委托/成交将清空。`)) return
+    setBusy(true)
+    setResetMsg('')
+    try {
+      const res = await fetch('/api/trading/reset', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        body: JSON.stringify({ initial_cash: cash }),
+      })
+      if (!res.ok) {
+        const er = await res.json().catch(() => ({}))
+        throw new Error(er.detail || `重置失败(${res.status})`)
+      }
+      const data = await res.json().catch(() => ({}))
+      setResetMsg(`账户已重置，初始资金 ${Number(data.initial_cash).toLocaleString()}`)
       await load()
     } catch (err) {
       setError(err.message)
@@ -153,6 +191,34 @@ export default function Trading({ onNavigate }) {
       </div>
 
       {error && <div className="qf-error">{error}</div>}
+
+      {/* V6.0 模拟账户：可配置初始资金（纯本地，持久化） */}
+      {mode === 'paper' && account && (
+        <div style={{ marginTop: 12, border: '1px solid #6366f1', borderRadius: 10, padding: 14, background: '#fafaff' }}>
+          <div style={{ fontWeight: 600, fontSize: 13, color: '#4338ca', marginBottom: 8 }}>
+            模拟账户（V6.0）· 初始资金可配置
+          </div>
+          <div className="qf-mcards" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', marginBottom: 10 }}>
+            <div className="qf-mcard"><div className="qf-mcard-value" style={{ color: '#4338ca' }}>{account.initial_cash.toLocaleString()}</div><div className="qf-mcard-label">初始资金</div></div>
+            <div className="qf-mcard"><div className="qf-mcard-value">{account.cash.toLocaleString()}</div><div className="qf-mcard-label">当前现金</div></div>
+            <div className="qf-mcard"><div className="qf-mcard-value" style={{ color: '#6366f1' }}>{account.equity.toLocaleString()}</div><div className="qf-mcard-label">当前权益</div></div>
+            <div className="qf-mcard"><div className="qf-mcard-value">{account.position_count}</div><div className="qf-mcard-label">持仓数</div></div>
+          </div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <label className="qf-prop-field" style={{ margin: 0 }}>
+              <span className="qf-prop-label">重置初始资金</span>
+              <input className="qf-name-input" type="number" min="1" step="10000" value={resetCash}
+                onChange={(e) => setResetCash(e.target.value)} style={{ width: 180 }} />
+            </label>
+            <button className="qf-btn qf-btn-primary qf-btn-sm" onClick={resetToCash} disabled={busy}>重置为自定义初始资金</button>
+            <button className="qf-btn qf-btn-sm" onClick={reset} disabled={busy}>仅清空（保持初始资金）</button>
+          </div>
+          {resetMsg && <div className="qf-success">{resetMsg}</div>}
+          <div className="qf-hint" style={{ marginTop: 6 }}>
+            重置后所有现金/持仓/委托/成交清空，权益曲线从指定初始资金重新开始。账户数据按用户隔离、纯本地存储。
+          </div>
+        </div>
+      )}
 
       {liveDisabled && (
         <div className="qf-hint" style={{ background: '#fff7ed', border: '1px solid #fed7aa', padding: 10, borderRadius: 8, marginBottom: 12 }}>

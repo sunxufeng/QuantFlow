@@ -25,6 +25,14 @@ class MarketDataRepository(ABC):
     def latest_date(self, interval: str = "daily") -> Optional[str]:
         """Return the latest stored bar date (inclusive) for the interval, or None."""
 
+    @abstractmethod
+    def list_symbols(self) -> List[dict]:
+        """Return per-symbol breakdown: [{symbol, count, first_date, last_date}] (V5.0)."""
+
+    @abstractmethod
+    def count(self) -> int:
+        """Return the total number of stored bars (V5.0)."""
+
 
 class InMemoryMarketDataRepository(MarketDataRepository):
     """Thread-safe M2 adapter used by tests and single-process development."""
@@ -56,6 +64,30 @@ class InMemoryMarketDataRepository(MarketDataRepository):
                 if item_interval == interval
             ]
         return max(dates) if dates else None
+
+    def list_symbols(self) -> List[dict]:
+        from collections import defaultdict
+
+        agg: Dict[str, List[str]] = defaultdict(list)
+        with self._lock:
+            for (item_symbol, date, item_interval), _ in self._items.items():
+                if item_interval == "daily":
+                    agg[item_symbol].append(date)
+        return [
+            {
+                "symbol": sym,
+                "count": len(dates),
+                "first_date": min(dates),
+                "last_date": max(dates),
+            }
+            for sym, dates in sorted(agg.items())
+        ]
+
+    def count(self) -> int:
+        with self._lock:
+            return sum(
+                1 for (_, _, item_interval), _ in self._items.items() if item_interval == "daily"
+            )
 
     def clear(self) -> None:
         with self._lock:
@@ -139,6 +171,32 @@ class SQLiteMarketDataRepository(MarketDataRepository):
     def count(self) -> int:
         row = db.query_one("SELECT COUNT(*) AS n FROM market_bars")
         return int(row["n"]) if row else 0
+
+    def list_symbols(self) -> List[dict]:
+        rows = db.query(
+            "SELECT symbol, COUNT(*) AS count, MIN(date) AS first_date, MAX(date) AS last_date, "
+            "MAX(source) AS source "
+            "FROM market_bars GROUP BY symbol ORDER BY symbol ASC"
+        )
+        return [
+            {
+                "symbol": r["symbol"],
+                "count": int(r["count"]),
+                "first_date": r["first_date"],
+                "last_date": r["last_date"],
+                "source": r["source"],
+            }
+            for r in rows
+        ]
+
+    def delete_symbol(self, symbol: str) -> int:
+        """删除某标的的全部日线（V7.1 用户导入数据清理）。"""
+        with db._lock:
+            cur = db._ensure().execute(
+                "DELETE FROM market_bars WHERE symbol = ? AND interval = 'daily'", (symbol,)
+            )
+            db._ensure().commit()
+            return cur.rowcount
 
     def clear(self) -> None:
         with db._lock:
