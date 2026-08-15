@@ -239,6 +239,14 @@ export const getStressScenarios = () => request('/backtest/stress-scenarios')
 export const runStressTest = (payload) => request('/backtest/stress-test', { method: 'POST', body: JSON.stringify(payload) })
 export const getFactorBacktestCatalog = () => request('/factors/backtest/catalog')
 export const runFactorBacktest = (payload) => request('/factors/backtest', { method: 'POST', body: JSON.stringify(payload) })
+
+// ---- 组合优化增强（V32–V36）----
+const _portOpt = (path, payload) => request(`/portfolio/${path}`, { method: 'POST', body: JSON.stringify(payload) })
+export const runRiskParity = (payload) => _portOpt('risk-parity', payload)
+export const runMaxDiversification = (payload) => _portOpt('max-diversification', payload)
+export const runHRP = (payload) => _portOpt('hrp', payload)
+export const runRebalance = (payload) => _portOpt('rebalance', payload)
+export const runStyleExposure = (payload) => _portOpt('style-exposure', payload)
 export const getLivePositions = () => request('/trading/live/positions')
 export const getLiveFills = () => request('/trading/live/fills')
 

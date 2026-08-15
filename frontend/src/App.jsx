@@ -57,6 +57,7 @@ import StrategyLibrary from './StrategyLibrary.jsx'
 import SyntheticLab from './SyntheticLab.jsx'
 import Seasonality from './Seasonality.jsx'
 import PortfolioOpt from './PortfolioOpt.jsx'
+import PortfolioOptExt from './PortfolioOptExt.jsx'
 import TradeAnalysis from './TradeAnalysis.jsx'
 import BenchmarkLibrary from './BenchmarkLibrary.jsx'
 import ForwardSim from './ForwardSim.jsx'
@@ -1094,6 +1095,7 @@ export default function App() {
           {view === 'optimizer' && <Optimizer />}
           {view === 'market' && <MarketData />}
           {view === 'portfolio' && <Portfolio />}
+          {view === 'optext' && <PortfolioOptExt />}
           {view === 'sensitivity' && <Sensitivity />}
           {view === 'paramgrid' && <ParamGrid />}
           {view === 'montecarlo' && <MonteCarlo />}

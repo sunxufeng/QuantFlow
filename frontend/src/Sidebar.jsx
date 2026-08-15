@@ -23,6 +23,7 @@ const navItems = [
   { key: 'fwd', label: '前向模拟', abbr: '前' },
   { key: 'season', label: '季节性', abbr: '季' },
   { key: 'portopt', label: '组合优化', abbr: '优' },
+  { key: 'optext', label: '组合优化增强', abbr: '增' },
   { key: 'blotter', label: '成交分析', abbr: '交' },
   { key: 'benchmark', label: '基准库', abbr: '准' },
   { key: 'attrib', label: '绩效归因', abbr: '归' },

@@ -26,6 +26,7 @@ from .api import (
     market,
     monitoring,
     notifications,
+    portfolio_opt_ext,
     projects,
     runs,
     schedules,
@@ -121,6 +122,7 @@ app.include_router(monitoring.router, prefix="/api")
 app.include_router(execution.router, prefix="/api")
 app.include_router(settings_api.router, prefix="/api")
 app.include_router(trading.router, prefix="/api")
+app.include_router(portfolio_opt_ext.router, prefix="/api")
 app.include_router(alerts.router, prefix="/api")
 app.include_router(workspace_api.router, prefix="/api")
 app.include_router(export_api.router, prefix="/api")
