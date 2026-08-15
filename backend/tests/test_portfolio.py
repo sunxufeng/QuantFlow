@@ -40,10 +40,19 @@ def _run_leg(leg: Dict[str, Any], initial: float, start: str, end: str) -> Any:
 
 
 def _point_at(result, date: str, allocated: float) -> EquityPoint:
-    for p in result.equity_curve:
-        if p.date == date:
-            return p
-    return EquityPoint(date=date, cash=allocated, market_value=0.0, total_value=allocated, daily_return=0.0)
+    """前向填充取某腿在指定日期的净值（非交易日沿用上一交易日；早于首交易日用分配资金）。
+
+    与组合回测引擎的 _leg_value_series 口径一致（修复 end 落在最后交易日之后净值被重置为
+    分配资金的异常），同时保持「组合净值 == 各腿独立运行净值之前向填充求和」的核心不变量。
+    """
+    nav = {p.date: p.total_value for p in result.equity_curve}
+    if date in nav:
+        return EquityPoint(date=date, cash=allocated, market_value=nav[date], total_value=nav[date], daily_return=0.0)
+    cand = [d for d in nav if d <= date]
+    if cand:
+        v = nav[max(cand)]
+        return EquityPoint(date=date, cash=allocated, market_value=v, total_value=v, daily_return=0.0)
+    return EquityPoint(date=date, cash=allocated, market_value=allocated, total_value=allocated, daily_return=0.0)
 
 
 FUND_LEG = {

@@ -580,16 +580,20 @@ class PortfolioRunRequest(BaseModel):
     initial_cash: float = Field(default=1_000_000.0, gt=0, description="总初始资金")
     start: str = Field(..., description="起始日期 YYYY-MM-DD")
     end: str = Field(..., description="结束日期 YYYY-MM-DD")
-    rebalance: str = Field(default="none", description="再平衡方式（当前仅支持 none）")
+    rebalance: str = Field(
+        default="none",
+        description="再平衡频率：none(买入持有) / D(日) / W(周) / M(月) / Q(季) / Y(年)",
+    )
 
 
-@router.post("/portfolio", summary="组合回测（多腿合并净值）")
+@router.post("/portfolio", summary="组合回测（多腿合并净值，支持再平衡）")
 def run_portfolio(payload: PortfolioRunRequest) -> dict:
     if payload.end < payload.start:
         raise HTTPException(status_code=422, detail="end 不得早于 start")
-    if payload.rebalance != "none":
+    if payload.rebalance not in ("none", "D", "W", "M", "Q", "Y"):
         raise HTTPException(
-            status_code=422, detail=f"暂不支持再平衡方式 {payload.rebalance!r}（当前仅 none）"
+            status_code=422,
+            detail=f"不支持的再平衡频率 {payload.rebalance!r}（可选 none/D/W/M/Q/Y）",
         )
     legs = [l.model_dump() for l in payload.legs]
     try:
