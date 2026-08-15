@@ -32,6 +32,8 @@ def build_report(
     strategy_config: Optional[Dict[str, Any]] = None,
     run_id: Optional[str] = None,
     benchmark_symbol: Optional[str] = None,
+    benchmark_values: Optional[List[float]] = None,
+    benchmark_curve: Optional[List[Dict[str, Any]]] = None,
     factors: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """汇总回测结果为结构化报告 dict。
@@ -42,10 +44,13 @@ def build_report(
     - 净值曲线（日期/总资产/收益率）
     - 交易明细（买卖/股数/价格/成本/盈亏）
     - 账户终态
+    - 基准对比（V14 增强：benchmark_values 驱动 alpha/beta/跟踪误差/信息比率，
+      benchmark_curve 提供基准净值曲线供前端叠加）
     - 策略关联因子（V3.2 因子 IC/IR 进策略排行榜）
     """
     metrics = PerformanceMetrics(
-        result.equity_curve, result.engine.initial_cash, result.trades
+        result.equity_curve, result.engine.initial_cash, result.trades,
+        benchmark_values=benchmark_values,
     )
     report = {
         "run_id": run_id or uuid.uuid4().hex[:12],
@@ -53,6 +58,7 @@ def build_report(
         "strategy": strategy_name or type(result.strategy).__name__,
         "strategy_config": strategy_config or {},
         "benchmark_symbol": benchmark_symbol,
+        "benchmark_curve": benchmark_curve or [],
         "symbols": result.engine.symbols,
         "interval": INTERVAL_MINUTE if result.engine.is_minute else INTERVAL_DAILY,
         "start_date": result.engine.calendar[0] if result.engine.calendar else "",

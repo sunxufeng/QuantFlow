@@ -20,6 +20,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, Field
 
 from ..backtest import BacktestEngine, BacktestError, BacktestReportStore, build_report
+from ..backtest.metrics import PerformanceMetrics
 from ..backtest.optimizer import OptimizeConfigError, optimize
 from ..backtest.portfolio import PortfolioBacktest
 from ..backtest.strategies import STRATEGY_REGISTRY, default_factors
@@ -97,6 +98,48 @@ def _strategy_description(name: str) -> str:
     return docs.get(name, "")
 
 
+def _build_benchmark_curve(
+    symbol: str,
+    start: str,
+    end: str,
+    interval: str,
+    dates: List[str],
+    initial_cash: float,
+) -> "tuple[Optional[List[float]], Optional[List[Dict[str, Any]]]]":
+    """构建基准买入持有净值曲线（与策略 equity_curve 日期对齐）。
+
+    返回 (benchmark_values, benchmark_curve)：
+    - benchmark_values：按 dates 对齐的基准总资产序列（供 PerformanceMetrics 算 alpha/beta/TE/IR）
+    - benchmark_curve：[{date, value}] 供前端叠加展示
+    行情缺失时返回 (None, None)，不影响主回测。
+    """
+    try:
+        bars = market_service.bars(symbol, start, end, interval=interval)
+    except Exception as exc:  # 基准行情失败不影响主回测
+        logger.warning("benchmark fetch %s failed: %s", symbol, exc)
+        return None, None
+    if not bars:
+        return None, None
+    close_by_date = {b.date: float(b.close) for b in bars}
+    base = bars[0].close or 1.0
+    values: List[float] = []
+    curve: List[Dict[str, Any]] = []
+    last = None
+    for d in dates:
+        if d in close_by_date:
+            last = close_by_date[d]
+        # 非交易日沿用上一已知收盘价（净值不变）
+        if last is None:
+            continue
+        nav = initial_cash * (last / base)
+        values.append(nav)
+        curve.append({"date": d, "value": round(nav, 2)})
+    if len(values) < 2:
+        return None, None
+    return values, curve
+
+
+
 @router.post("/run", summary="运行回测并生成报告")
 def run_backtest(payload: BacktestRunRequest) -> dict:
     if payload.end < payload.start:
@@ -162,11 +205,21 @@ def run_backtest(payload: BacktestRunRequest) -> dict:
     # 4. 生成报告并落盘
     strategy_display = payload.strategy_name or payload.strategy
     factors = list(payload.factors) if payload.factors else default_factors(payload.strategy)
+    benchmark_values = None
+    benchmark_curve = None
+    if payload.benchmark_symbol:
+        benchmark_values, benchmark_curve = _build_benchmark_curve(
+            payload.benchmark_symbol, payload.start, payload.end,
+            payload.interval, [p.date for p in result.equity_curve],
+            payload.initial_cash,
+        )
     report = build_report(
         result,
         strategy_name=strategy_display,
         strategy_config=payload.params,
         benchmark_symbol=payload.benchmark_symbol,
+        benchmark_values=benchmark_values,
+        benchmark_curve=benchmark_curve,
         factors=factors,
     )
     report_store.save(report)
@@ -236,6 +289,105 @@ def optimize_backtest(payload: OptimizeRequest) -> dict:
     except BacktestError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     return result
+
+
+# --------------------------------------------------------------------------- #
+# 参数敏感性分析（V14）
+# --------------------------------------------------------------------------- #
+class SensitivityRequest(BaseModel):
+    strategy: str = Field(..., description="策略名称（见 /strategies）")
+    params: Dict[str, object] = Field(
+        default_factory=dict, description="固定参数（不参与扫描的部分）"
+    )
+    param: str = Field(..., description="待扫描的参数名")
+    values: List[object] = Field(
+        ..., min_length=1, description="待扫描的参数取值列表（按此顺序逐次回测）"
+    )
+    symbols: List[str] = Field(..., min_length=1, description="回测标的")
+    start: str = Field(..., description="起始日期 YYYY-MM-DD")
+    end: str = Field(..., description="结束日期 YYYY-MM-DD")
+    initial_cash: float = Field(default=1_000_000.0, gt=0, description="初始资金")
+    asset_types: Dict[str, str] = Field(
+        default_factory=dict, description="标的资产类型覆盖（symbol -> stock/fund/future）"
+    )
+    multipliers: Dict[str, float] = Field(
+        default_factory=dict, description="期货合约乘数覆盖（future 默认 10）"
+    )
+    interval: str = Field(default="daily", description="行情频率：daily / minute")
+    metric: str = Field(
+        default="total_return",
+        description="扫描指标：total_return / annual_return / sharpe / max_drawdown / win_rate",
+    )
+
+
+@router.post("/sensitivity", summary="参数敏感性分析（单参数扫描，V14）")
+def sensitivity_analysis(payload: SensitivityRequest) -> dict:
+    if payload.end < payload.start:
+        raise HTTPException(status_code=422, detail="end 不得早于 start")
+    if payload.interval not in ("daily", "minute"):
+        raise HTTPException(
+            status_code=422, detail=f"不支持的行情频率 {payload.interval!r}"
+        )
+    if payload.strategy not in STRATEGY_REGISTRY:
+        raise HTTPException(
+            status_code=422,
+            detail=f"未知策略 {payload.strategy!r}，可选: {sorted(STRATEGY_REGISTRY)}",
+        )
+    if payload.metric not in (
+        "total_return", "annual_return", "sharpe", "max_drawdown", "win_rate"
+    ):
+        raise HTTPException(status_code=422, detail=f"不支持的指标 {payload.metric!r}")
+
+    # 1. 行情（对所有取值共享，只拉一次）
+    data: Dict[str, List[Bar]] = {}
+    for symbol in payload.symbols:
+        try:
+            bars = market_service.bars(symbol, payload.start, payload.end, interval=payload.interval)
+        except Exception as exc:
+            raise HTTPException(status_code=503, detail=f"行情获取失败: {symbol}") from exc
+        if not bars:
+            raise HTTPException(
+                status_code=422, detail=f"标的 {symbol} 在 {payload.start}~{payload.end} 无行情数据"
+            )
+        data[symbol] = bars
+
+    instruments: Dict[str, Instrument] = {}
+    for symbol in payload.symbols:
+        asset_type = payload.asset_types.get(symbol, "stock")
+        exchange = "CFFEX" if asset_type == "future" else ("SH" if asset_type == "stock" else "")
+        instruments[symbol] = Instrument(
+            symbol=symbol, name="标的自定义", market=asset_type, exchange=exchange,
+            contract_multiplier=float(payload.multipliers.get(symbol, 10.0)) if asset_type == "future" else 1.0,
+        )
+
+    # 2. 逐个取值跑回测，收集指标
+    results = []
+    for v in payload.values:
+        params = dict(payload.params)
+        params[payload.param] = v
+        try:
+            strategy = STRATEGY_REGISTRY[payload.strategy](params)
+            engine = BacktestEngine(
+                strategy, data, initial_cash=payload.initial_cash, instruments=instruments
+            )
+            res = engine.run()
+            m = PerformanceMetrics(res.equity_curve, payload.initial_cash, res.trades)
+            value = getattr(m, payload.metric, None)
+        except Exception as exc:
+            value = None
+            logger.warning("sensitivity value=%s failed: %s", v, exc)
+        results.append({
+            "param_value": v,
+            "metric": payload.metric,
+            "value": round(value, 6) if isinstance(value, (int, float)) else None,
+        })
+
+    return {
+        "strategy": payload.strategy,
+        "param": payload.param,
+        "metric": payload.metric,
+        "points": results,
+    }
 
 
 def _normalize_report(r: dict) -> dict:
@@ -584,6 +736,9 @@ class PortfolioRunRequest(BaseModel):
         default="none",
         description="再平衡频率：none(买入持有) / D(日) / W(周) / M(月) / Q(季) / Y(年)",
     )
+    benchmark_symbol: Optional[str] = Field(
+        default=None, description="组合基准标的（equal-weight 买入持有，可选）"
+    )
 
 
 @router.post("/portfolio", summary="组合回测（多腿合并净值，支持再平衡）")
@@ -603,6 +758,7 @@ def run_portfolio(payload: PortfolioRunRequest) -> dict:
             start=payload.start,
             end=payload.end,
             rebalance=payload.rebalance,
+            benchmark_symbol=payload.benchmark_symbol,
         )
         report = pb.run()
     except BacktestError as exc:

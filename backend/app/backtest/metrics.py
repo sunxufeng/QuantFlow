@@ -250,11 +250,21 @@ class PerformanceMetrics:
                 ann_s = (1 + strat_ret) ** (TRADING_DAYS_PER_YEAR / self.days) - 1 if self.days >= 2 else 0.0
                 ann_b = (1 + bench_ret) ** (TRADING_DAYS_PER_YEAR / self.days) - 1 if self.days >= 2 else 0.0
                 alpha = ann_s - beta * ann_b
+                # 跟踪误差（年化）与信息比率（V14 基准对比增强）
+                excess = [s_ret[i] - b_ret[i] for i in range(n)]
+                mean_ex = sum(excess) / n
+                te_daily = math.sqrt(
+                    sum((e - mean_ex) ** 2 for e in excess) / (n - 1)
+                )
+                tracking_error = te_daily * math.sqrt(TRADING_DAYS_PER_YEAR)
+                information_ratio = (ann_s - ann_b) / tracking_error if tracking_error > 1e-12 else 0.0
                 attr["benchmark"] = {
                     "benchmark_return": round(bench_ret, 6),
                     "excess_return": round(strat_ret - bench_ret, 6),
                     "alpha": round(alpha, 6),
                     "beta": round(beta, 6),
+                    "tracking_error": round(tracking_error, 6),
+                    "information_ratio": round(information_ratio, 4),
                 }
 
         return attr

@@ -303,3 +303,173 @@ class TestPortfolioRiskDecomposition:
         d = resp.json()
         assert "risk_decomposition" in d
         assert len(d["risk_decomposition"]["risk_contrib_annual"]) == 2
+
+
+# --------------------------------------------------------------------------- #
+# V14：基准对比增强 / 参数敏感性 / 组合因子暴露
+# --------------------------------------------------------------------------- #
+class TestBenchmarkEnhancement:
+    def test_metrics_benchmark_alpha_beta_te_ir(self):
+        from app.backtest.metrics import PerformanceMetrics
+        from app.backtest.engine import EquityPoint
+
+        # 策略与基准完全同收益（含波动）-> beta=1, alpha=0, TE=0, IR=0
+        init = 100_000.0
+        n = 20
+        rets = [0.01 + 0.005 * (i % 2) for i in range(n)]  # 0.01/0.015 交替，有方差
+        eq_vals = [init]
+        for r in rets:
+            eq_vals.append(eq_vals[-1] * (1 + r))
+        # equity[i].daily_return 与 benchmark 第 i 段收益对齐（同一收益序列）
+        equity = [
+            EquityPoint(
+                date=f"2024-01-{i+1:02d}", cash=0.0,
+                market_value=eq_vals[i + 1], total_value=eq_vals[i + 1],
+                daily_return=rets[i],
+            )
+            for i in range(n)
+        ]
+        benchmark_values = eq_vals  # 含基准初始值，与策略同源
+        m = PerformanceMetrics(equity, init, [], benchmark_values=benchmark_values)
+        b = m._compute_attribution()["benchmark"]
+        assert b["beta"] == pytest.approx(1.0, abs=1e-6)
+        assert b["alpha"] == pytest.approx(0.0, abs=1e-6)
+        assert b["tracking_error"] == pytest.approx(0.0, abs=1e-6)
+        assert "information_ratio" in b
+        assert b["information_ratio"] == pytest.approx(0.0, abs=1e-6)
+
+    def test_run_with_benchmark_exposes_benchmark_block_and_curve(self, client):
+        resp = client.post(
+            "/api/backtest/run",
+            json={
+                "strategy": "buy_hold",
+                "params": {},
+                "symbols": ["TEST.STOCK"],
+                "start": START,
+                "end": END,
+                "benchmark_symbol": "TEST.STOCK",
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        d = resp.json()
+        bench = d["metrics"]["attribution"]["benchmark"]
+        assert set(["benchmark_return", "excess_return", "alpha", "beta",
+                    "tracking_error", "information_ratio"]) <= set(bench.keys())
+        assert len(d.get("benchmark_curve", [])) >= 2
+
+    def test_run_without_benchmark_has_no_benchmark_block(self, client):
+        resp = client.post(
+            "/api/backtest/run",
+            json={
+                "strategy": "buy_hold",
+                "params": {},
+                "symbols": ["TEST.STOCK"],
+                "start": START,
+                "end": END,
+            },
+        )
+        d = resp.json()
+        assert d.get("benchmark_symbol") is None
+        assert d.get("benchmark_curve", []) == []
+
+
+class TestSensitivity:
+    def test_sensitivity_scans_param_and_returns_metric_curve(self, client):
+        resp = client.post(
+            "/api/backtest/sensitivity",
+            json={
+                "strategy": "ma_cross",
+                "params": {"slow": 20, "symbol": "TEST.STOCK"},
+                "param": "fast",
+                "values": [3, 5, 8, 10, 15],
+                "symbols": ["TEST.STOCK"],
+                "start": START,
+                "end": END,
+                "metric": "total_return",
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        d = resp.json()
+        assert d["param"] == "fast"
+        assert d["metric"] == "total_return"
+        assert [p["param_value"] for p in d["points"]] == [3, 5, 8, 10, 15]
+        # 每个取值都产生了指标（fixture 行情下不会全 None）
+        assert all(p["value"] is not None for p in d["points"])
+
+    def test_sensitivity_rejects_unknown_strategy(self, client):
+        resp = client.post(
+            "/api/backtest/sensitivity",
+            json={
+                "strategy": "nope",
+                "params": {},
+                "param": "x",
+                "values": [1],
+                "symbols": ["TEST.STOCK"],
+                "start": START,
+                "end": END,
+            },
+        )
+        assert resp.status_code == 422
+
+
+class TestPortfolioBenchmarkFactor:
+    def test_portfolio_benchmark_and_factor_exposure(self, client):
+        resp = client.post(
+            "/api/backtest/portfolio",
+            json={
+                "legs": [{**STOCK_LEG, "weight": 0.6}, {**FUND_LEG, "weight": 0.4}],
+                "initial_cash": 200_000,
+                "start": START,
+                "end": END,
+                "rebalance": "none",
+                "benchmark_symbol": "TEST.STOCK",
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        d = resp.json()
+        assert len(d.get("benchmark_curve", [])) >= 2
+        assert d["benchmark_symbol"] == "TEST.STOCK"
+        # 因子暴露结构正确（flat fixture 下因子 IC 可能为 null，仅校验结构）
+        fe = d["factor_exposure"]
+        assert isinstance(fe, dict)
+        assert "factors" in fe and "total_exposure_weight" in fe
+        assert isinstance(fe["total_exposure_weight"], (int, float))
+
+
+class TestFactorExposureAggregation:
+    def test_aggregate_factor_exposure_weights_by_leg(self, monkeypatch):
+        from app.backtest import portfolio as pf
+
+        def fake_ic(symbols, start, end, window, forward):
+            return {
+                "factors": ["momentum", "volatility", "sharpe"],
+                "results": {
+                    "momentum": {"mean_ic": 0.4, "ir": 1.2, "observations": 9},
+                    "volatility": {"mean_ic": -0.2, "ir": -0.5, "observations": 9},
+                    "sharpe": {"mean_ic": 0.1, "ir": 0.3, "observations": 9},
+                },
+            }
+
+        monkeypatch.setattr(pf.factor_research, "ic_analysis", fake_ic)
+
+        legs = [
+            {"strategy": "buy_hold", "symbols": ["A"], "weight": 1.0},   # sharpe, volatility
+            {"strategy": "ma_cross", "symbols": ["B"], "weight": 1.0},   # momentum, mean_reversion
+        ]
+        out = pf._aggregate_factor_exposure(legs, ["A", "B"], "2024-01-02", "2024-01-29")
+        names = {f["factor"] for f in out["factors"]}
+        # buy_hold -> sharpe/volatility; ma_cross -> momentum/mean_reversion
+        assert "sharpe" in names and "volatility" in names and "momentum" in names
+        # 暴露占比归一：各因子暴露权重之和约=1（4 位四舍五入）
+        assert out["total_exposure_weight"] == pytest.approx(1.0, abs=1e-3)
+        sharpe = next(f for f in out["factors"] if f["factor"] == "sharpe")
+        assert sharpe["ic_mean"] == pytest.approx(0.1, abs=1e-6)
+        assert sharpe["exposure_weight"] > 0
+
+    def test_aggregate_factor_exposure_no_factors(self):
+        from app.backtest import portfolio as pf
+        out = pf._aggregate_factor_exposure(
+            [{"strategy": "unknown_strat", "symbols": ["A"], "weight": 1.0}],
+            ["A"], "2024-01-02", "2024-01-29",
+        )
+        assert out["factors"] == []

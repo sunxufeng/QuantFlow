@@ -19,7 +19,8 @@ from typing import Any, Dict, List
 
 from .engine import BacktestEngine, BacktestError, EquityPoint
 from .metrics import PerformanceMetrics
-from .strategies import STRATEGY_REGISTRY
+from .strategies import STRATEGY_REGISTRY, default_factors
+from ..factors import research as factor_research
 from ..market.models import Instrument
 from ..market.service import market_service
 
@@ -35,6 +36,7 @@ class PortfolioBacktest:
         end: str = "",
         rebalance: str = "none",
         cost_rates=None,
+        benchmark_symbol: Optional[str] = None,
     ) -> None:
         if not legs:
             raise BacktestError("组合回测至少需要一条腿")
@@ -45,6 +47,7 @@ class PortfolioBacktest:
         self.end = end
         self.rebalance = rebalance
         self.cost_rates = cost_rates
+        self.benchmark_symbol = benchmark_symbol
 
         # 权重归一化
         raw_weights = [float(l.get("weight", 1.0)) for l in legs]
@@ -75,18 +78,26 @@ class PortfolioBacktest:
     # ------------------------------------------------------------------ #
     def run(self) -> Dict[str, Any]:
         leg_results = []
+        # 汇总所有腿的标的（去重保序）—— 基准与因子暴露均需用到，提前拉取行情缓存
+        all_symbols: List[str] = []
         for leg in self.legs:
-            # 1. 拉取行情
-            data: Dict[str, Any] = {}
-            for sym in leg["symbols"]:
-                bars = market_service.bars(
-                    sym, self.start, self.end, interval=leg.get("interval", "daily")
+            for s in leg["symbols"]:
+                if s not in all_symbols:
+                    all_symbols.append(s)
+        market_cache: Dict[str, Any] = {}
+        for sym in all_symbols:
+            bars = market_service.bars(
+                sym, self.start, self.end, interval=leg.get("interval", "daily")
+            )
+            if not bars:
+                raise BacktestError(
+                    f"标的 {sym} 在 {self.start}~{self.end} 无行情数据"
                 )
-                if not bars:
-                    raise BacktestError(
-                        f"标的 {sym} 在 {self.start}~{self.end} 无行情数据"
-                    )
-                data[sym] = bars
+            market_cache[sym] = bars
+
+        for leg in self.legs:
+            # 1. 行情（复用全局缓存的子集）
+            data: Dict[str, Any] = {sym: market_cache[sym] for sym in leg["symbols"]}
             instruments: Dict[str, Instrument] = {}
             for sym in leg["symbols"]:
                 at = leg["asset_types"].get(sym, "stock")
@@ -137,7 +148,14 @@ class PortfolioBacktest:
         all_trades = []
         for r in leg_results:
             all_trades.extend(r["result"].trades)
-        metrics = PerformanceMetrics(combined_points, self.initial_cash, all_trades)
+        # 组合基准（equal-weight 买入持有，跨所有标的，与组合净值日期对齐）
+        bench_values, bench_curve = _equal_weight_benchmark(
+            market_cache, all_symbols, dates, combined_curve, self.initial_cash
+        ) if self.benchmark_symbol else (None, None)
+        metrics = PerformanceMetrics(
+            combined_points, self.initial_cash, all_trades,
+            benchmark_values=bench_values,
+        )
 
         # 4. 各腿明细
         leg_summaries = []
@@ -159,12 +177,6 @@ class PortfolioBacktest:
                 }
             )
 
-        # 汇总所有腿的标的（去重保序）
-        all_symbols: List[str] = []
-        for leg in self.legs:
-            for s in leg["symbols"]:
-                if s not in all_symbols:
-                    all_symbols.append(s)
         start_date = self.start or (combined_curve[0]["date"] if combined_curve else "")
         end_date = self.end or (combined_curve[-1]["date"] if combined_curve else "")
         interval = self.legs[0].get("interval", "daily") if self.legs else "daily"
@@ -240,6 +252,11 @@ class PortfolioBacktest:
             "equity_curve": combined_curve,
             "calendar": dates,
             "risk_decomposition": _risk_decomposition(leg_curves, weights),
+            "benchmark_symbol": self.benchmark_symbol,
+            "benchmark_curve": bench_curve or [],
+            "factor_exposure": _aggregate_factor_exposure(
+                self.legs, all_symbols, start_date, end_date
+            ),
         }
 
 
@@ -466,3 +483,125 @@ def _std(xs: List[float]) -> float:
         return 0.0
     mean = sum(xs) / n
     return math.sqrt(sum((x - mean) ** 2 for x in xs) / (n - 1))
+
+
+def _equal_weight_benchmark(
+    data: Dict[str, List[Any]],
+    symbols: List[str],
+    dates: List[str],
+    combined_curve: List[Dict[str, Any]],
+    initial_cash: float,
+) -> "tuple[Optional[List[float]], Optional[List[Dict[str, Any]]]]":
+    """构建等权买入持有基准（跨所有标的，与组合净值日期对齐）。
+
+    返回 (benchmark_values, benchmark_curve)。每个标的使用自身收盘价做买入持有
+    NAV，等权取均值作为组合基准。任意标的无行情时退化为 (None, None)。
+    """
+    closes: List[Dict[str, float]] = []
+    bases: List[float] = []
+    for sym in symbols:
+        bars = data.get(sym)
+        if not bars:
+            return None, None
+        close_by_date = {b.date: float(b.close) for b in bars}
+        if not close_by_date:
+            return None, None
+        closes.append(close_by_date)
+        bases.append(close_by_date[min(close_by_date)] or 1.0)
+
+    values: List[float] = []
+    curve: List[Dict[str, Any]] = []
+    for i, d in enumerate(dates):
+        navs = []
+        ok = True
+        for j, cbd in enumerate(closes):
+            # 取该日期及之前最近一个交易日的收盘价（停牌沿用上一日）
+            last = None
+            for dd in dates[: i + 1]:
+                if dd in cbd:
+                    last = cbd[dd]
+            if last is None:
+                ok = False
+                break
+            navs.append(last / bases[j])
+        if not ok or not navs:
+            continue
+        nav = initial_cash * (sum(navs) / len(navs))
+        values.append(nav)
+        if combined_curve:
+            curve.append({"date": d, "value": round(nav, 2)})
+    if len(values) < 2:
+        return None, None
+    return values, curve
+
+
+def _aggregate_factor_exposure(
+    legs: List[Dict[str, Any]],
+    all_symbols: List[str],
+    start: str,
+    end: str,
+) -> Dict[str, Any]:
+    """组合因子暴露（V14）：按各腿权重聚合因子 IC/IR。
+
+    每条腿按策略取默认因子，调用 factor_research.ic_analysis 计算因子 IC/IR，
+    再以腿权重加权汇总到每个因子。输出各因子的加权 IC 均值、加权 IR 与暴露占比。
+    因子分析失败时整体退化为空（不影响主回测）。
+    """
+    if not all_symbols or not start or not end:
+        return {"factors": [], "notice": "样本不足"}
+    # 汇总每条腿的因子及其权重
+    leg_factors: List[Dict[str, Any]] = []
+    for leg in legs:
+        fs = default_factors(leg.get("strategy", ""))
+        if fs:
+            leg_factors.append({"weight": leg.get("weight", 0.0), "factors": fs})
+    if not leg_factors:
+        return {"factors": [], "notice": "各腿策略未配置关联因子"}
+
+    agg: Dict[str, Dict[str, float]] = {}
+    total_w = 0.0
+    for lf in leg_factors:
+        w = lf["weight"]
+        total_w += w
+        # 同一因子可能被多个腿引用，逐腿累加权重贡献
+        for f in lf["factors"]:
+            agg.setdefault(f, {"w": 0.0, "ic": 0.0, "ir": 0.0, "n": 0})
+            agg[f]["w"] += w
+    if total_w <= 0:
+        return {"factors": [], "notice": "权重之和为 0"}
+
+    # 各因子只算一次 IC/IR（用全部标的 + 全区间），按腿出现权重放大暴露
+    computed = {}
+    try:
+        ic = factor_research.ic_analysis(
+            symbols=all_symbols, start=start, end=end, window=10, forward=1
+        )
+        for factor_name, stat in (ic.get("results") or {}).items():
+            if not stat:
+                continue
+            computed[factor_name] = {
+                "ic_mean": stat.get("mean_ic") or 0.0,
+                "ir": stat.get("ir") or 0.0,
+            }
+    except Exception as exc:  # 因子分析失败不影响主回测
+        logger = __import__("logging").getLogger("quantflow.backtest.portfolio")
+        logger.warning("portfolio factor exposure failed: %s", exc)
+        return {"factors": [], "notice": "因子分析失败"}
+
+    # 仅对确有 IC 结果的因子做暴露占比归一化（无 IC 的因子不展示）
+    emitted = [(f, acc, computed[f]) for f, acc in agg.items() if computed.get(f)]
+    total_factor_w = sum(acc["w"] for _, acc, _ in emitted) or 1.0
+    factors_out = []
+    for f, acc, c in emitted:
+        exposure_w = acc["w"] / total_factor_w
+        factors_out.append({
+            "factor": f,
+            "ic_mean": round(c["ic_mean"], 4),
+            "ir": round(c["ir"], 4),
+            "exposure_weight": round(exposure_w, 4),
+        })
+    factors_out.sort(key=lambda x: abs(x["ic_mean"]), reverse=True)
+    return {
+        "factors": factors_out,
+        "total_exposure_weight": round(sum(f["exposure_weight"] for f in factors_out), 4),
+    }

@@ -9,6 +9,7 @@ const navItems = [
   { key: 'monitor', label: '系统监控', abbr: '系' },
   { key: 'factor', label: '因子库', abbr: '因' },
   { key: 'portfolio', label: '组合回测', abbr: '组' },
+  { key: 'sensitivity', label: '参数敏感性', abbr: '敏' },
   { key: 'factorScore', label: '因子评分', abbr: '评' },
   { key: 'notify', label: '通知渠道', abbr: '通' },
   { key: 'llm', label: 'LLM 助手', abbr: '助' },

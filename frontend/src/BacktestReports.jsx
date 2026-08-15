@@ -14,14 +14,19 @@ function fmtNum(v, d = 2) {
   return Number(v).toFixed(d)
 }
 
-function EquityChart({ curve }) {
+function EquityChart({ curve, benchmark }) {
   if (!curve || !curve.length) return null
   const W = 600
   const H = 120
   const pad = 10
   const vals = curve.map((p) => Number(p.total_value) || 0)
-  const lo = Math.min(...vals)
-  const hi = Math.max(...vals)
+  let lo = Math.min(...vals)
+  let hi = Math.max(...vals)
+  const benchVals = benchmark && benchmark.length ? benchmark.map((p) => Number(p.value) || 0) : null
+  if (benchVals) {
+    lo = Math.min(lo, ...benchVals)
+    hi = Math.max(hi, ...benchVals)
+  }
   const span = hi - lo || 1
   const stepX = curve.length > 1 ? (W - pad * 2) / (curve.length - 1) : 0
   const y = (v) => H - pad - ((v - lo) / span) * (H - pad * 2)
@@ -29,9 +34,15 @@ function EquityChart({ curve }) {
     .map((p, i) => `${i === 0 ? 'M' : 'L'}${(pad + i * stepX).toFixed(1)},${y(Number(p.total_value) || 0).toFixed(1)}`)
     .join(' ')
   const area = `0,${H - pad} ${path} ${W - pad},${H - pad}`
+  const benchPath = benchVals
+    ? benchVals.map((v, i) => `${i === 0 ? 'M' : 'L'}${(pad + i * stepX).toFixed(1)},${y(v).toFixed(1)}`).join(' ')
+    : null
   return (
     <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ width: '100%', height: H }}>
       <polyline points={area} fill="#15803d" fillOpacity="0.08" stroke="none" />
+      {benchPath && (
+        <polyline points={benchPath} fill="none" stroke="#94a3b8" strokeWidth="1.4" strokeDasharray="6 4" vectorEffect="non-scaling-stroke" />
+      )}
       <polyline points={path} fill="none" stroke="#15803d" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
     </svg>
   )
@@ -407,7 +418,7 @@ export default function BacktestReports() {
             </div>
           )}
           <div className="qf-an-title">净值曲线</div>
-          <EquityChart curve={detail.equity_curve} />
+          <EquityChart curve={detail.equity_curve} benchmark={detail.benchmark_curve} />
           <div className="qf-hint">
             标的：{(detail.symbols || []).join(', ')} ｜ 区间：{detail.start_date} ~ {detail.end_date} ｜
             交易笔数：{Array.isArray(detail.trades) ? detail.trades.length : 0}
@@ -415,6 +426,34 @@ export default function BacktestReports() {
               <span> ｜ 关联因子：{detail.factors.join(', ')}</span>
             )}
           </div>
+
+          {detail.benchmark_symbol && detail.metrics?.attribution?.benchmark && (
+            <>
+              <div className="qf-an-title">基准对比（V14 · {detail.benchmark_symbol} 买入持有）</div>
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 6 }}>
+                {(() => {
+                  const b = detail.metrics.attribution.benchmark
+                  const cells = [
+                    ['基准收益', `${((b.benchmark_return || 0) * 100).toFixed(2)}%`],
+                    ['超额收益', `${((b.excess_return || 0) * 100).toFixed(2)}%`],
+                    ['Alpha', `${(b.alpha || 0).toFixed(2)}%`],
+                    ['Beta', (b.beta || 0).toFixed(3)],
+                    ['跟踪误差(年化)', `${((b.tracking_error || 0) * 100).toFixed(2)}%`],
+                    ['信息比率', (b.information_ratio || 0).toFixed(2)],
+                  ]
+                  return cells.map(([k, v]) => (
+                    <div key={k} className="qf-mcard" style={{ minWidth: 130 }}>
+                      <div className="qf-mcard-label">{k}</div>
+                      <div className="qf-mcard-value" style={{ fontSize: 15 }}>{v}</div>
+                    </div>
+                  ))
+                })()}
+              </div>
+              <div className="qf-hint" style={{ marginTop: 6 }}>
+                净值曲线图中灰色虚线为基准；Beta 衡量组合相对基准的系统性暴露，信息比率 = 年化超额收益 / 跟踪误差。
+              </div>
+            </>
+          )}
 
           <div className="qf-an-title">K 线 / 技术指标 / 买卖信号（V13）</div>
           {(detail.symbols || []).length > 0 && (

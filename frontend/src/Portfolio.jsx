@@ -12,14 +12,19 @@ const REBALANCE_OPTS = [
 
 const DEFAULT_LEG = { strategy: 'ma_cross', symbols: 'TEST.STOCK', weight: 1 }
 
-function NavChart({ curve }) {
+function NavChart({ curve, benchmark }) {
   if (!curve || curve.length < 2) return null
   const W = 720
   const H = 220
   const pad = 36
   const vals = curve.map((p) => p.total_value)
-  const lo = Math.min(...vals)
-  const hi = Math.max(...vals)
+  let lo = Math.min(...vals)
+  let hi = Math.max(...vals)
+  const benchVals = benchmark && benchmark.length >= 2 ? benchmark.map((p) => p.value) : null
+  if (benchVals) {
+    lo = Math.min(lo, ...benchVals)
+    hi = Math.max(hi, ...benchVals)
+  }
   const span = hi - lo || 1
   const x = (i) => pad + (i / (curve.length - 1)) * (W - pad * 2)
   const y = (v) => H - pad - ((v - lo) / span) * (H - pad * 2)
@@ -28,12 +33,18 @@ function NavChart({ curve }) {
   const last = vals[vals.length - 1]
   const up = last >= first
   const color = up ? '#15803d' : '#dc2626'
+  const benchPath = benchVals
+    ? benchVals.map((v, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ')
+    : null
   return (
     <div className="qf-an-block">
       <div className="qf-an-title">组合净值曲线（{curve.length} 个交易日）</div>
       <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ width: '100%', height: 220 }}>
         <line x1={pad} y1={H - pad} x2={W - pad} y2={H - pad} stroke="#cbd5e1" strokeWidth="1" />
         <line x1={pad} y1={pad} x2={pad} y2={H - pad} stroke="#cbd5e1" strokeWidth="1" />
+        {benchPath && (
+          <path d={benchPath} fill="none" stroke="#94a3b8" strokeWidth="1.4" strokeDasharray="6 4" vectorEffect="non-scaling-stroke" />
+        )}
         <path d={path} fill="none" stroke={color} strokeWidth="2" vectorEffect="non-scaling-stroke" />
         <text x={pad} y={pad - 8} fill="#64748b" fontSize="10">{hi.toFixed(0)}</text>
         <text x={pad} y={H - pad + 14} fill="#64748b" fontSize="10">{lo.toFixed(0)}</text>
@@ -42,6 +53,12 @@ function NavChart({ curve }) {
         </text>
         <text x={pad} y={H - pad + 14} fill="#64748b" fontSize="9">{curve[0].date}</text>
       </svg>
+      {benchPath && (
+        <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginTop: 4, fontSize: 11 }}>
+          <span style={{ color: '#15803d', fontWeight: 600 }}>— 组合净值</span>
+          <span style={{ color: '#94a3b8' }}>-- 等权基准（{benchmark && benchmark.length ? benchmark[0].date : ''} 起）</span>
+        </div>
+      )}
     </div>
   )
 }
@@ -213,6 +230,51 @@ function RiskDecomp({ risk, legs }) {
   )
 }
 
+function FactorExposure({ exposure }) {
+  if (!exposure || !exposure.factors || exposure.factors.length === 0) return null
+  const maxW = Math.max(1e-6, ...exposure.factors.map((f) => Math.abs(f.exposure_weight)))
+  return (
+    <div className="qf-an-block">
+      <div className="qf-an-title">
+        组合因子暴露（V14 · 按策略关联因子聚合 IC/IR 与暴露占比）
+      </div>
+      <table className="qf-state-table" style={{ marginTop: 6 }}>
+        <thead>
+          <tr>
+            <th>因子</th><th>加权 IC 均值</th><th>IR</th><th>组合暴露占比</th>
+          </tr>
+        </thead>
+        <tbody>
+          {exposure.factors.map((f) => (
+            <tr key={f.factor}>
+              <td>{f.factor}</td>
+              <td style={{ color: f.ic_mean >= 0 ? '#15803d' : '#dc2626' }}>
+                {f.ic_mean.toFixed(4)}
+              </td>
+              <td style={{ color: f.ir >= 0 ? '#15803d' : '#dc2626' }}>
+                {f.ir.toFixed(4)}
+              </td>
+              <td>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <div style={{
+                    width: `${Math.max(2, (Math.abs(f.exposure_weight) / maxW) * 140)}px`,
+                    height: 10, borderRadius: 3,
+                    background: '#7c3aed',
+                  }} />
+                  <span>{(f.exposure_weight * 100).toFixed(1)}%</span>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div className="qf-hint" style={{ marginTop: 6 }}>
+        暴露占比按「引用该因子的各腿权重」归一，总和 = 100%；IC 均值为该因子在样本内对收益方向预测能力的度量。
+      </div>
+    </div>
+  )
+}
+
 export default function Portfolio() {
   const [strategies, setStrategies] = useState([])
   const [legs, setLegs] = useState([{ ...DEFAULT_LEG }])
@@ -220,6 +282,7 @@ export default function Portfolio() {
   const [start, setStart] = useState('2024-01-01')
   const [end, setEnd] = useState('2024-12-31')
   const [initialCash, setInitialCash] = useState(1000000)
+  const [benchmarkSymbol, setBenchmarkSymbol] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [result, setResult] = useState(null)
@@ -256,6 +319,7 @@ export default function Portfolio() {
       start,
       end,
       rebalance,
+      benchmark_symbol: benchmarkSymbol.trim() || undefined,
     }
     if (payload.legs.some((l) => l.symbols.length === 0)) {
       setError('每条腿至少需要一个标的')
@@ -278,7 +342,7 @@ export default function Portfolio() {
   return (
     <div className="qf-monitor" style={{ padding: 16 }}>
         <div className="qf-result-head">
-          <h3>组合回测（V13 · 多腿 + 再平衡 + 绩效归因 + 风险分解）</h3>
+          <h3>组合回测（V14 · 多腿 + 再平衡 + 绩效归因 + 风险分解 + 因子暴露 + 基准对比）</h3>
         </div>
       <form className="qf-prop-form" onSubmit={run} style={{ maxWidth: 860 }}>
         <div className="qf-hint" style={{ marginBottom: 8 }}>
@@ -358,6 +422,14 @@ export default function Portfolio() {
               onChange={(e) => setInitialCash(e.target.value)}
             />
           </div>
+          <div className="qf-prop-field" style={{ width: 150 }}>
+            <label className="qf-prop-label">基准标的（可选）</label>
+            <input
+              value={benchmarkSymbol}
+              onChange={(e) => setBenchmarkSymbol(e.target.value)}
+              placeholder="如 TEST.STOCK"
+            />
+          </div>
           <button type="submit" className="qf-btn qf-btn-primary" disabled={busy}>
             {busy ? '回测中…' : '运行组合回测'}
           </button>
@@ -387,7 +459,7 @@ export default function Portfolio() {
             </div>
           </div>
 
-          <NavChart curve={result.equity_curve} />
+          <NavChart curve={result.equity_curve} benchmark={result.benchmark_curve} />
 
           <div className="qf-an-title" style={{ marginTop: 12 }}>
             各腿明细（run_id: {result.run_id} · 再平衡: {result.rebalance}）
@@ -426,6 +498,18 @@ export default function Portfolio() {
             风险分解（V13 · 组合波动按各腿贡献拆解）
           </div>
           <RiskDecomp risk={result.risk_decomposition} legs={result.legs} />
+
+          {result.benchmark_symbol && (
+            <div className="qf-hint" style={{ marginTop: 8 }}>
+              {result.benchmark_symbol} 等权买入持有基准年化波动：
+              {(((result.risk_decomposition?.portfolio_vol_annual) || 0) * 100).toFixed(2)}%（组合 vs 基准对照见上图虚线）
+            </div>
+          )}
+
+          <div className="qf-an-title" style={{ marginTop: 16 }}>
+            组合因子暴露（V14 · 按策略关联因子聚合）
+          </div>
+          <FactorExposure exposure={result.factor_exposure} />
 
           <div className="qf-hint" style={{ marginTop: 8 }}>
             期末配置占比：

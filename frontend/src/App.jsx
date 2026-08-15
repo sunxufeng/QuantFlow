@@ -40,6 +40,7 @@ import FuturesBacktest from './FuturesBacktest.jsx'
 import Optimizer from './Optimizer.jsx'
 import MarketData from './MarketData.jsx'
 import Portfolio from './Portfolio.jsx'
+import Sensitivity from './Sensitivity.jsx'
 import LoginScreen from './LoginScreen.jsx'
 import { useGraphHistory } from './useHistory.js'
 import {
@@ -1074,6 +1075,7 @@ export default function App() {
           {view === 'optimizer' && <Optimizer />}
           {view === 'market' && <MarketData />}
           {view === 'portfolio' && <Portfolio />}
+          {view === 'sensitivity' && <Sensitivity />}
          </ErrorBoundary>
         </main>
       </div>
