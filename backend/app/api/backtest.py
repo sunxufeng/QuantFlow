@@ -40,6 +40,7 @@ from ..backtest.portfolio_opt import (
     min_variance_portfolio as _min_variance_portfolio,
     max_sharpe_portfolio as _max_sharpe_portfolio,
 )
+from ..backtest.trade_analysis import analyze_from_dicts as _analyze_trades
 from ..backtest.strategies import STRATEGY_REGISTRY, default_factors
 from ..core.auth import get_current_user
 from ..factors import research as factor_research
@@ -1570,3 +1571,32 @@ def run_portfolio(payload: PortfolioRunRequest) -> dict:
     report_store.save(report)
     logger.info("portfolio backtest %s generated (%d legs)", report["run_id"], len(legs))
     return report
+
+
+# --------------------------------------------------------------------------- #
+# 成交（交易）分析（V25）
+# --------------------------------------------------------------------------- #
+class TradeAnalysisRequest(BaseModel):
+    run_id: str = Field(..., description="已存回测报告 run_id")
+
+
+@router.post("/trade-analysis", summary="成交分析（交易笔数/胜率/盈亏比/盈利因子/逐笔流水，V25）")
+def trade_analysis(payload: TradeAnalysisRequest) -> dict:
+    """基于已存回测报告中的逐笔成交，做交易层面统计与逐笔流水。"""
+    try:
+        report = report_store.load(payload.run_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    report = _normalize_report(report)
+    trades = report.get("trades", [])
+    if not trades:
+        raise HTTPException(status_code=422, detail="该报告无成交记录，无法做交易分析")
+    try:
+        result = _analyze_trades(trades)
+    except Exception as exc:  # 防御性
+        raise HTTPException(status_code=422, detail=f"交易分析失败: {exc}") from exc
+    result["run_id"] = payload.run_id
+    result["strategy"] = report.get("strategy") or report.get("strategy_name")
+    result["symbols"] = report.get("symbols")
+    return result
+

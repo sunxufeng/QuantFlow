@@ -53,6 +53,7 @@ import StrategyLibrary from './StrategyLibrary.jsx'
 import SyntheticLab from './SyntheticLab.jsx'
 import Seasonality from './Seasonality.jsx'
 import PortfolioOpt from './PortfolioOpt.jsx'
+import TradeAnalysis from './TradeAnalysis.jsx'
 import ForwardSim from './ForwardSim.jsx'
 import LoginScreen from './LoginScreen.jsx'
 import { useGraphHistory } from './useHistory.js'
@@ -1102,6 +1103,7 @@ export default function App() {
           {view === 'fwd' && <ForwardSim />}
           {view === 'season' && <Seasonality />}
           {view === 'portopt' && <PortfolioOpt />}
+          {view === 'blotter' && <TradeAnalysis />}
          </ErrorBoundary>
         </main>
       </div>
