@@ -51,6 +51,10 @@ def test_builtin_factor_backtest():
     assert "ir" in res["metrics"]
     # 累计收益末值应为 1+ann 路径的合理范围
     assert res["metrics"]["max_drawdown"] <= 0
+    # 多空组合收益不应全为 0（实际分组构造生效，用小股票池也成立）
+    import statistics
+    sd = statistics.pstdev(res["ls_returns"])
+    assert sd > 0, "多空日收益方差为 0，说明分组/多空构造未生效"
 
 
 def test_expression_factor_backtest():

@@ -174,7 +174,7 @@ def factor_long_short(
             r = c1 / c0 - 1.0
             fvals.append(fv)
             rets.append(r)
-        if len(fvals) < quantiles:
+        if len(fvals) < 2:
             ls_returns.append(0.0)
             cum_return.append(cum - 1.0)
             continue
