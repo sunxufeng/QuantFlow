@@ -18,7 +18,9 @@ from pydantic import BaseModel, Field
 
 from ..core.auth import get_current_user
 from ..factors.analyzer import FactorAnalyzer
+from ..factors import backtest as factor_backtest
 from ..factors import library as factor_library
+from ..factors.registry import FactorNotFoundError
 from ..market.service import market_service
 
 router = APIRouter()
@@ -177,3 +179,42 @@ def analyze_factor(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"report": report}
+
+
+# ----------------------------- V30：因子回测（多空组合） -----------------------------
+
+class FactorBacktestRequest(BaseModel):
+    factor: str = Field(..., description="因子名（内置 momentum/volatility/rsi…）或表达式（如 close.pct_change(20)）")
+    universe: list[str] = Field(..., min_length=2, description="股票池")
+    start: str = Field(default="2023-01-01", description="开始日 YYYY-MM-DD")
+    end: str = Field(default="2023-12-31", description="结束日 YYYY-MM-DD")
+    quantiles: int = Field(default=5, ge=2, le=10, description="分组数")
+    neutralized: bool = Field(default=False, description="是否横截面中性化（缩尾+zscore）")
+    source: str = Field(default="synthetic", description="行情来源：synthetic(离线) / live")
+    seed: int = Field(default=12345, description="合成行情随机种子")
+
+
+@router.get("/factors/backtest/catalog", summary="因子回测可用因子清单（V30）")
+def factor_backtest_catalog(user=Depends(get_current_user)) -> dict:
+    return {"factors": factor_backtest.factor_catalog()}
+
+
+@router.post("/factors/backtest", summary="因子多空组合回测（累计收益/IC 时序/指标，V30）")
+def factor_backtest_run(
+    req: FactorBacktestRequest,
+    user=Depends(get_current_user),
+) -> dict:
+    try:
+        result = factor_backtest.factor_long_short(
+            factor=req.factor,
+            universe=req.universe,
+            start=req.start,
+            end=req.end,
+            quantiles=req.quantiles,
+            neutralized=req.neutralized,
+            source=req.source,
+            seed=req.seed,
+        )
+    except (ValueError, FactorNotFoundError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return result

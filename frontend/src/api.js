@@ -237,6 +237,8 @@ export const runAttribution = (payload) => request('/backtest/performance-attrib
 export const runDataQuality = (payload) => request('/backtest/data-quality', { method: 'POST', body: JSON.stringify(payload) })
 export const getStressScenarios = () => request('/backtest/stress-scenarios')
 export const runStressTest = (payload) => request('/backtest/stress-test', { method: 'POST', body: JSON.stringify(payload) })
+export const getFactorBacktestCatalog = () => request('/factors/backtest/catalog')
+export const runFactorBacktest = (payload) => request('/factors/backtest', { method: 'POST', body: JSON.stringify(payload) })
 
 // ---- 因子库 CRUD（V1.1 N3）----
 export const factorLibraryList = (category) => request(
