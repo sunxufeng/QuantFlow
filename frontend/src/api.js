@@ -303,6 +303,14 @@ export const runExecTwap = (payload) => _exec('twap', payload)
 export const runExecVwap = (payload) => _exec('vwap', payload)
 export const runExecSlippage = (payload) => _exec('slippage', payload)
 
+// ---- 报告与运维增强（V67–V71）----
+const _rep = (path, payload) => request(`/reports/${path}`, { method: 'POST', body: JSON.stringify(payload) })
+export const runReportPerformance = (payload) => _rep('performance', payload)
+export const runReportCompare = (payload) => _rep('compare', payload)
+export const runReportMulti = (payload) => _rep('multi-compare', payload)
+export const runReportPeriodic = (payload) => _rep('periodic', payload)
+export const runReportDashboard = (payload) => _rep('dashboard', payload)
+
 // ---- 因子库 CRUD（V1.1 N3）----
 export const factorLibraryList = (category) => request(
   `/factors/library${category ? `?category=${encodeURIComponent(category)}` : ''}`,

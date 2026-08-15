@@ -119,6 +119,7 @@ def drawdown_analysis(returns: Sequence[float]) -> Dict:
     underwater = dd < -1e-9
     idx = np.where(underwater)[0]
     episodes = []
+    top = []
     if len(idx):
         start = idx[0]
         prev = idx[0]
