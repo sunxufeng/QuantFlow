@@ -227,6 +227,7 @@ export const runMetricsExtended = (payload) => request('/backtest/metrics-extend
 export const genSynthetic = (payload) => request('/backtest/market/synthetic', { method: 'POST', body: JSON.stringify(payload) })
 export const runSyntheticBacktest = (payload) => request('/backtest/synthetic-run', { method: 'POST', body: JSON.stringify(payload) })
 export const runForwardSim = (payload) => request('/backtest/forward-sim', { method: 'POST', body: JSON.stringify(payload) })
+export const runSeasonality = (payload) => request('/backtest/seasonality', { method: 'POST', body: JSON.stringify(payload) })
 
 // ---- 因子库 CRUD（V1.1 N3）----
 export const factorLibraryList = (category) => request(

@@ -51,6 +51,7 @@ import WeightedBenchmarks from './WeightedBenchmarks.jsx'
 import RiskReport from './RiskReport.jsx'
 import StrategyLibrary from './StrategyLibrary.jsx'
 import SyntheticLab from './SyntheticLab.jsx'
+import Seasonality from './Seasonality.jsx'
 import ForwardSim from './ForwardSim.jsx'
 import LoginScreen from './LoginScreen.jsx'
 import { useGraphHistory } from './useHistory.js'
@@ -1098,6 +1099,7 @@ export default function App() {
           {view === 'stratelib' && <StrategyLibrary />}
           {view === 'synth' && <SyntheticLab />}
           {view === 'fwd' && <ForwardSim />}
+          {view === 'season' && <Seasonality />}
          </ErrorBoundary>
         </main>
       </div>

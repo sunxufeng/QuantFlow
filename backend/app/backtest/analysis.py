@@ -14,9 +14,10 @@
 
 from __future__ import annotations
 
+import datetime as dt
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-from ..market.models import Instrument
+from ..market.models import Bar, Instrument
 from ..market.service import market_service
 from ..backtest.engine import BacktestEngine, BacktestResult, EquityPoint
 from ..backtest.metrics import PerformanceMetrics
@@ -669,4 +670,156 @@ def weighted_benchmark_compare(
             }
             for j, b in enumerate(benchmarks)
         ],
+    }
+
+
+# --------------------------------------------------------------------------- #
+# 7. 季节性 / 日历效应分析（V21）
+# --------------------------------------------------------------------------- #
+_MONTH_NAMES = [
+    "1月", "2月", "3月", "4月", "5月", "6月",
+    "7月", "8月", "9月", "10月", "11月", "12月",
+]
+_WEEKDAY_NAMES = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
+
+
+def _daily_returns_from_bars(bars: Sequence[Bar]) -> List[Dict[str, Any]]:
+    """由收盘价序列计算逐期（日）简单收益率，附日期。"""
+    out: List[Dict[str, Any]] = []
+    for i in range(1, len(bars)):
+        prev = float(bars[i - 1].close)
+        cur = float(bars[i].close)
+        if prev > 0:
+            out.append({"date": bars[i].date, "return": cur / prev - 1.0, "close": cur})
+    return out
+
+
+def _summarize(returns: Sequence[float]) -> Dict[str, Any]:
+    """对一组收益率做汇总：均值、累计（复利）、胜率、计数。"""
+    n = len(returns)
+    if n == 0:
+        return {"count": 0, "mean_return": None, "total_return": None, "win_rate": None}
+    mean = sum(returns) / n
+    total = 1.0
+    for r in returns:
+        total *= (1.0 + r)
+    total_return = total - 1.0
+    wins = sum(1 for r in returns if r > 0)
+    return {
+        "count": n,
+        "mean_return": round(mean, 6),
+        "total_return": round(total_return, 6),
+        "win_rate": round(wins / n, 4),
+    }
+
+
+def _turn_of_month_flags(bars: Sequence[Bar], window: int = 3) -> Dict[str, bool]:
+    """标记每个交易日是否属于「月初 / 月末」窗口（turn-of-month）。
+
+    按 (年, 月) 分组，组内前 ``window`` 与后 ``window`` 个交易日标记为 True。
+    返回 date -> bool 的映射。
+    """
+    groups: Dict[Tuple[int, int], List[Bar]] = {}
+    for b in bars:
+        d = dt.date.fromisoformat(b.date)
+        groups.setdefault((d.year, d.month), []).append(b)
+    flags: Dict[str, bool] = {}
+    for bars_in_month in groups.values():
+        ordered = sorted(bars_in_month, key=lambda x: x.date)
+        m = len(ordered)
+        for i, b in enumerate(ordered):
+            flags[b.date] = (i < window) or (i >= m - window)
+    return flags
+
+
+def seasonality(
+    symbol: str,
+    start: str = "2000-01-01",
+    end: str = "2100-01-01",
+    interval: str = "daily",
+    bars: Optional[Sequence[Bar]] = None,
+    tom_window: int = 3,
+) -> Dict[str, Any]:
+    """季节性 / 日历效应分析：把日收益率按时间维度分组聚合。
+
+    维度：
+    - by_month：按自然月（1~12）聚合月度平均日收益、累计、胜率。
+    - by_weekday：按周几（周一~周五）聚合。
+    - turn_of_month：月初/月末 ``tom_window`` 个交易日 vs 其余交易日的对比（日历效应）。
+
+    ``bars`` 可显式传入（端点在 live / synthetic 行情间二选一后传入）；缺省则
+    通过 ``market_service.bars`` 拉取。返回结构化聚合结果。
+    """
+    if bars is None:
+        bars = market_service.bars(symbol, start, end, interval=interval)
+    if bars is None or len(bars) < 2:
+        raise ValueError(f"标的 {symbol} 在 {start}~{end} 无足够行情数据（至少需要 2 个交易日）")
+    rets = _daily_returns_from_bars(bars)
+    if not rets:
+        raise ValueError(f"标的 {symbol} 在 {start}~{end} 无法计算日收益率")
+
+    # by_month / by_weekday
+    month_buckets: Dict[int, List[float]] = {}
+    weekday_buckets: Dict[int, List[float]] = {}
+    for r in rets:
+        d = dt.date.fromisoformat(r["date"])
+        month_buckets.setdefault(d.month, []).append(r["return"])
+        weekday_buckets.setdefault(d.weekday(), []).append(r["return"])
+
+    by_month = []
+    for m in range(1, 13):
+        s = _summarize(month_buckets.get(m, []))
+        by_month.append({"month": m, "name": _MONTH_NAMES[m - 1], **s})
+
+    by_weekday = []
+    for w in range(5):  # 仅工作日有意义（合成/真实行情默认不含周末）
+        s = _summarize(weekday_buckets.get(w, []))
+        by_weekday.append({"weekday": w, "name": _WEEKDAY_NAMES[w], **s})
+
+    # turn_of_month
+    flags = _turn_of_month_flags(bars, window=tom_window)
+    tom_rets: List[float] = []
+    non_tom_rets: List[float] = []
+    for r in rets:
+        (tom_rets if flags.get(r["date"], False) else non_tom_rets).append(r["return"])
+    tom = _summarize(tom_rets)
+    non_tom = _summarize(non_tom_rets)
+    edge = (
+        round(tom["mean_return"] - non_tom["mean_return"], 6)
+        if tom["mean_return"] is not None and non_tom["mean_return"] is not None
+        else None
+    )
+
+    # 摘要：最佳/最差月、最佳/最差周几
+    valid_months = [m for m in by_month if m["mean_return"] is not None]
+    valid_weekdays = [w for w in by_weekday if w["mean_return"] is not None]
+    best_month = max(valid_months, key=lambda x: x["mean_return"]) if valid_months else None
+    worst_month = min(valid_months, key=lambda x: x["mean_return"]) if valid_months else None
+    best_weekday = max(valid_weekdays, key=lambda x: x["mean_return"]) if valid_weekdays else None
+    worst_weekday = min(valid_weekdays, key=lambda x: x["mean_return"]) if valid_weekdays else None
+
+    return {
+        "symbol": symbol,
+        "start": start,
+        "end": end,
+        "interval": interval,
+        "tom_window": tom_window,
+        "n_days": len(rets),
+        "by_month": by_month,
+        "by_weekday": by_weekday,
+        "turn_of_month": {
+            "turn": tom,
+            "non_turn": non_tom,
+            "edge": edge,
+            "interpretation": (
+                "月初/月末效应显著" if (edge is not None and abs(edge) >= 0.0005)
+                else "未见明显月初/月末效应"
+            ),
+        },
+        "summary": {
+            "best_month": best_month,
+            "worst_month": worst_month,
+            "best_weekday": best_weekday,
+            "worst_weekday": worst_weekday,
+        },
     }

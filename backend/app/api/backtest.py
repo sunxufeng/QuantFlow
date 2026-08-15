@@ -31,6 +31,7 @@ from ..backtest.analysis import (
     factor_decay as _factor_decay,
     parameter_robustness as _parameter_robustness,
     weighted_benchmark_compare as _weighted_benchmark_compare,
+    seasonality as _seasonality,
 )
 from ..backtest.optimizer import OptimizeConfigError, optimize
 from ..backtest.portfolio import PortfolioBacktest
@@ -1010,6 +1011,58 @@ def benchmark_weighted(payload: WeightedBenchmarkRequest) -> dict:
         "composite_curve": cmp["composite_curve"],
         "benchmarks": cmp["benchmarks"],
     }
+
+
+# --------------------------------------------------------------------------- #
+# 季节性 / 日历效应分析（V21）
+# --------------------------------------------------------------------------- #
+class SeasonalityRequest(BaseModel):
+    symbol: str = Field(..., description="标的代码")
+    start: str = Field(..., description="起始日期 YYYY-MM-DD")
+    end: str = Field(..., description="结束日期 YYYY-MM-DD")
+    interval: str = Field(default="daily", description="行情频率")
+    tom_window: int = Field(default=3, ge=1, le=10, description="月初/月末效应窗口（交易日）")
+    synthetic: Optional[Dict[str, object]] = Field(
+        default=None,
+        description="可选：提供则改用 GBM 合成行情（initial_price/mu_annual/sigma_annual/seed/regime），无需真实行情源",
+    )
+
+
+@router.post("/seasonality", summary="季节性/日历效应分析（按月/周几/月初月末，V21）")
+def seasonality_analysis(payload: SeasonalityRequest) -> dict:
+    if payload.end < payload.start:
+        raise HTTPException(status_code=422, detail="end 不得早于 start")
+    try:
+        if payload.synthetic is not None:
+            sg = dict(payload.synthetic)
+            bars = synthetic.generate_symbol(
+                symbol=payload.symbol,
+                start=payload.start,
+                end=payload.end,
+                initial_price=float(sg.get("initial_price", 100.0)),
+                mu_annual=float(sg.get("mu_annual", 0.08)),
+                sigma_annual=float(sg.get("sigma_annual", 0.20)),
+                seed=(None if sg.get("seed") is None else int(sg["seed"])),
+                regime=bool(sg.get("regime", False)),
+            )
+        else:
+            bars = market_service.bars(payload.symbol, payload.start, payload.end, interval=payload.interval)
+    except (ValueError, RuntimeError) as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    try:
+        result = _seasonality(
+            symbol=payload.symbol,
+            start=payload.start,
+            end=payload.end,
+            interval=payload.interval,
+            bars=bars,
+            tom_window=payload.tom_window,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    result["source"] = "synthetic" if payload.synthetic is not None else "live"
+    return result
 
 
 class MetricsExtendedRequest(BaseModel):
