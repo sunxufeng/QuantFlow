@@ -86,6 +86,19 @@ def _bootstrap_indices(n: int, size: int, rng: random.Random, block_size: int) -
     return idx
 
 
+def _summary(vals: List[float]) -> Dict[str, float]:
+    """终值/收益等指标的分位数汇总（P5/P25/P50/P75/P95/mean）。"""
+    s = sorted(vals)
+    return {
+        "p5": round(_percentile(s, 0.05), 4),
+        "p25": round(_percentile(s, 0.25), 4),
+        "p50": round(_percentile(s, 0.50), 4),
+        "p75": round(_percentile(s, 0.75), 4),
+        "p95": round(_percentile(s, 0.95), 4),
+        "mean": round(sum(vals) / len(vals), 4),
+    }
+
+
 def monte_carlo(
     equity_curve: Sequence[Any],
     initial_cash: float,
@@ -154,17 +167,6 @@ def monte_carlo(
         sim_mdd.append(_max_drawdown(aligned))
         sim_sharpe.append(_sharpe(sampled))
 
-    def _summary(vals: List[float]) -> Dict[str, float]:
-        s = sorted(vals)
-        return {
-            "p5": round(_percentile(s, 0.05), 4),
-            "p25": round(_percentile(s, 0.25), 4),
-            "p50": round(_percentile(s, 0.50), 4),
-            "p75": round(_percentile(s, 0.75), 4),
-            "p95": round(_percentile(s, 0.95), 4),
-            "mean": round(sum(vals) / len(vals), 4),
-        }
-
     lower = (1.0 - confidence) / 2.0
     upper = 1.0 - lower
 
@@ -216,4 +218,114 @@ def monte_carlo(
         "n_sims": n_sims,
         "confidence": confidence,
         "block_size": max(1, block_size),
+    }
+
+
+def forward_simulate(
+    equity_curve: Sequence[Any],
+    horizon: int = 252,
+    n_paths: int = 200,
+    seed: int = 42,
+    target_return: Optional[float] = None,
+    confidence: float = 0.9,
+) -> Dict[str, Any]:
+    """前向模拟（V20）：基于回测的日收益经验分布，向未来投影 ``horizon`` 个交易日。
+
+    与 ``monte_carlo``（对历史窗口重采样）不同，这里以回测**结束日净值**为起点，
+    向未来滚动 ``horizon`` 个交易日，生成多条未来净值路径，给出：
+
+    - ``bands``：未来每个交易日的分位区间（P5~P95 / P25~P75 / 中位）
+    - ``histogram``：期末净值的分布
+    - ``summary``：期末净值 / 未来总收益 的分位数
+    - ``prob_target``：期末收益 >= target_return 的路径占比（target_return 给定时）
+
+    纯经验自助（i.i.d. bootstrap），``seed`` 固定可复现。
+    """
+    if horizon <= 0:
+        raise ValueError("horizon 必须为正")
+    if n_paths <= 0:
+        raise ValueError("n_paths 必须为正")
+    rets = _daily_returns(equity_curve)
+    if len(rets) < 2:
+        raise ValueError("净值曲线日收益不足，无法前向模拟")
+    rng = random.Random(seed)
+
+    start_value = float(_get(equity_curve[-1], "total_value", 0.0) or 0.0)
+    if start_value <= 0:
+        start_value = 1.0
+
+    by_day: List[List[float]] = [[] for _ in range(horizon)]
+    final_values: List[float] = []
+    final_returns: List[float] = []
+    for _ in range(n_paths):
+        v = start_value
+        for d in range(horizon):
+            r = rets[rng.randrange(len(rets))]
+            v *= (1.0 + r)
+            by_day[d].append(v)
+        final_values.append(v)
+        final_returns.append(v / start_value - 1.0)
+
+    dates = [f"T+{i+1}" for i in range(horizon)]
+    lo_q = (1.0 - confidence) / 2.0
+    hi_q = 1.0 - lo_q
+
+    def _band_stats(vals: List[float]) -> Dict[str, float]:
+        s = sorted(vals)
+        return {
+            "p_low": round(_percentile(s, lo_q), 2),
+            "p25": round(_percentile(s, 0.25), 2),
+            "p50": round(_percentile(s, 0.5), 2),
+            "p75": round(_percentile(s, 0.75), 2),
+            "p_high": round(_percentile(s, hi_q), 2),
+            "mean": round(sum(s) / len(s), 2),
+        }
+
+    bands = []
+    for d in range(horizon):
+        b = _band_stats(by_day[d])
+        b["date"] = dates[d]
+        bands.append(b)
+
+    # 期末分布直方图
+    fv = sorted(final_values)
+    n_bins = min(20, max(5, n_paths // 10))
+    lo, hi = fv[0], fv[-1]
+    if hi - lo < 1e-9:
+        edges = [lo, hi]
+        counts = [n_paths]
+        centers = [(lo + hi) / 2.0]
+    else:
+        width = (hi - lo) / n_bins
+        edges = [lo + width * i for i in range(n_bins + 1)]
+        centers = [lo + width * (i + 0.5) for i in range(n_bins)]
+        counts = [0] * n_bins
+        for x in fv:
+            b = min(int((x - lo) / width), n_bins - 1)
+            counts[b] += 1
+
+    prob_target = None
+    if target_return is not None:
+        prob_target = round(
+            sum(1 for r in final_returns if r >= float(target_return)) / len(final_returns), 4
+        )
+
+    return {
+        "start_value": round(start_value, 2),
+        "horizon": horizon,
+        "n_paths": n_paths,
+        "confidence": confidence,
+        "seed": seed,
+        "bands": bands,
+        "histogram": {
+            "bin_edges": [round(e, 2) for e in edges],
+            "bin_centers": [round(c, 2) for c in centers],
+            "counts": counts,
+        },
+        "summary": {
+            "final_equity": _summary(final_values),
+            "future_return": _summary(final_returns),
+        },
+        "prob_target": prob_target,
+        "target_return": target_return,
     }

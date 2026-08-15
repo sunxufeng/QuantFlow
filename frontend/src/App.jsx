@@ -50,6 +50,8 @@ import Robustness from './Robustness.jsx'
 import WeightedBenchmarks from './WeightedBenchmarks.jsx'
 import RiskReport from './RiskReport.jsx'
 import StrategyLibrary from './StrategyLibrary.jsx'
+import SyntheticLab from './SyntheticLab.jsx'
+import ForwardSim from './ForwardSim.jsx'
 import LoginScreen from './LoginScreen.jsx'
 import { useGraphHistory } from './useHistory.js'
 import {
@@ -1094,6 +1096,8 @@ export default function App() {
           {view === 'wbench' && <WeightedBenchmarks />}
           {view === 'risk' && <RiskReport />}
           {view === 'stratelib' && <StrategyLibrary />}
+          {view === 'synth' && <SyntheticLab />}
+          {view === 'fwd' && <ForwardSim />}
          </ErrorBoundary>
         </main>
       </div>

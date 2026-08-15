@@ -23,7 +23,7 @@ from ..backtest import BacktestEngine, BacktestError, BacktestReportStore, build
 from ..backtest.metrics import PerformanceMetrics
 from ..backtest.engine import EquityPoint
 from ..backtest.account import Trade
-from ..backtest.montecarlo import monte_carlo
+from ..backtest.montecarlo import monte_carlo, forward_simulate
 from ..backtest.analysis import (
     sensitivity_grid as _sensitivity_grid,
     walk_forward as _walk_forward,
@@ -40,6 +40,7 @@ from ..factors import research as factor_research
 from ..factors.registry import list_factors
 from ..market.models import Bar, Instrument
 from ..market.service import market_service
+from ..market import synthetic
 
 logger = logging.getLogger("quantflow.api.backtest")
 
@@ -525,6 +526,173 @@ def montecarlo_analysis(payload: MonteCarloRequest) -> dict:
     mc["strategy"] = strat
     mc["run_id"] = run_id
     return mc
+
+
+# --------------------------------------------------------------------------- #
+# 合成行情 + 前向模拟（V20）
+# --------------------------------------------------------------------------- #
+def _build_instruments(symbols, asset_types, multipliers) -> dict:
+    instruments = {}
+    for symbol in symbols:
+        asset_type = asset_types.get(symbol, "stock")
+        exchange = "CFFEX" if asset_type == "future" else ("SH" if asset_type == "stock" else "")
+        instruments[symbol] = Instrument(
+            symbol=symbol,
+            name="标的自定义",
+            market=asset_type,
+            exchange=exchange,
+            contract_multiplier=float(multipliers.get(symbol, 10.0)) if asset_type == "future" else 1.0,
+        )
+    return instruments
+
+
+class SyntheticGenerateRequest(BaseModel):
+    symbols: List[str] = Field(..., min_length=1, description="合成标的列表")
+    start: str = Field(..., description="起始日期 YYYY-MM-DD")
+    end: str = Field(..., description="结束日期 YYYY-MM-DD")
+    initial_prices: Dict[str, float] = Field(default_factory=dict, description="各标的初始价（默认 100）")
+    mu_annual: float = Field(default=0.08, description="年化漂移")
+    sigma_annual: float = Field(default=0.20, description="年化波动")
+    seed: Optional[int] = Field(default=42, description="随机种子")
+    regime: bool = Field(default=False, description="是否启用牛/熊状态切换")
+
+
+@router.post("/market/synthetic", summary="生成合成行情（GBM，V20）")
+def market_synthetic(payload: SyntheticGenerateRequest) -> dict:
+    if payload.end < payload.start:
+        raise HTTPException(status_code=422, detail="end 不得早于 start")
+    data = synthetic.generate_universe(
+        symbols=payload.symbols,
+        start=payload.start,
+        end=payload.end,
+        initial_prices=payload.initial_prices,
+        mu_annual=payload.mu_annual,
+        sigma_annual=payload.sigma_annual,
+        seed=payload.seed,
+        regime=payload.regime,
+    )
+    return {
+        "symbols": payload.symbols,
+        "bars": {s: [b.to_dict() for b in bars] for s, bars in data.items()},
+        "meta": {
+            "mu_annual": payload.mu_annual,
+            "sigma_annual": payload.sigma_annual,
+            "regime": payload.regime,
+            "trading_days": len(next(iter(data.values()))) if data else 0,
+        },
+    }
+
+
+class SyntheticRunRequest(BaseModel):
+    strategy: str = Field(..., description="策略名称（见 /strategies）")
+    params: Dict[str, object] = Field(default_factory=dict, description="策略参数")
+    symbols: List[str] = Field(..., min_length=1, description="合成标的")
+    start: str = Field(..., description="起始日期 YYYY-MM-DD")
+    end: str = Field(..., description="结束日期 YYYY-MM-DD")
+    initial_cash: float = Field(default=1_000_000.0, gt=0, description="初始资金")
+    initial_prices: Dict[str, float] = Field(default_factory=dict, description="各标的初始价")
+    mu_annual: float = Field(default=0.08, description="年化漂移")
+    sigma_annual: float = Field(default=0.20, description="年化波动")
+    seed: Optional[int] = Field(default=42, description="随机种子")
+    regime: bool = Field(default=False, description="牛/熊状态切换")
+    asset_types: Dict[str, str] = Field(default_factory=dict, description="资产类型覆盖")
+    multipliers: Dict[str, float] = Field(default_factory=dict, description="期货乘数")
+    benchmark_symbol: Optional[str] = Field(default=None, description="可选基准标的")
+    strategy_name: Optional[str] = Field(default=None, description="报告展示名")
+
+
+@router.post("/synthetic-run", summary="合成行情回测（无真实行情源也可回测，V20）")
+def synthetic_backtest_run(payload: SyntheticRunRequest) -> dict:
+    if payload.end < payload.start:
+        raise HTTPException(status_code=422, detail="end 不得早于 start")
+    if payload.strategy not in STRATEGY_REGISTRY:
+        raise HTTPException(
+            status_code=422,
+            detail=f"未知策略 {payload.strategy!r}，可选: {sorted(STRATEGY_REGISTRY)}",
+        )
+    data = synthetic.generate_universe(
+        symbols=payload.symbols,
+        start=payload.start,
+        end=payload.end,
+        initial_prices=payload.initial_prices,
+        mu_annual=payload.mu_annual,
+        sigma_annual=payload.sigma_annual,
+        seed=payload.seed,
+        regime=payload.regime,
+    )
+    instruments = _build_instruments(payload.symbols, payload.asset_types, payload.multipliers)
+    factory = STRATEGY_REGISTRY[payload.strategy]
+    strategy = factory(payload.params)
+    engine = BacktestEngine(strategy, data, initial_cash=payload.initial_cash, instruments=instruments)
+    result = engine.run()
+    factors = default_factors(payload.strategy)
+    benchmark_values = None
+    benchmark_curve = None
+    if payload.benchmark_symbol:
+        benchmark_values, benchmark_curve = _build_benchmark_curve(
+            payload.benchmark_symbol, payload.start, payload.end,
+            "daily", [p.date for p in result.equity_curve], payload.initial_cash,
+        )
+    report = build_report(
+        result,
+        strategy_name=payload.strategy_name or payload.strategy,
+        strategy_config=payload.params,
+        benchmark_symbol=payload.benchmark_symbol,
+        benchmark_values=benchmark_values,
+        benchmark_curve=benchmark_curve,
+        factors=factors,
+    )
+    report_store.save(report)
+    return report
+
+
+class ForwardSimRequest(BaseModel):
+    run_id: Optional[str] = Field(default=None, description="已存报告 run_id（优先）")
+    strategy: Optional[str] = Field(default=None, description="或：策略名（需配合 symbols/start/end）")
+    params: Dict[str, object] = Field(default_factory=dict, description="策略参数")
+    symbols: List[str] = Field(default_factory=list, description="回测标的")
+    start: Optional[str] = Field(default=None, description="起始日期")
+    end: Optional[str] = Field(default=None, description="结束日期")
+    initial_cash: float = Field(default=1_000_000.0, gt=0, description="初始资金")
+    horizon: int = Field(default=252, ge=1, le=1260, description="向前投影交易日数")
+    n_paths: int = Field(default=200, gt=0, le=2000, description="模拟路径条数")
+    seed: Optional[int] = Field(default=42, description="随机种子")
+    target_return: Optional[float] = Field(default=None, description="目标期末收益（计算达成概率）")
+    confidence: float = Field(default=0.9, gt=0.0, lt=1.0, description="置信带水平")
+
+
+@router.post("/forward-sim", summary="前向模拟（基于回测日收益分布向未来投影，V20）")
+def forward_simulation(payload: ForwardSimRequest) -> dict:
+    if payload.run_id:
+        try:
+            report = report_store.load(payload.run_id)
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        report = _normalize_report(report)
+        curve = report.get("equity_curve") or []
+        if not curve:
+            raise HTTPException(status_code=422, detail="该报告无净值曲线，无法模拟")
+        strat = report.get("strategy") or report.get("strategy_name") or "已存报告"
+        rid = payload.run_id
+    else:
+        if not payload.strategy or payload.strategy not in STRATEGY_REGISTRY:
+            raise HTTPException(status_code=422, detail=f"未知策略 {payload.strategy!r}")
+        if not payload.symbols or not payload.start or not payload.end:
+            raise HTTPException(status_code=422, detail="symbols / start / end 必填")
+        result = _run_engine_for_mc(payload.model_dump())
+        curve = [p.to_dict() for p in result.equity_curve]
+        strat = payload.strategy
+        rid = None
+    try:
+        fs = forward_simulate(
+            curve, horizon=payload.horizon, n_paths=payload.n_paths,
+            seed=payload.seed, target_return=payload.target_return, confidence=payload.confidence,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    fs["strategy"] = strat
+    fs["run_id"] = rid
+    return fs
 
 
 # --------------------------------------------------------------------------- #

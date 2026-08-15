@@ -19,6 +19,8 @@ const navItems = [
   { key: 'wbench', label: '加权基准', abbr: '权' },
   { key: 'risk', label: '风险指标', abbr: '险' },
   { key: 'stratelib', label: '策略库', abbr: '库' },
+  { key: 'synth', label: '合成行情', abbr: '成' },
+  { key: 'fwd', label: '前向模拟', abbr: '前' },
   { key: 'factorScore', label: '因子评分', abbr: '评' },
   { key: 'notify', label: '通知渠道', abbr: '通' },
   { key: 'llm', label: 'LLM 助手', abbr: '助' },
