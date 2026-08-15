@@ -13,6 +13,7 @@
 
 from __future__ import annotations
 
+import math
 import uuid
 from typing import Any, Dict, List
 
@@ -238,6 +239,7 @@ class PortfolioBacktest:
             "metrics": metrics.to_dict(),
             "equity_curve": combined_curve,
             "calendar": dates,
+            "risk_decomposition": _risk_decomposition(leg_curves, weights),
         }
 
 
@@ -350,3 +352,117 @@ def _combine_with_rebalance(
         prev_total = total
         prev_date = d
     return combined_curve, combined_points
+
+
+def _risk_decomposition(
+    leg_curves: List[Dict[str, Any]], weights: List[float]
+) -> Dict[str, Any]:
+    """组合风险分解（V13，欧拉波动率分解）。
+
+    用各腿对齐日历的净值序列算日收益，构建协方差矩阵 Σ：
+    - 组合日波动 σ_p = sqrt(wᵀΣw)
+    - 边际风险贡献 MCR_k = (Σw)_k / σ_p
+    - 风险贡献 RC_k = w_k · MCR_k（日），各腿求和精确等于 σ_p
+    - 相关系数矩阵 corr_kl = Σ_kl / sqrt(Σ_kk Σ_ll)
+    年化乘以 sqrt(252)。单腿或收益样本不足时退化为各腿独立波动。
+    """
+    n = len(leg_curves)
+    # 各腿日收益序列
+    rets: List[List[float]] = []
+    for lc in leg_curves:
+        s = lc.get("series", [])
+        r = []
+        for i in range(1, len(s)):
+            prev = s[i - 1].get("value", 0.0) or 0.0
+            cur = s[i].get("value", 0.0) or 0.0
+            r.append((cur / prev - 1.0) if prev else 0.0)
+        rets.append(r)
+
+    if n == 0:
+        return {
+            "portfolio_vol_annual": 0.0,
+            "per_leg_vol_annual": [],
+            "risk_contrib_annual": [],
+            "risk_contrib_pct": [],
+            "correlation": [],
+            "weights": [],
+        }
+
+    if n == 1:
+        rv = rets[0]
+        vol = _std(rv) if len(rv) >= 2 else 0.0
+        vol_annual = vol * math.sqrt(252)
+        return {
+            "portfolio_vol_annual": round(vol_annual, 6),
+            "per_leg_vol_annual": [round(vol_annual, 6)],
+            "risk_contrib_annual": [round(vol_annual, 6)],
+            "risk_contrib_pct": [1.0],
+            "correlation": [[1.0]],
+            "weights": [round(weights[0], 6)],
+        }
+
+    T = min(len(r) for r in rets)
+    if T < 2:
+        per_leg_vol = []
+        for k in range(n):
+            rv = rets[k][:T]
+            vol = _std(rv) if len(rv) >= 2 else 0.0
+            per_leg_vol.append(round(vol * math.sqrt(252), 6))
+        return {
+            "portfolio_vol_annual": 0.0,
+            "per_leg_vol_annual": per_leg_vol,
+            "risk_contrib_annual": [0.0] * n,
+            "risk_contrib_pct": [0.0] * n,
+            "correlation": [[0.0] * n for _ in range(n)],
+            "weights": [round(weights[k], 6) for k in range(n)],
+        }
+
+    R = [[rets[k][i] for i in range(T)] for k in range(n)]
+    means = [sum(R[k]) / T for k in range(n)]
+    cov: List[List[float]] = [[0.0] * n for _ in range(n)]
+    for a in range(n):
+        for b in range(a, n):
+            s = sum((R[a][i] - means[a]) * (R[b][i] - means[b]) for i in range(T)) / (T - 1)
+            cov[a][b] = cov[b][a] = s
+
+    w = [weights[k] for k in range(n)]
+    port_var = sum(w[a] * sum(w[b] * cov[a][b] for b in range(n)) for a in range(n))
+    port_vol_daily = math.sqrt(port_var) if port_var > 0 else 0.0
+    port_vol_annual = port_vol_daily * math.sqrt(252)
+
+    sw = [sum(cov[k][b] * w[b] for b in range(n)) for k in range(n)]
+    mcr = [sw[k] / port_vol_daily if port_vol_daily else 0.0 for k in range(n)]
+    rc = [w[k] * mcr[k] for k in range(n)]
+    rc_annual = [rc[k] * math.sqrt(252) for k in range(n)]
+    rc_pct = [rc[k] / port_vol_daily if port_vol_daily else 0.0 for k in range(n)]
+
+    per_leg_vol = [
+        math.sqrt(cov[k][k]) * math.sqrt(252) if cov[k][k] > 0 else 0.0 for k in range(n)
+    ]
+    corr: List[List[float]] = [[0.0] * n for _ in range(n)]
+    for a in range(n):
+        for b in range(n):
+            if a == b:
+                corr[a][b] = 1.0  # 自相关系數恒为 1（即便该腿收益方差为 0）
+                continue
+            sa = math.sqrt(cov[a][a])
+            sb = math.sqrt(cov[b][b])
+            corr[a][b] = (cov[a][b] / (sa * sb)) if (sa and sb) else 0.0
+
+    return {
+        "portfolio_vol_annual": round(port_vol_annual, 6),
+        "per_leg_vol_annual": [round(v, 6) for v in per_leg_vol],
+        "risk_contrib_annual": [round(v, 6) for v in rc_annual],
+        "risk_contrib_pct": [round(v, 6) for v in rc_pct],
+        "correlation": [[round(v, 4) for v in row] for row in corr],
+        "weights": [round(w[k], 6) for k in range(n)],
+    }
+
+
+def _std(xs: List[float]) -> float:
+    """样本标准差（ddof=1）。"""
+    n = len(xs)
+    if n < 2:
+        return 0.0
+    mean = sum(xs) / n
+    return math.sqrt(sum((x - mean) ** 2 for x in xs) / (n - 1))

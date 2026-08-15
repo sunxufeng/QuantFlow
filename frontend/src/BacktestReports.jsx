@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { backtestReport, backtestReports, exportBacktestReport, patchReport, reportFactors, reportTags } from './api.js'
+import { backtestReport, backtestReports, exportBacktestReport, fetchBars, patchReport, reportFactors, reportTags } from './api.js'
 import FuturesBacktest from './FuturesBacktest.jsx'
 import Optimizer from './Optimizer.jsx'
 
@@ -34,6 +34,126 @@ function EquityChart({ curve }) {
       <polyline points={area} fill="#15803d" fillOpacity="0.08" stroke="none" />
       <polyline points={path} fill="none" stroke="#15803d" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
     </svg>
+  )
+}
+
+function KlineChart({ bars, trades, symbol }) {
+  if (!bars || bars.length < 2) return <div className="qf-hint">该标的可用行情不足，无法绘制 K 线。</div>
+  const W = 720
+  const H = 380
+  const padL = 44
+  const padR = 12
+  const padT = 12
+  const padB = 18
+  const volH = 70
+  const priceH = H - volH - padT - padB
+  const volBase = padT + priceH + 8
+  const volBottom = volBase + volH
+  const n = bars.length
+  const step = Math.max(1, Math.floor(n / 300))
+  const idxs = []
+  for (let i = 0; i < n; i += step) idxs.push(i)
+  if (idxs[idxs.length - 1] !== n - 1) idxs.push(n - 1)
+  const bs = idxs.map((i) => bars[i])
+  const closes = bars.map((b) => Number(b.close) || 0)
+  const lo = Math.min(...bars.map((b) => Number(b.low) || 0))
+  const hi = Math.max(...bars.map((b) => Number(b.high) || 0))
+  const span = hi - lo || 1
+  const x = (k) => padL + (k / (idxs.length - 1)) * (W - padL - padR)
+  const y = (v) => padT + (1 - (v - lo) / span) * priceH
+  const ma = (period) =>
+    closes.map((_, i) => {
+      if (i < period - 1) return null
+      let s = 0
+      for (let j = i - period + 1; j <= i; j++) s += closes[j]
+      return s / period
+    })
+  const ma5 = ma(5)
+  const ma20 = ma(20)
+  const ma60 = ma(60)
+  const maLine = (arr) =>
+    idxs
+      .map((i, k) => {
+        const v = arr[i]
+        if (v == null) return ''
+        return `${k === 0 ? 'M' : 'L'}${x(k).toFixed(1)},${y(v).toFixed(1)}`
+      })
+      .filter(Boolean)
+      .join(' ')
+  const vols = bars.map((b) => Number(b.volume) || 0)
+  const maxVol = Math.max(...vols, 1)
+  const volY = (v) => volBase + (1 - v / maxVol) * volH
+  const dateIdx = {}
+  bars.forEach((b, i) => { dateIdx[b.date] = i })
+  const markers = (trades || [])
+    .filter((t) => t.symbol === symbol)
+    .map((t) => {
+      const i = dateIdx[t.date]
+      if (i == null) return null
+      const k = idxs.indexOf(i)
+      if (k < 0) return null
+      const up = t.side === 'buy'
+      const yy = up ? y(bars[i].high) - 9 : y(bars[i].low) + 9
+      return { k, cx: x(k), cy: yy, up }
+    })
+    .filter(Boolean)
+  const cw = Math.max(2, ((W - padL - padR) / idxs.length) * 0.6)
+  return (
+    <div>
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ width: '100%', height: H }}>
+        <line x1={padL} y1={padT} x2={padL} y2={padT + priceH} stroke="#cbd5e1" />
+        <line x1={padL} y1={volBase} x2={W - padR} y2={volBase} stroke="#e2e8f0" />
+        {bs.map((b, k) => {
+          const up = Number(b.close) >= Number(b.open)
+          const color = up ? '#15803d' : '#dc2626'
+          const yO = y(Number(b.open))
+          const yC = y(Number(b.close))
+          const top = Math.min(yO, yC)
+          const h = Math.max(1, Math.abs(yC - yO))
+          return (
+            <g key={k}>
+              <line x1={x(k)} y1={y(Number(b.high))} x2={x(k)} y2={y(Number(b.low))} stroke={color} strokeWidth="1" vectorEffect="non-scaling-stroke" />
+              <rect x={x(k) - cw / 2} y={top} width={cw} height={h} fill={color} />
+            </g>
+          )
+        })}
+        <path d={maLine(ma5)} fill="none" stroke="#d97706" strokeWidth="1.4" vectorEffect="non-scaling-stroke" />
+        <path d={maLine(ma20)} fill="none" stroke="#2563eb" strokeWidth="1.4" vectorEffect="non-scaling-stroke" />
+        <path d={maLine(ma60)} fill="none" stroke="#7c3aed" strokeWidth="1.4" vectorEffect="non-scaling-stroke" />
+        {bs.map((b, k) => {
+          const up = Number(b.close) >= Number(b.open)
+          return (
+            <rect
+              key={k}
+              x={x(k) - cw / 2}
+              y={volY(Number(b.volume) || 0)}
+              width={cw}
+              height={volBottom - volY(Number(b.volume) || 0)}
+              fill={up ? '#86efac' : '#fca5a5'}
+              opacity="0.7"
+            />
+          )
+        })}
+        {markers.map((mk, i) => (
+          <path
+            key={i}
+            d={mk.up ? `M${mk.cx},${mk.cy} l-5,8 l10,0 z` : `M${mk.cx},${mk.cy} l-5,-8 l10,0 z`}
+            fill={mk.up ? '#15803d' : '#dc2626'}
+          />
+        ))}
+        <text x={padL} y={padT - 2} fill="#64748b" fontSize="10">{hi.toFixed(2)}</text>
+        <text x={padL} y={padT + priceH - 2} fill="#64748b" fontSize="10">{lo.toFixed(2)}</text>
+        <text x={W - padR} y={H - 4} fill="#64748b" fontSize="9" textAnchor="end">{bs[bs.length - 1]?.date}</text>
+        <text x={padL} y={H - 4} fill="#64748b" fontSize="9">{bs[0]?.date}</text>
+      </svg>
+      <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginTop: 4, fontSize: 11 }}>
+        <span style={{ color: '#d97706' }}>— MA5</span>
+        <span style={{ color: '#2563eb' }}>— MA20</span>
+        <span style={{ color: '#7c3aed' }}>— MA60</span>
+        <span style={{ color: '#15803d' }}>▲ 买入</span>
+        <span style={{ color: '#dc2626' }}>▼ 卖出</span>
+      </div>
+    </div>
   )
 }
 
@@ -74,6 +194,9 @@ export default function BacktestReports() {
   const [savingTag, setSavingTag] = useState(false)
   const [factorData, setFactorData] = useState(null)
   const [factorLoading, setFactorLoading] = useState(false)
+  const [klineSymbol, setKlineSymbol] = useState('')
+  const [klineBars, setKlineBars] = useState(null)
+  const [klineLoading, setKlineLoading] = useState(false)
 
   const refresh = useCallback(() => {
     setLoading(true)
@@ -88,6 +211,20 @@ export default function BacktestReports() {
     refresh()
     reportTags().then((r) => setAllTags((r.items || []).map((it) => it[0]))).catch(() => {})
   }, [refresh])
+
+  // K 线 / 信号：随报告或所选标的变化拉取行情
+  useEffect(() => {
+    if (!detail) return
+    const syms = detail.symbols || []
+    if (syms.length === 0) { setKlineBars(null); return }
+    const sym = syms.includes(klineSymbol) ? klineSymbol : syms[0]
+    if (sym !== klineSymbol) { setKlineSymbol(sym); return }
+    setKlineLoading(true)
+    fetchBars(sym, detail.start_date, detail.end_date)
+      .then((d) => setKlineBars(d.bars || []))
+      .catch(() => setKlineBars([]))
+      .finally(() => setKlineLoading(false))
+  }, [detail, klineSymbol])
 
   const openDetail = useCallback((runId) => {
     setDetailLoading(true)
@@ -278,6 +415,27 @@ export default function BacktestReports() {
               <span> ｜ 关联因子：{detail.factors.join(', ')}</span>
             )}
           </div>
+
+          <div className="qf-an-title">K 线 / 技术指标 / 买卖信号（V13）</div>
+          {(detail.symbols || []).length > 0 && (
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 12, color: '#94a3b8' }}>标的：</span>
+              {(detail.symbols || []).map((s) => (
+                <button
+                  key={s}
+                  className={s === klineSymbol ? 'qf-btn qf-btn-primary qf-btn-sm' : 'qf-btn qf-btn-sm'}
+                  onClick={() => setKlineSymbol(s)}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          )}
+          {klineLoading && <div className="qf-busy">行情加载中…</div>}
+          {!klineLoading && klineSymbol && (
+            <KlineChart bars={klineBars || []} trades={detail.trades || []} symbol={klineSymbol} />
+          )}
+          {(detail.symbols || []).length === 0 && <div className="qf-hint">该报告无标的行情可绘制。</div>}
 
           {Array.isArray(detail.factors) && detail.factors.length > 0 && (
             <>

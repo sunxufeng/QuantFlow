@@ -141,6 +141,78 @@ function AttributionTable({ legs, attribution }) {
   )
 }
 
+function RiskDecomp({ risk, legs }) {
+  if (!risk) return null
+  const n = (risk.risk_contrib_pct || []).length
+  if (n === 0) return null
+  const maxPct = Math.max(1e-6, ...risk.risk_contrib_pct.map((v) => Math.abs(v)))
+  return (
+    <div className="qf-an-block">
+      <div className="qf-an-title">
+        风险分解（V13 · 欧拉波动率分解，各腿风险贡献之和 = 组合波动）
+      </div>
+      <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 6 }}>
+        组合年化波动率：<b style={{ color: '#0f172a' }}>{(risk.portfolio_vol_annual * 100).toFixed(2)}%</b>
+      </div>
+      <table className="qf-state-table" style={{ marginTop: 6 }}>
+        <thead>
+          <tr>
+            <th>腿</th><th>策略</th><th>权重</th><th>腿年化波动</th>
+            <th>风险贡献(年化)</th><th>风险贡献占比</th>
+          </tr>
+        </thead>
+        <tbody>
+          {risk.risk_contrib_pct.map((pct, k) => {
+            const lg = (legs || []).find((l) => l.index === k) || {}
+            return (
+              <tr key={k}>
+                <td>{k}</td>
+                <td>{lg.strategy || ''}</td>
+                <td>{((risk.weights?.[k] || 0) * 100).toFixed(1)}%</td>
+                <td>{((risk.per_leg_vol_annual?.[k] || 0) * 100).toFixed(2)}%</td>
+                <td>{((risk.risk_contrib_annual?.[k] || 0) * 100).toFixed(2)}%</td>
+                <td>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <div style={{
+                      width: `${Math.max(2, (Math.abs(pct) / maxPct) * 120)}px`,
+                      height: 10, borderRadius: 3,
+                      background: pct >= 0 ? '#2563eb' : '#dc2626',
+                    }} />
+                    <span>{(pct * 100).toFixed(1)}%</span>
+                  </div>
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+      {n > 1 && (
+        <div style={{ marginTop: 10 }}>
+          <div className="qf-an-title" style={{ fontSize: 12 }}>相关系数矩阵</div>
+          <table className="qf-state-table" style={{ marginTop: 4, width: 'auto' }}>
+            <thead>
+              <tr><th></th>{risk.correlation.map((_, k) => <th key={k}>腿{k}</th>)}</tr>
+            </thead>
+            <tbody>
+              {risk.correlation.map((row, a) => (
+                <tr key={a}>
+                  <td>腿{a}</td>
+                  {row.map((v, b) => (
+                    <td key={b} style={{
+                      color: a === b ? '#0f172a' : (v >= 0 ? '#15803d' : '#dc2626'),
+                      fontWeight: a === b ? 700 : 400,
+                    }}>{v.toFixed(2)}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function Portfolio() {
   const [strategies, setStrategies] = useState([])
   const [legs, setLegs] = useState([{ ...DEFAULT_LEG }])
@@ -206,7 +278,7 @@ export default function Portfolio() {
   return (
     <div className="qf-monitor" style={{ padding: 16 }}>
         <div className="qf-result-head">
-          <h3>组合回测（V12 · 多腿 + 再平衡 + 绩效归因）</h3>
+          <h3>组合回测（V13 · 多腿 + 再平衡 + 绩效归因 + 风险分解）</h3>
         </div>
       <form className="qf-prop-form" onSubmit={run} style={{ maxWidth: 860 }}>
         <div className="qf-hint" style={{ marginBottom: 8 }}>
@@ -349,6 +421,11 @@ export default function Portfolio() {
           </div>
           <AttributionChart attribution={result.attribution} />
           <AttributionTable legs={result.legs} attribution={result.attribution} />
+
+          <div className="qf-an-title" style={{ marginTop: 16 }}>
+            风险分解（V13 · 组合波动按各腿贡献拆解）
+          </div>
+          <RiskDecomp risk={result.risk_decomposition} legs={result.legs} />
 
           <div className="qf-hint" style={{ marginTop: 8 }}>
             期末配置占比：

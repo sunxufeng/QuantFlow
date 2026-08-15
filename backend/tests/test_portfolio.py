@@ -250,3 +250,56 @@ class TestPortfolioAttribution:
         assert "attribution" in d
         assert "leg_curves" in d
         assert len(d["attribution"]["by_leg"]) == 2
+
+
+class TestPortfolioRiskDecomposition:
+    """V13 组合风险分解：各腿风险贡献（年化）之和精确等于组合年化波动。"""
+
+    def _report(self, rebalance: str) -> Dict[str, Any]:
+        legs = [{**FUND_LEG, "weight": 0.5}, {**STOCK_LEG, "weight": 0.5}]
+        return PortfolioBacktest(
+            legs, initial_cash=200_000, start=START, end=END, rebalance=rebalance
+        ).run()
+
+    def test_risk_decomposition_shape(self):
+        rd = self._report("none")["risk_decomposition"]
+        assert "portfolio_vol_annual" in rd
+        assert len(rd["per_leg_vol_annual"]) == 2
+        assert len(rd["risk_contrib_annual"]) == 2
+        assert len(rd["risk_contrib_pct"]) == 2
+        assert len(rd["correlation"]) == 2 and len(rd["correlation"][0]) == 2
+
+    def test_risk_contrib_sum_equals_portfolio_vol(self):
+        rd = self._report("none")["risk_decomposition"]
+        s = sum(rd["risk_contrib_annual"])
+        assert s == pytest.approx(rd["portfolio_vol_annual"], abs=1e-4)
+
+    def test_risk_contrib_pct_sums_to_one(self):
+        rd = self._report("M")["risk_decomposition"]
+        assert sum(rd["risk_contrib_pct"]) == pytest.approx(1.0, abs=1e-6)
+
+    def test_correlation_diagonal_is_one(self):
+        rd = self._report("none")["risk_decomposition"]
+        for i in range(len(rd["correlation"])):
+            assert rd["correlation"][i][i] == pytest.approx(1.0, abs=1e-6)
+
+    def test_single_leg_risk_equals_its_vol(self):
+        legs = [{**FUND_LEG, "weight": 1.0}]
+        rd = PortfolioBacktest(legs, initial_cash=150_000, start=START, end=END).run()["risk_decomposition"]
+        assert rd["risk_contrib_pct"] == [1.0]
+        assert rd["portfolio_vol_annual"] == pytest.approx(rd["per_leg_vol_annual"][0], abs=1e-6)
+
+    def test_risk_decomposition_exposed_via_api(self, client):
+        resp = client.post(
+            "/api/backtest/portfolio",
+            json={
+                "legs": [{**FUND_LEG, "weight": 0.5}, {**STOCK_LEG, "weight": 0.5}],
+                "initial_cash": 200_000,
+                "start": START,
+                "end": END,
+                "rebalance": "none",
+            },
+        )
+        d = resp.json()
+        assert "risk_decomposition" in d
+        assert len(d["risk_decomposition"]["risk_contrib_annual"]) == 2
