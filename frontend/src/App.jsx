@@ -748,6 +748,9 @@ function Canvas({ projectId, pendingTemplate, onTemplateConsumed, setView }) {
             onPaneClick={onPaneClick}
             onNodesDelete={onNodesDelete}
             fitView
+            fitViewOptions={{ padding: 0.2, maxZoom: 1 }}
+            minZoom={0.4}
+            maxZoom={1.5}
           >
             <Background gap={16} />
             <Controls />
