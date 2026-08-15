@@ -184,6 +184,19 @@
   flex: 1; min-width: 0; padding: 1px 4px; border: 1px solid #cbd5e1;
   border-radius: 3px; font-size: 9px; background: #fff;
 }
+.qf-param-output { position: relative; padding-right: 10px; }
+.qf-param-output span { color: var(--primary); font-weight: 600; }
+.qf-inline-handle {
+  position: absolute !important;
+  right: -2px !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+  left: auto !important;
+  width: 8px !important;
+  height: 8px !important;
+  border: 2px solid #fff !important;
+  border-radius: 50% !important;
+}
 .qf-node-outputs { border-top: 1px dashed var(--border); margin-top: 4px; padding-top: 4px; }
 .qf-output-row { display: flex; gap: 4px; align-items: flex-start; font-size: 9px; }
 .qf-output-name { color: var(--primary); font-weight: 600; flex-shrink: 0; }
