@@ -7,6 +7,8 @@ const BROKERS = [
   { value: 'universal', label: '通用券商（OpenAPI 兼容）' },
   { value: 'easytrade', label: 'EasyTrade 类柜台' },
   { value: 'xuntou', label: '迅投 / QMT 类柜台' },
+  { value: 'qmt', label: 'QMT（miniQmt / xt_trader，需 QF_QMT_ACCOUNT + SDK）' },
+  { value: 'ctp', label: 'CTP（期货/期权柜台，需 QF_CTP_USER + pyctp SDK）' },
 ]
 
 export default function BrokerSettings() {

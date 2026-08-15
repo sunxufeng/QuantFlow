@@ -214,28 +214,45 @@ class LiveExecutionGateway(BaseExecutionGateway):
         self._broker = cfg.get("broker") or os.getenv("QF_BROKER", "simulated-broker")
         self._base_url = cfg.get("base_url") or os.getenv("QF_BROKER_BASE_URL", "")
         self._account_id = cfg.get("account_id") or os.getenv("QF_BROKER_ACCOUNT", "")
+        # V31：按券商类型装配真实连接器（QMT/CTP/通用），未配置则为 None
+        from ..core.broker.registry import get_live_connector
+        self._connector = get_live_connector(cfg)
 
     def _ensure_configured(self) -> None:
-        if not self._api_key:
+        if self._connector is not None and self._connector.is_configured():
+            return
+        if not self._api_key and self._connector is None:
             raise GatewayNotConfigured(
-                "实盘网关未配置：设置 QF_BROKER_API_KEY 与 QF_BROKER 后方可启用 live 模式"
+                "实盘网关未配置：在「券商设置」中选择真实券商（qmt/ctp 等）并填写凭证"
             )
 
     def submit_order(self, order: Order, last_price: Optional[float] = None) -> Fill:
         self._ensure_configured()
+        if self._connector is not None and self._connector.is_configured():
+            return self._connector.submit_order(order, last_price)
         raise NotImplementedError("LiveExecutionGateway 真实券商接入待实现（凭证就绪时补齐）")
 
     def get_positions(self) -> List[Position]:
         self._ensure_configured()
+        if self._connector is not None and self._connector.is_configured():
+            return self._connector.get_positions()
         raise NotImplementedError("LiveExecutionGateway 真实券商接入待实现（凭证就绪时补齐）")
 
     def get_account(self, prices: Optional[Dict[str, float]] = None) -> dict:
         self._ensure_configured()
+        if self._connector is not None and self._connector.is_configured():
+            return self._connector.get_account(prices)
+        raise NotImplementedError("LiveExecutionGateway 真实券商接入待实现（凭证就绪时补齐）")
+
+    def get_fills(self) -> List[dict]:
+        self._ensure_configured()
+        if self._connector is not None and self._connector.is_configured():
+            return self._connector.get_fills()
         raise NotImplementedError("LiveExecutionGateway 真实券商接入待实现（凭证就绪时补齐）")
 
     def reset(self, cash: float) -> None:
         self._ensure_configured()
-        raise NotImplementedError("LiveExecutionGateway 真实券商接入待实现（凭证就绪时补齐）")
+        raise NotImplementedError("LiveExecutionGateway 为实盘，不支持本地重置")
 
 
 _GATEWAY: Optional[BaseExecutionGateway] = None

@@ -239,6 +239,8 @@ export const getStressScenarios = () => request('/backtest/stress-scenarios')
 export const runStressTest = (payload) => request('/backtest/stress-test', { method: 'POST', body: JSON.stringify(payload) })
 export const getFactorBacktestCatalog = () => request('/factors/backtest/catalog')
 export const runFactorBacktest = (payload) => request('/factors/backtest', { method: 'POST', body: JSON.stringify(payload) })
+export const getLivePositions = () => request('/trading/live/positions')
+export const getLiveFills = () => request('/trading/live/fills')
 
 // ---- 因子库 CRUD（V1.1 N3）----
 export const factorLibraryList = (category) => request(

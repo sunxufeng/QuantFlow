@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { brokerGetConfig, getToken } from './api.js'
+import { brokerGetConfig, getToken, getLivePositions, getLiveFills } from './api.js'
 
 const SYMBOL_HINT = '示例：600519（贵州茅台）、000001（平安银行）、AAPL'
 
@@ -24,6 +24,8 @@ export default function Trading({ onNavigate }) {
   const [account, setAccount] = useState(null)
   const [resetCash, setResetCash] = useState('')
   const [resetMsg, setResetMsg] = useState('')
+  const [livePositions, setLivePositions] = useState([])
+  const [liveFills, setLiveFills] = useState([])
 
   const load = useCallback(() => {
     return Promise.all([
@@ -55,6 +57,10 @@ export default function Trading({ onNavigate }) {
       .then(r => r.json())
       .then(setLiveStatus)
       .catch(() => {})
+    if (liveCapable) {
+      getLivePositions().then(setLivePositions).catch(() => setLivePositions([]))
+      getLiveFills().then(setLiveFills).catch(() => setLiveFills([]))
+    }
   }, [load])
 
   const submit = async (e) => {
@@ -231,8 +237,50 @@ export default function Trading({ onNavigate }) {
 
       {mode === 'live' && liveCapable && (
         <div className="qf-hint" style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', padding: 10, borderRadius: 8, marginBottom: 12 }}>
-          实盘已具备条件（券商：{liveStatus?.broker}）。真实下单已接入执行网关，券商 SDK 待凭证就绪后启用；
-          当前下单会返回 501（接入点已就位），不影响模拟交易。
+          实盘已具备条件（券商：{liveStatus?.broker}）。真实下单/查询已接入 {liveStatus?.broker?.toUpperCase()} 连接器，凭证就绪后直接连线真实柜台。
+        </div>
+      )}
+
+      {mode === 'live' && liveCapable && (
+        <div style={{ display: 'flex', gap: 16, marginTop: 12, flexWrap: 'wrap' }}>
+          <div style={{ flex: '1 1 320px', minWidth: 300, border: '1px solid var(--border)', borderRadius: 10, padding: 14, background: '#fff' }}>
+            <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text)', marginBottom: 10 }}>实盘持仓（{liveStatus?.broker?.toUpperCase()} 柜台）</div>
+            {livePositions.length === 0 && <div className="qf-prop-hint">暂无实盘持仓</div>}
+            {livePositions.length > 0 && (
+              <table className="qf-state-table">
+                <thead><tr><th>标的</th><th>数量</th><th>均价</th><th>市值</th></tr></thead>
+                <tbody>
+                  {livePositions.map((p, i) => (
+                    <tr key={p.symbol || i}>
+                      <td>{p.symbol}</td>
+                      <td style={{ color: Number(p.quantity) >= 0 ? '#16a34a' : '#e11d48' }}>{Number(p.quantity).toLocaleString()}</td>
+                      <td>{Number(p.avg_cost).toFixed(2)}</td>
+                      <td>{p.market_value != null ? Number(p.market_value).toLocaleString() : '-'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+          <div style={{ flex: '1 1 320px', minWidth: 300, border: '1px solid var(--border)', borderRadius: 10, padding: 14, background: '#fff' }}>
+            <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text)', marginBottom: 10 }}>实盘成交</div>
+            {liveFills.length === 0 && <div className="qf-prop-hint">暂无实盘成交</div>}
+            {liveFills.length > 0 && (
+              <table className="qf-state-table">
+                <thead><tr><th>标的</th><th>方向</th><th>数量</th><th>价格</th></tr></thead>
+                <tbody>
+                  {liveFills.map((f, i) => (
+                    <tr key={i}>
+                      <td>{f.symbol}</td>
+                      <td style={{ color: f.side === 'buy' ? '#16a34a' : '#e11d48' }}>{f.side === 'buy' ? '买' : '卖'}</td>
+                      <td>{Number(f.quantity).toLocaleString()}</td>
+                      <td>{Number(f.price).toFixed(2)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
         </div>
       )}
 

@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from ..core.auth import get_current_user
+from ..execution.gateway import GatewayNotConfigured
 from ..trading import engine
 from ..trading import store
 
@@ -46,6 +47,28 @@ def get_mode(user: Dict[str, Any] = Depends(get_current_user)):
 @router.get("/trading/live/status")
 def get_live_status(user: Dict[str, Any] = Depends(get_current_user)):
     return engine.live_status()
+
+
+@router.get("/trading/live/positions")
+def get_live_positions(user: Dict[str, Any] = Depends(get_current_user)):
+    """V31 实盘持仓：经 QMT/CTP 连接器查询真实柜台；未配置返回 409。"""
+    try:
+        return engine.live_positions()
+    except GatewayNotConfigured as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    except NotImplementedError:
+        raise HTTPException(status_code=501, detail="实盘持仓查询待券商 SDK 就绪后启用")
+
+
+@router.get("/trading/live/fills")
+def get_live_fills(user: Dict[str, Any] = Depends(get_current_user)):
+    """V31 实盘成交：经 QMT/CTP 连接器查询真实柜台；未配置返回 409。"""
+    try:
+        return engine.live_fills()
+    except GatewayNotConfigured as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    except NotImplementedError:
+        raise HTTPException(status_code=501, detail="实盘成交查询待券商 SDK 就绪后启用")
 
 
 @router.post("/trading/live/orders")

@@ -213,31 +213,51 @@ def simulate_tick(user_id: str, price_overrides: dict = None):
 
 
 def live_capable() -> bool:
-    """是否具备实盘条件：配置了真实券商且已填 api_key。"""
+    """是否具备实盘条件：配置了真实券商且连接器就绪（SDK + 凭证）。"""
     cfg = load_broker_config()
-    return cfg.get("broker") in ("universal", "easytrade", "xuntou") and bool(cfg.get("api_key"))
+    broker = cfg.get("broker", "none")
+    if broker in ("qmt", "ctp"):
+        from ..core.broker.registry import get_live_connector
+        conn = get_live_connector(cfg)
+        return conn.is_configured() if conn is not None else False
+    # universal / easytrade / xuntou 等通用 REST 柜台：凭证(api_key)齐备即视为可配置
+    if broker in ("universal", "easytrade", "xuntou"):
+        return bool(cfg.get("api_key"))
+    return bool(cfg.get("api_key"))
 
 
 def live_broker() -> str:
     return load_broker_config().get("broker", "none")
 
 
+def _live_connector():
+    cfg = load_broker_config()
+    from ..core.broker.registry import get_live_connector
+    return get_live_connector(cfg)
+
+
 def live_status() -> dict:
-    """V2.0 实盘就绪详情：列出缺失的凭证字段与可读提示（真实下单仍待券商 SDK）。"""
+    """V31 实盘就绪详情：列出缺失的凭证字段与可读提示，按券商类型区分（QMT/CTP/通用）。"""
     cfg = load_broker_config()
     broker = cfg.get("broker", "none")
     capable = live_capable()
     missing = []
-    if broker not in ("universal", "easytrade", "xuntou"):
-        missing.append("broker(需 universal/easytrade/xuntou)")
-    if not cfg.get("api_key"):
-        missing.append("api_key")
-    if not cfg.get("api_secret"):
-        missing.append("api_secret")
-    if not cfg.get("base_url"):
-        missing.append("base_url")
-    if not cfg.get("account_id"):
-        missing.append("account_id")
+    if broker in ("qmt", "ctp", "universal", "easytrade", "xuntou"):
+        if broker == "qmt" and not cfg.get("api_key") and not __import__("os").environ.get("QF_QMT_ACCOUNT"):
+            missing.append("QF_QMT_ACCOUNT(资金账号)+xt_trader SDK")
+        elif broker == "ctp" and not __import__("os").environ.get("QF_CTP_USER"):
+            missing.append("QF_CTP_USER/QF_CTP_BROKER_ID/QF_CTP_TD_FRONT + pyctp SDK")
+        if broker in ("universal", "easytrade", "xuntou"):
+            if not cfg.get("api_key"):
+                missing.append("api_key")
+            if not cfg.get("api_secret"):
+                missing.append("api_secret")
+            if not cfg.get("base_url"):
+                missing.append("base_url")
+            if not cfg.get("account_id"):
+                missing.append("account_id")
+    elif broker not in ("none", "simulated"):
+        missing.append("broker(需 qmt/ctp/universal/easytrade/xuntou)")
     message = "实盘已就绪" if capable else ("缺少凭证：" + "、".join(missing) if missing else "未配置券商")
     return {
         "live_capable": capable,
@@ -249,6 +269,20 @@ def live_status() -> dict:
         "missing": missing,
         "message": message,
     }
+
+
+def live_positions() -> list:
+    """实盘持仓（经连接器查询真实柜台；未配置时抛 GatewayNotConfigured）。"""
+    from ..execution.gateway import LiveExecutionGateway
+    gw = LiveExecutionGateway()
+    return [p.to_dict() for p in gw.get_positions()]
+
+
+def live_fills() -> list:
+    """实盘成交（经连接器查询真实柜台；未配置时抛 GatewayNotConfigured）。"""
+    from ..execution.gateway import LiveExecutionGateway
+    gw = LiveExecutionGateway()
+    return gw.get_fills()
 
 
 def place_live_order(user_id, symbol, side, otype, qty, price=None):

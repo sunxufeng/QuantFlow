@@ -23,7 +23,7 @@ from ..settings_store import get_setting, set_setting
 
 BROKER_CONFIG_KEY = "broker.config"
 
-SUPPORTED_BROKERS = ("none", "simulated", "universal", "easytrade", "xuntou")
+SUPPORTED_BROKERS = ("none", "simulated", "universal", "easytrade", "xuntou", "qmt", "ctp")
 
 
 def default_broker_config() -> Dict[str, Any]:

@@ -20,8 +20,12 @@ def clean_db():
     """每个用例前清空业务表与日志缓冲，保证用例相互独立。"""
     from app.core.db import db
     from app.core.logging_store import LOG_STORE
+    from app.trading import store as trading_store
 
     db.reset()
+    # trading_* 表由 trading.store.init() 单独创建（主 schema 不含），
+    # 确保直接 INSERT trading_fills 等表的用例可用。init 幂等（IF NOT EXISTS + 守卫）。
+    trading_store.init()
     LOG_STORE._records.clear()
     yield
     db.reset()

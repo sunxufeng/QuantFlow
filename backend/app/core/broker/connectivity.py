@@ -19,6 +19,19 @@ def test_broker_config(cfg: Dict[str, Any]) -> Dict[str, Any]:
     base_url = (cfg.get("base_url") or "").strip()
 
     if broker in (None, "", "none") or not api_key:
+        # QMT/CTP 不依赖页面 api_key，而依赖环境变量凭证；单独判断
+        if broker in ("qmt", "ctp"):
+            import os
+            if broker == "qmt" and os.getenv("QF_QMT_ACCOUNT"):
+                return {
+                    "ok": True, "broker": broker, "configured": True,
+                    "detail": "QMT 已识别资金账号（QF_QMT_ACCOUNT）；xt_trader SDK 安装后可直接接入。",
+                }
+            if broker == "ctp" and os.getenv("QF_CTP_USER"):
+                return {
+                    "ok": True, "broker": broker, "configured": True,
+                    "detail": "CTP 已识别交易账号（QF_CTP_USER）；pyctp SDK 安装后可直接接入。",
+                }
         return {
             "ok": False,
             "broker": broker,
@@ -34,7 +47,16 @@ def test_broker_config(cfg: Dict[str, Any]) -> Dict[str, Any]:
             "detail": "模拟盘模式：无需外部凭证，本地撮合即可运行。",
         }
 
-    # 真实券商：凭证齐备时做可达性探测
+    if broker in ("qmt", "ctp"):
+        # QMT/CTP 走本地 SDK，不做 HTTP 可达性探测，仅确认连接器已识别
+        return {
+            "ok": True,
+            "broker": broker,
+            "configured": True,
+            "detail": f"{broker.upper()} 连接器已识别；安装对应 SDK 并配置账号后即可实盘接入。",
+        }
+
+    # 真实券商（通用 REST 类）：凭证齐备时做可达性探测
     if not base_url:
         return {
             "ok": False,
