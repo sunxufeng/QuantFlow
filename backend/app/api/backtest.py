@@ -21,6 +21,7 @@ from pydantic import BaseModel, Field
 
 from ..backtest import BacktestEngine, BacktestError, BacktestReportStore, build_report
 from ..backtest.metrics import PerformanceMetrics
+from ..backtest.montecarlo import monte_carlo
 from ..backtest.optimizer import OptimizeConfigError, optimize
 from ..backtest.portfolio import PortfolioBacktest
 from ..backtest.strategies import STRATEGY_REGISTRY, default_factors
@@ -388,6 +389,128 @@ def sensitivity_analysis(payload: SensitivityRequest) -> dict:
         "metric": payload.metric,
         "points": results,
     }
+
+
+# --------------------------------------------------------------------------- #
+# 蒙特卡洛鲁棒性模拟（V15）
+# --------------------------------------------------------------------------- #
+def _run_engine_for_mc(spec: dict) -> "BacktestResult":
+    """复用 /run 的行情拉取 + 建仓 + 运行逻辑，返回引擎结果（供蒙特卡洛重采样）。
+
+    与普通 /run 的不同：不生成/落盘报告，只返回引擎结果对象。
+    """
+    from ..backtest.engine import BacktestResult  # noqa: F811
+
+    data: Dict[str, List[Bar]] = {}
+    symbols = spec.get("symbols") or []
+    start = spec.get("start")
+    end = spec.get("end")
+    interval = spec.get("interval", "daily")
+    asset_types = spec.get("asset_types", {}) or {}
+    multipliers = spec.get("multipliers", {}) or {}
+    initial_cash = float(spec.get("initial_cash", 1_000_000.0))
+    for symbol in symbols:
+        try:
+            bars = market_service.bars(symbol, start, end, interval=interval)
+        except Exception as exc:
+            raise HTTPException(status_code=503, detail=f"行情获取失败: {symbol}") from exc
+        if not bars:
+            raise HTTPException(
+                status_code=422,
+                detail=f"标的 {symbol} 在 {start}~{end} 无行情数据",
+            )
+        data[symbol] = bars
+
+    instruments: Dict[str, Instrument] = {}
+    for symbol in symbols:
+        asset_type = asset_types.get(symbol, "stock")
+        exchange = "CFFEX" if asset_type == "future" else ("SH" if asset_type == "stock" else "")
+        instruments[symbol] = Instrument(
+            symbol=symbol,
+            name="标的自定义",
+            market=asset_type,
+            exchange=exchange,
+            contract_multiplier=float(multipliers.get(symbol, 10.0)) if asset_type == "future" else 1.0,
+        )
+
+    factory = STRATEGY_REGISTRY[spec["strategy"]]
+    strategy = factory(spec.get("params", {}) or {})
+    engine = BacktestEngine(
+        strategy, data, initial_cash=initial_cash, instruments=instruments
+    )
+    result: BacktestResult = engine.run()
+    return result
+
+
+class MonteCarloRequest(BaseModel):
+    run_id: Optional[str] = Field(
+        default=None, description="已存报告 run_id（优先）：基于其净值曲线做模拟"
+    )
+    # 运行参数（run_id 为空时必填，等价于 /run 的运行部分）
+    strategy: Optional[str] = Field(default=None, description="策略名称（见 /strategies）")
+    params: Dict[str, object] = Field(default_factory=dict, description="策略参数")
+    symbols: List[str] = Field(default_factory=list, description="回测标的")
+    start: Optional[str] = Field(default=None, description="起始日期 YYYY-MM-DD")
+    end: Optional[str] = Field(default=None, description="结束日期 YYYY-MM-DD")
+    initial_cash: float = Field(default=1_000_000.0, gt=0, description="初始资金")
+    asset_types: Dict[str, str] = Field(default_factory=dict, description="标的资产类型覆盖")
+    multipliers: Dict[str, float] = Field(default_factory=dict, description="期货合约乘数覆盖")
+    interval: str = Field(default="daily", description="行情频率：daily / minute")
+    n_sims: int = Field(default=200, gt=0, le=2000, description="模拟路径条数")
+    seed: Optional[int] = Field(default=42, description="随机种子（固定可复现）")
+    confidence: float = Field(default=0.9, gt=0.0, lt=1.0, description="置信带水平（0.9 -> P5~P95）")
+    block_size: int = Field(default=1, ge=1, le=60, description="块自助块大小（1=普通自助）")
+
+
+@router.post("/montecarlo", summary="蒙特卡洛鲁棒性模拟（V15）")
+def montecarlo_analysis(payload: MonteCarloRequest) -> dict:
+    if payload.run_id:
+        try:
+            report = report_store.load(payload.run_id)
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        report = _normalize_report(report)
+        curve = report.get("equity_curve") or []
+        if not curve:
+            raise HTTPException(status_code=422, detail="该报告无净值曲线，无法模拟")
+        initial = curve[0].get("total_value") or payload.initial_cash
+        strat = report.get("strategy") or report.get("strategy_name") or "已存报告"
+        run_id = payload.run_id
+    else:
+        if not payload.strategy or payload.strategy not in STRATEGY_REGISTRY:
+            raise HTTPException(
+                status_code=422,
+                detail=f"未知策略 {payload.strategy!r}，可选: {sorted(STRATEGY_REGISTRY)}",
+            )
+        if not payload.symbols:
+            raise HTTPException(status_code=422, detail="symbols 不能为空")
+        if not payload.start or not payload.end:
+            raise HTTPException(status_code=422, detail="start / end 必填")
+        if payload.end < payload.start:
+            raise HTTPException(status_code=422, detail="end 不得早于 start")
+        if payload.interval not in ("daily", "minute"):
+            raise HTTPException(status_code=422, detail=f"不支持的行情频率 {payload.interval!r}")
+        result = _run_engine_for_mc(payload.model_dump())
+        curve = [p.to_dict() for p in result.equity_curve]
+        initial = payload.initial_cash
+        strat = payload.strategy
+        run_id = None
+
+    try:
+        mc = monte_carlo(
+            curve,
+            initial,
+            n_sims=payload.n_sims,
+            seed=payload.seed,
+            confidence=payload.confidence,
+            block_size=payload.block_size,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    mc["strategy"] = strat
+    mc["run_id"] = run_id
+    return mc
 
 
 def _normalize_report(r: dict) -> dict:

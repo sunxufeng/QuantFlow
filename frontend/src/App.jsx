@@ -41,6 +41,7 @@ import Optimizer from './Optimizer.jsx'
 import MarketData from './MarketData.jsx'
 import Portfolio from './Portfolio.jsx'
 import Sensitivity from './Sensitivity.jsx'
+import MonteCarlo from './MonteCarlo.jsx'
 import LoginScreen from './LoginScreen.jsx'
 import { useGraphHistory } from './useHistory.js'
 import {
@@ -1076,6 +1077,7 @@ export default function App() {
           {view === 'market' && <MarketData />}
           {view === 'portfolio' && <Portfolio />}
           {view === 'sensitivity' && <Sensitivity />}
+          {view === 'montecarlo' && <MonteCarlo />}
          </ErrorBoundary>
         </main>
       </div>
