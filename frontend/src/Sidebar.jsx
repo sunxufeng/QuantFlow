@@ -33,6 +33,7 @@ const navItems = [
   { key: 'riskanalytics', label: '风险分析', abbr: '险' },
   { key: 'marketreg', label: '市场择时', abbr: '态' },
   { key: 'stragext', label: '策略扩展', abbr: '扩' },
+  { key: 'mlanalytics', label: 'ML分析', abbr: 'ML' },
   { key: 'factorbt', label: '因子回测', abbr: '测' },
   { key: 'factoreng', label: '因子工程', abbr: '工' },
   { key: 'notify', label: '通知渠道', abbr: '通' },

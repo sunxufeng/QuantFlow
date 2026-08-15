@@ -1,5 +1,54 @@
 # QuantFlow 生产部署看守 — 执行记录
 
+## 2026-08-16 07:07 CST
+- **结果**：主机可达，部署成功（deploy-remote.sh exit=0），重跑并成功。
+- 后端 app/ + 前端 src/dist 已同步并重启服务，健康检查通过。
+- 健康端点探测版本：**54.0.0**（背景预期 2.0.0；仓库版本号持续前移，与任务背景不符，建议确认版本号来源）。
+- 已通过 lark-cli（im +messages-send --as bot --chat-id 紧跟 --chat-id、--markdown 紧跟 --markdown）向 chat-id oc_ea45f82679bd3c90715d83da8a46f247 发送成功消息（message_id om_x100b673b50f1e4a4dfab8b4e7282d90），含部署时间、版本、访问地址。
+- 访问地址 http://116.62.188.165:8080。
+
+## 2026-08-16 06:12 CST
+- **结果**：主机可达，部署成功（deploy-remote.sh exit=0）。
+- 后端 app/ + 前端 src/dist 已同步并重启服务，健康检查通过。
+- 健康端点探测版本：**54.0.0**（背景预期 2.0.0；仓库版本号持续前移，与任务背景不符，建议确认版本号来源）。
+- 已通过 lark-cli（im +messages-send --as bot --chat-id 紧跟 --chat-id、--markdown 紧跟 --markdown）向 chat-id oc_ea45f82679bd3c90715d83da8a46f247 发送成功消息（message_id om_x100b673a0a9550a0c3a69bf7d0553ee），含部署时间、版本、访问地址。
+- 访问地址 http://116.62.188.165:8080。
+
+## 2026-08-16 05:16 CST
+- **结果**：主机可达，部署成功（deploy-remote.sh exit=0），重跑并成功。
+- 后端 app/ + 前端 src/dist 已同步并重启服务，健康检查通过。
+- 健康端点探测版本：**54.0.0**（背景预期 2.0.0；仓库版本号持续前移，与任务背景不符，建议确认版本号来源）。
+- 已通过 lark-cli（im +messages-send --as bot --chat-id 紧跟 --chat-id、--markdown 紧跟 --markdown）向 chat-id oc_ea45f82679bd3c90715d83da8a46f247 发送成功消息（message_id om_x100b67393f0564a8c213684883f9fef），含部署时间、版本、访问地址。
+- 访问地址 http://116.62.188.165:8080。
+
+## 2026-08-16 04:19 CST
+- **结果**：主机可达，部署成功（deploy-remote.sh exit=0），重跑并成功（首次 lark-cli 因多写了一个 `--markdown` 致 chat-id 被当位置参数报错，修正 flag 顺序后重发成功）。
+- 后端 app/ + 前端 src/dist 已同步并重启服务，健康检查通过。
+- 健康端点探测版本：**54.0.0**（背景预期 2.0.0；仓库版本号持续前移，与任务背景不符，建议确认版本号来源）。
+- 已通过 lark-cli（im +messages-send --as bot --chat-id 紧跟 --chat-id、--markdown 紧跟 --markdown）向 chat-id oc_ea45f82679bd3c90715d83da8a46f247 发送成功消息（message_id om_x100b6738d02f90a0c256b4fee39e33a），含部署时间、版本、访问地址。
+- 访问地址 http://116.62.188.165:8080。
+
+## 2026-08-16 03:23 CST
+- **结果**：主机可达，部署成功（deploy-remote.sh exit=0），重跑并成功。
+- 后端 app/ + 前端 src/dist 已同步并重启服务，健康检查通过。
+- 健康端点探测版本：**54.0.0**（背景预期 2.0.0；与前次 02:27 一致）。
+- 已通过 lark-cli（im +messages-send --as bot --markdown，消息紧跟 --markdown、chat-id 紧跟 --chat-id）向 chat-id oc_ea45f82679bd3c90715d83da8a46f247 发送成功消息（message_id om_x100b673f82d9b0a0c21a471598ab853），含部署时间、版本、访问地址。
+- 访问地址 http://116.62.188.165:8080。
+
+## 2026-08-16 02:27 CST
+- **结果**：主机可达，部署成功（deploy-remote.sh exit=0），重跑并成功。
+- 后端 app/ + 前端 src/dist 已同步并重启服务，健康检查通过。
+- 健康端点探测版本：**54.0.0**（背景预期 2.0.0；仓库版本号持续前移，与任务背景不符，建议确认版本号来源）。
+- 已通过 lark-cli（im +messages-send --as bot --markdown，消息紧跟 --markdown、chat-id 紧跟 --chat-id）向 chat-id oc_ea45f82679bd3c90715d83da8a46f247 发送成功消息（message_id om_x100b673eb78604a8ddc0351c9f061e5），含部署时间、版本、访问地址。
+- 访问地址 http://116.62.188.165:8080。
+
+## 2026-08-16 01:30 CST
+- **结果**：主机可达，部署成功（deploy-remote.sh exit=0），重跑并成功。
+- 后端 app/ + 前端 src/dist 已同步并重启服务，健康检查通过。
+- 健康端点探测版本：**54.0.0**（背景预期 2.0.0；仓库版本号持续前移，与任务背景不符，建议确认版本号来源）。
+- 已通过 lark-cli（im +messages-send --as bot --chat-id 紧跟 --chat-id、--markdown 紧跟 --markdown）向 chat-id oc_ea45f82679bd3c90715d83da8a46f247 发送成功消息（message_id om_x100b673e688520a4c34c6e593002725），含部署时间、版本、访问地址。
+- 访问地址 http://116.62.188.165:8080。
+
 ## 2026-08-16 00:34 CST
 - **结果**：主机可达，部署成功（deploy-remote.sh exit=0），重跑并成功。
 - 后端 app/ + 前端 src/dist 已同步并重启服务，健康检查通过。

@@ -287,6 +287,14 @@ export const runDcaBacktest = (payload) => _stx('dca-backtest', payload)
 export const runMultiTrend = (payload) => _stx('multi-trend', payload)
 export const getLiveFills = () => request('/trading/live/fills')
 
+// ---- ML 量化分析（V57–V61）----
+const _ml = (path, payload) => request(`/ml/${path}`, { method: 'POST', body: JSON.stringify(payload) })
+export const runMlPredict = (payload) => _ml('predict', payload)
+export const runMlCluster = (payload) => _ml('cluster', payload)
+export const runMlAnomaly = (payload) => _ml('anomaly', payload)
+export const runMlImportance = (payload) => _ml('importance', payload)
+export const runMlFeatures = (payload) => _ml('features', payload)
+
 // ---- 因子库 CRUD（V1.1 N3）----
 export const factorLibraryList = (category) => request(
   `/factors/library${category ? `?category=${encodeURIComponent(category)}` : ''}`,
