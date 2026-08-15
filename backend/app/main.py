@@ -21,6 +21,7 @@ from .api import (
     export as export_api,
     factor_scoring,
     factors,
+    factors_eng,
     logs,
     llm,
     market,
@@ -112,6 +113,7 @@ app.include_router(backtest.router, prefix="/api")
 app.include_router(auth.router, prefix="/api")
 app.include_router(tokens.router, prefix="/api")
 app.include_router(factors.router, prefix="/api")
+app.include_router(factors_eng.router, prefix="/api")
 app.include_router(factor_scoring.router, prefix="/api")
 app.include_router(notifications.router, prefix="/api")
 app.include_router(llm.router, prefix="/api")

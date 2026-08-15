@@ -31,6 +31,7 @@ const navItems = [
   { key: 'stress', label: '情景分析', abbr: '景' },
   { key: 'factorScore', label: '因子评分', abbr: '评' },
   { key: 'factorbt', label: '因子回测', abbr: '测' },
+  { key: 'factoreng', label: '因子工程', abbr: '工' },
   { key: 'notify', label: '通知渠道', abbr: '通' },
   { key: 'llm', label: 'LLM 助手', abbr: '助' },
   { key: 'settings', label: 'LLM 配置', abbr: '配' },

@@ -247,6 +247,15 @@ export const runMaxDiversification = (payload) => _portOpt('max-diversification'
 export const runHRP = (payload) => _portOpt('hrp', payload)
 export const runRebalance = (payload) => _portOpt('rebalance', payload)
 export const runStyleExposure = (payload) => _portOpt('style-exposure', payload)
+
+// ---- 因子工程深化（V37–V41）----
+const _facEng = (path, payload) => request(`/factors/${path}`, { method: 'POST', body: JSON.stringify(payload) })
+export const runOrthogonalize = (payload) => _facEng('orthogonalize', payload)
+export const runOrthogonalizeAll = (payload) => _facEng('orthogonalize-all', payload)
+export const runFactorTiming = (payload) => _facEng('timing', payload)
+export const runFactorCrowding = (payload) => _facEng('crowding', payload)
+export const runCombineFactors = (payload) => _facEng('combine', payload)
+export const runFactorTurnover = (payload) => _facEng('turnover', payload)
 export const getLivePositions = () => request('/trading/live/positions')
 export const getLiveFills = () => request('/trading/live/fills')
 

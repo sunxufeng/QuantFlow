@@ -52,6 +52,7 @@ import RiskReport from './RiskReport.jsx'
 import Attribution from './Attribution.jsx'
 import StressTest from './StressTest.jsx'
 import FactorBacktest from './FactorBacktest.jsx'
+import FactorEngineering from './FactorEngineering.jsx'
 import DataQuality from './DataQuality.jsx'
 import StrategyLibrary from './StrategyLibrary.jsx'
 import SyntheticLab from './SyntheticLab.jsx'
@@ -1116,6 +1117,7 @@ export default function App() {
           {view === 'dq' && <DataQuality />}
           {view === 'stress' && <StressTest />}
           {view === 'factorbt' && <FactorBacktest />}
+          {view === 'factoreng' && <FactorEngineering />}
          </ErrorBoundary>
         </main>
       </div>
