@@ -310,6 +310,7 @@ export const runReportCompare = (payload) => _rep('compare', payload)
 export const runReportMulti = (payload) => _rep('multi-compare', payload)
 export const runReportPeriodic = (payload) => _rep('periodic', payload)
 export const runReportDashboard = (payload) => _rep('dashboard', payload)
+export const runConsolidate = (payload) => _rep('consolidate', payload)
 
 // ---- 组合层面增强（V72–V76）----
 const _pi = (path, payload) => request(`/portfolioi/${path}`, { method: 'POST', body: JSON.stringify(payload) })
