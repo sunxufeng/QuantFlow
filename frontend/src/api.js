@@ -327,6 +327,14 @@ export const runComponentVar = (payload) => _ra('component-var', payload)
 export const runRiskTree = (payload) => _ra('risk-tree', payload)
 export const runTailMetrics = (payload) => _ra('tail', payload)
 
+// ---- 衍生品策略与对冲（V82–V86）----
+const _deriv = (path, payload) => request(`/deriv/${path}`, { method: 'POST', body: JSON.stringify(payload) })
+export const runOptionPayoff = (payload) => _deriv('payoff', payload)
+export const runDeltaHedge = (payload) => _deriv('delta-hedge', payload)
+export const runPortfolioInsurance = (payload) => _deriv('insurance', payload)
+export const runPortfolioGreeks = (payload) => _deriv('portfolio-greeks', payload)
+export const runVolSurface = (payload) => _deriv('vol-surface', payload)
+
 // ---- 因子库 CRUD（V1.1 N3）----
 export const factorLibraryList = (category) => request(
   `/factors/library${category ? `?category=${encodeURIComponent(category)}` : ''}`,

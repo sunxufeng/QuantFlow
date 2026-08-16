@@ -57,6 +57,7 @@ import ExecutionCost from './ExecutionCost.jsx'
 import ReportsHub from './ReportsHub.jsx'
 import PortfolioI from './PortfolioI.jsx'
 import RiskAttrib from './RiskAttrib.jsx'
+import Derivatives from './Derivatives.jsx'
 import Attribution from './Attribution.jsx'
 import StressTest from './StressTest.jsx'
 import FactorBacktest from './FactorBacktest.jsx'
@@ -1122,6 +1123,7 @@ export default function App() {
           {view === 'reports' && <ReportsHub />}
           {view === 'portfolioi' && <PortfolioI />}
           {view === 'riskattrib' && <RiskAttrib />}
+          {view === 'deriv' && <Derivatives />}
           {view === 'stratelib' && <StrategyLibrary />}
           {view === 'synth' && <SyntheticLab />}
           {view === 'fwd' && <ForwardSim />}
