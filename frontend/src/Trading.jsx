@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { brokerGetConfig, getToken, getLivePositions, getLiveFills, verifyOrder, marketSession } from './api.js'
+import { brokerGetConfig, getToken, getLivePositions, getLiveFills, verifyOrder, marketSession, hedgeCalc } from './api.js'
 
 const SYMBOL_HINT = '示例：600519（贵州茅台）、000001（平安银行）、AAPL'
 
@@ -13,7 +13,7 @@ export default function Trading({ onNavigate }) {
   const [positions, setPositions] = useState([])
   const [orders, setOrders] = useState([])
   const [analytics, setAnalytics] = useState(null)
-  const [tab, setTab] = useState('trade')           // trade | analytics
+  const [tab, setTab] = useState('trade')           // trade | analytics | hedge
   const [mode, setMode] = useState('paper')        // paper | live
   const [liveCapable, setLiveCapable] = useState(false)
   const [liveStatus, setLiveStatus] = useState(null)
@@ -203,6 +203,8 @@ export default function Trading({ onNavigate }) {
             style={toggleStyle(tab === 'trade', '#6366f1')}>面板</button>
           <button type="button" onClick={() => setTab('analytics')}
             style={toggleStyle(tab === 'analytics', '#0ea5e9')}>分析</button>
+          <button type="button" onClick={() => setTab('hedge')}
+            style={toggleStyle(tab === 'hedge', '#f59e0b')}>对冲</button>
         </div>
         {/* 模拟 / 实盘 切换 */}
         <div style={{ display: 'inline-flex', borderRadius: 8, overflow: 'hidden', border: '1px solid #cbd5e1' }}>
@@ -452,6 +454,203 @@ export default function Trading({ onNavigate }) {
 
       {tab === 'analytics' && analytics && (
         <AnalyticsPanel data={analytics} initial={analytics.equity_curve?.[0]?.equity || summary?.initial_cash || 1_000_000} />
+      )}
+
+      {tab === 'hedge' && <HedgeCalculator />}
+    </div>
+  )
+}
+
+function HedgeCalculator() {
+  const [kind, setKind] = useState('beta')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [res, setRes] = useState(null)
+
+  // beta 对冲
+  const [portfolioText, setPortfolioText] = useState(
+    '[\n  {"symbol":"600519.SH","market_value":300000,"beta":1.05},\n  {"symbol":"000001.SZ","market_value":200000,"beta":1.20}\n]'
+  )
+  const [futurePrice, setFuturePrice] = useState('3800')
+  const [multiplier, setMultiplier] = useState('300')
+  const [targetBeta, setTargetBeta] = useState('0')
+  const [futureBeta, setFutureBeta] = useState('1')
+
+  // reverse 反向
+  const [currentQty, setCurrentQty] = useState('100')
+  const [mode, setMode] = useState('close')
+
+  // group 篮子
+  const [longText, setLongText] = useState('{"AG2110.SHF":15}')
+  const [shortText, setShortText] = useState('{}')
+  const [pricesText, setPricesText] = useState('{}')
+
+  const parse = (txt, fallback) => {
+    try { return JSON.parse(txt) } catch (e) { throw new Error('JSON 解析失败：' + e.message) }
+  }
+
+  const calc = async () => {
+    setBusy(true)
+    setError('')
+    setRes(null)
+    try {
+      let payload
+      if (kind === 'beta') {
+        payload = {
+          kind: 'beta',
+          portfolio: parse(portfolioText),
+          future_price: Number(futurePrice),
+          multiplier: Number(multiplier),
+          target_beta: Number(targetBeta),
+          future_beta: Number(futureBeta),
+        }
+      } else if (kind === 'reverse') {
+        payload = { kind: 'reverse', current_qty: Number(currentQty), mode }
+      } else {
+        payload = {
+          kind: 'group',
+          long_dict: parse(longText),
+          short_dict: parse(shortText),
+          prices: parse(pricesText),
+        }
+      }
+      const data = await hedgeCalc(payload)
+      setRes(data)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const card = { flex: '1 1 360px', minWidth: 320, border: '1px solid var(--border)', borderRadius: 10, padding: 14, background: '#fff' }
+
+  return (
+    <div style={{ marginTop: 18 }}>
+      <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text)', marginBottom: 10 }}>
+        对冲 / 反向交易计算器（V105 · 移植自 panda reverse_operation 计算内核）
+      </div>
+      {error && <div className="qf-error">{error}</div>}
+
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+        <button type="button" onClick={() => setKind('beta')} style={toggleStyle(kind === 'beta', '#f59e0b')}>Beta 中性对冲</button>
+        <button type="button" onClick={() => setKind('reverse')} style={toggleStyle(kind === 'reverse', '#f59e0b')}>反向平仓 / 反手</button>
+        <button type="button" onClick={() => setKind('group')} style={toggleStyle(kind === 'group', '#f59e0b')}>多空篮子组单</button>
+      </div>
+
+      {kind === 'beta' && (
+        <div style={{ ...card }}>
+          <label className="qf-prop-field" style={{ marginBottom: 10 }}>
+            <span className="qf-prop-label">股票组合（JSON：[{'{'}"symbol, market_value, beta{'}'}]）</span>
+            <textarea className="qf-name-input" rows={5} value={portfolioText}
+              onChange={(e) => setPortfolioText(e.target.value)} style={{ fontFamily: 'monospace', fontSize: 12 }} />
+          </label>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <label className="qf-prop-field" style={{ flex: 1, minWidth: 120 }}>
+              <span className="qf-prop-label">期货点位</span>
+              <input className="qf-name-input" type="number" value={futurePrice} onChange={(e) => setFuturePrice(e.target.value)} />
+            </label>
+            <label className="qf-prop-field" style={{ flex: 1, minWidth: 120 }}>
+              <span className="qf-prop-label">合约乘数</span>
+              <input className="qf-name-input" type="number" value={multiplier} onChange={(e) => setMultiplier(e.target.value)} />
+            </label>
+            <label className="qf-prop-field" style={{ flex: 1, minWidth: 120 }}>
+              <span className="qf-prop-label">目标β</span>
+              <input className="qf-name-input" type="number" step="0.1" value={targetBeta} onChange={(e) => setTargetBeta(e.target.value)} />
+            </label>
+            <label className="qf-prop-field" style={{ flex: 1, minWidth: 120 }}>
+              <span className="qf-prop-label">合约β</span>
+              <input className="qf-name-input" type="number" step="0.1" value={futureBeta} onChange={(e) => setFutureBeta(e.target.value)} />
+            </label>
+          </div>
+        </div>
+      )}
+
+      {kind === 'reverse' && (
+        <div style={{ ...card }}>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+            <button type="button" onClick={() => setMode('close')} style={btnStyle(mode === 'close', '#f59e0b')}>平仓至 0</button>
+            <button type="button" onClick={() => setMode('flip')} style={btnStyle(mode === 'flip', '#f59e0b')}>反手</button>
+          </div>
+          <label className="qf-prop-field" style={{ marginBottom: 10 }}>
+            <span className="qf-prop-label">当前持仓数量（正=多 / 负=空）</span>
+            <input className="qf-name-input" type="number" value={currentQty} onChange={(e) => setCurrentQty(e.target.value)} />
+          </label>
+          <div className="qf-hint">例如当前多仓 100 → 平仓需卖出 100；反手需卖出 200（平多+开空）。</div>
+        </div>
+      )}
+
+      {kind === 'group' && (
+        <div style={{ ...card }}>
+          <label className="qf-prop-field" style={{ marginBottom: 10 }}>
+            <span className="qf-prop-label">多头篮子 long_dict（JSON：{'{'}"SYM":qty{'}'}）</span>
+            <textarea className="qf-name-input" rows={3} value={longText}
+              onChange={(e) => setLongText(e.target.value)} style={{ fontFamily: 'monospace', fontSize: 12 }} />
+          </label>
+          <label className="qf-prop-field" style={{ marginBottom: 10 }}>
+            <span className="qf-prop-label">空头篮子 short_dict（JSON：{'{'}"SYM":qty{'}'}）</span>
+            <textarea className="qf-name-input" rows={3} value={shortText}
+              onChange={(e) => setShortText(e.target.value)} style={{ fontFamily: 'monospace', fontSize: 12 }} />
+          </label>
+          <label className="qf-prop-field" style={{ marginBottom: 10 }}>
+            <span className="qf-prop-label">价格 prices（可选，用于名义金额：{'{'}"SYM":price{'}'}）</span>
+            <textarea className="qf-name-input" rows={2} value={pricesText}
+              onChange={(e) => setPricesText(e.target.value)} style={{ fontFamily: 'monospace', fontSize: 12 }} />
+          </label>
+          <div className="qf-hint">对应 panda insert_future_group_order / insert_stock_group_order 的篮子组单。</div>
+        </div>
+      )}
+
+      <button className="qf-btn qf-btn-primary" onClick={calc} disabled={busy} style={{ marginTop: 12 }}>
+        {busy ? '计算中…' : '计算'}
+      </button>
+
+      {res && (
+        <div style={{ marginTop: 14, border: '1px solid #f59e0b', borderRadius: 10, padding: 14, background: '#fffbeb' }}>
+          <div style={{ fontWeight: 600, fontSize: 13, color: '#b45309', marginBottom: 8 }}>
+            计算结果（{res.kind}）
+          </div>
+          {res.kind === 'beta' && (
+            <div className="qf-mcards" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))' }}>
+              <div className="qf-mcard"><div className="qf-mcard-value">{res.portfolio_beta}</div><div className="qf-mcard-label">组合贝塔</div></div>
+              <div className="qf-mcard"><div className="qf-mcard-value">{res.portfolio_value.toLocaleString()}</div><div className="qf-mcard-label">组合市值</div></div>
+              <div className="qf-mcard"><div className="qf-mcard-value" style={{ color: '#b45309' }}>{res.contracts}</div><div className="qf-mcard-label">对冲手数</div></div>
+              <div className="qf-mcard"><div className="qf-mcard-value">{res.side_label}</div><div className="qf-mcard-label">方向</div></div>
+              <div className="qf-mcard"><div className="qf-mcard-value">{res.hedge_notional.toLocaleString()}</div><div className="qf-mcard-label">对冲名义</div></div>
+              <div className="qf-mcard"><div className="qf-mcard-value">{res.residual_beta}</div><div className="qf-mcard-label">残差贝塔</div></div>
+            </div>
+          )}
+          {res.kind === 'reverse' && (
+            <div className="qf-mcards" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))' }}>
+              <div className="qf-mcard"><div className="qf-mcard-value">{res.current_qty}</div><div className="qf-mcard-label">当前持仓</div></div>
+              <div className="qf-mcard"><div className="qf-mcard-value">{res.order_side_label}</div><div className="qf-mcard-label">下单方向</div></div>
+              <div className="qf-mcard"><div className="qf-mcard-value" style={{ color: '#b45309' }}>{res.order_qty}</div><div className="qf-mcard-label">下单数量</div></div>
+              <div className="qf-mcard"><div className="qf-mcard-value">{res.mode}</div><div className="qf-mcard-label">模式</div></div>
+            </div>
+          )}
+          {res.kind === 'group' && (
+            <>
+              <div className="qf-mcards" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', marginBottom: 10 }}>
+                <div className="qf-mcard"><div className="qf-mcard-value">{res.long_count}</div><div className="qf-mcard-label">多头只数</div></div>
+                <div className="qf-mcard"><div className="qf-mcard-value">{res.short_count}</div><div className="qf-mcard-label">空头只数</div></div>
+                <div className="qf-mcard"><div className="qf-mcard-value">{res.net_notional.toLocaleString()}</div><div className="qf-mcard-label">净敞口</div></div>
+              </div>
+              <table className="qf-state-table">
+                <thead><tr><th>标的</th><th>方向</th><th>数量</th></tr></thead>
+                <tbody>
+                  {res.orders.map((o, i) => (
+                    <tr key={i}>
+                      <td>{o.symbol}</td>
+                      <td style={{ color: o.side === 'buy' ? '#16a34a' : '#e11d48' }}>{o.side === 'buy' ? '买入' : '卖出'}</td>
+                      <td>{o.qty}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          )}
+          <div className="qf-success" style={{ marginTop: 10 }}>{res.note}</div>
+        </div>
       )}
     </div>
   )

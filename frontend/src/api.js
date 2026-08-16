@@ -542,4 +542,9 @@ export const verifyOrder = (payload) => request('/trading/verify', {
 })
 // V104 市场时段 / 开市状态（移植自 panda TradeTimeManager）
 export const marketSession = (assetType = 'stock') => request(`/market/session?asset_type=${assetType}`)
+// V105 对冲 / 反向交易计算器（移植自 panda reverse_operation 计算内核）
+export const hedgeCalc = (payload) => request('/trading/hedge', {
+  method: 'POST',
+  body: JSON.stringify(payload),
+})
 

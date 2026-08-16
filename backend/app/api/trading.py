@@ -169,6 +169,42 @@ def verify(payload: VerifyIn, user: Dict[str, Any] = Depends(get_current_user)):
     )
 
 
+class HedgeIn(BaseModel):
+    kind: str                                   # beta | reverse | group
+    # beta 对冲
+    portfolio: Optional[list] = None            # [{symbol, market_value, beta}]
+    future_price: Optional[float] = None
+    multiplier: Optional[float] = None
+    target_beta: float = 0.0
+    future_beta: float = 1.0
+    round_lot: float = 1.0
+    # reverse 反向
+    current_qty: float = 0.0
+    mode: str = "close"                         # close | flip
+    # group 篮子
+    long_dict: Optional[dict] = None
+    short_dict: Optional[dict] = None
+    prices: Optional[dict] = None
+
+
+@router.post("/trading/hedge")
+def hedge(payload: HedgeIn, user: Dict[str, Any] = Depends(get_current_user)):
+    """对冲 / 反向交易计算器（V105，移植自 panda reverse_operation 的计算内核）。
+
+    按 ``kind`` 分发：
+    - beta：用股指合约对股票组合做 Beta 中性对冲，返回应对冲手数/方向。
+    - reverse：给定当前持仓，返回反向平仓/反手的下单量与方向。
+    - group：给定多/空篮子，返回组单结构（对应 panda insert_*_group_order）。
+    纯计算，不落库、不改变账户状态。
+    """
+    from ..trading.hedge import compute_hedge
+
+    try:
+        return compute_hedge(payload.model_dump())
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
 def _serialize(order: Optional[dict]) -> Optional[dict]:
     if not order:
         return None
