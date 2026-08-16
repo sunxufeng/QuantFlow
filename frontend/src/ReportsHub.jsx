@@ -2,6 +2,9 @@ import React, { useState } from 'react'
 import {
   runReportPerformance, runReportCompare, runReportMulti, runReportPeriodic, runReportDashboard,
 } from './api.js'
+import { exportSectionsToExcel, exportSectionsToPdf } from './exportUtils.js'
+
+const TAB_LABEL = { performance: '综合绩效', compare: '快照对比', multi: '多策略对比', periodic: '周期报告', dashboard: '风险看板' }
 
 const btn = {
   padding: '6px 14px', borderRadius: 8, border: '1px solid #2f6df6',
@@ -47,6 +50,63 @@ export default function ReportsHub() {
     for (let i = 0; i < n; i++) out.push(+(drift + (rnd() - 0.5) * 2 * vol).toFixed(6))
     return out
   }
+
+  // 把当前结果按 tab 转成可导出的章节结构（V95）。
+  const buildSections = () => {
+    if (!res) return []
+    if (tabk === 'performance') {
+      return [
+        { title: '绩效', kv: res.performance },
+        { title: '风险', kv: res.risk },
+        ...(res.benchmark ? [{ title: '基准', kv: res.benchmark }] : []),
+      ]
+    }
+    if (tabk === 'compare') {
+      return [
+        { title: '对比概览', kv: { n_metrics: res.n_metrics, improved_count: res.improved_count } },
+        {
+          title: '逐指标对比',
+          columns: ['metric', res.name_a, res.name_b, 'delta', 'improved'],
+          rows: res.comparisons.map((c) => ({
+            metric: c.metric, [res.name_a]: c[res.name_a], [res.name_b]: c[res.name_b],
+            delta: c.delta, improved: c.improved ? res.name_a : res.name_b,
+          })),
+        },
+      ]
+    }
+    if (tabk === 'multi') {
+      return [
+        { title: '概览', kv: { n_strategies: res.n_strategies, ranking_by_sharpe: res.ranking_by_sharpe.join(' > ') } },
+        {
+          title: '各策略',
+          columns: ['name', 'sharpe', 'ann_return', 'max_drawdown'],
+          rows: res.rows.map((r) => ({
+            name: r.name, sharpe: r.report.performance.sharpe,
+            ann_return: r.report.performance.ann_return, max_drawdown: r.report.risk.max_drawdown,
+          })),
+        },
+      ]
+    }
+    if (tabk === 'periodic') {
+      return [
+        { title: '概览', kv: { freq: res.freq, n_periods: res.n_periods, overall_sharpe: res.overall.sharpe } },
+        {
+          title: '分周期',
+          columns: ['period', 'n', 'ann_return', 'ann_vol', 'sharpe'],
+          rows: res.periods.map((p) => ({
+            period: p.period, n: p.n, ann_return: p.ann_return, ann_vol: p.ann_vol, sharpe: p.sharpe,
+          })),
+        },
+      ]
+    }
+    if (tabk === 'dashboard') {
+      return [{ title: '风险看板', kv: res.dashboard }]
+    }
+    return []
+  }
+
+  const doExcel = () => exportSectionsToExcel(buildSections(), `quantflow_${tabk}.xls`, `QuantFlow 报告 - ${TAB_LABEL[tabk]}`)
+  const doPdf = () => exportSectionsToPdf(buildSections(), `QuantFlow 报告 - ${TAB_LABEL[tabk]}`)
 
   return (
     <div style={{ padding: 18, maxWidth: 1080 }}>
@@ -159,6 +219,14 @@ export default function ReportsHub() {
             <KV data={res.dashboard} />
           </div>}
         </Card>
+      )}
+
+      {res && (
+        <div style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap' }}>
+          <button style={btn} onClick={doExcel}>导出 Excel</button>
+          <button style={{ ...btn, background: '#fff', color: '#2f6df6' }} onClick={doPdf}>导出 PDF</button>
+          <span className="qf-hint" style={{ alignSelf: 'center' }}>V95 · 零依赖导出当前报告</span>
+        </div>
       )}
 
       {err && <div style={{ color: '#c0392b', marginTop: 10 }}>⚠ {err}</div>}
