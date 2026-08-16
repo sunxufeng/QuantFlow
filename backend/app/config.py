@@ -8,7 +8,7 @@ import os
 class Settings:
     APP_NAME: str = os.getenv("QF_APP_NAME", "quantflow")
     # 版本号单一来源（health / monitoring / OpenAPI 共用）
-    APP_VERSION: str = "95.0.0"
+    APP_VERSION: str = "96.0.0"
     DEBUG: bool = os.getenv("QF_DEBUG", "1") == "1"
     CORS_ORIGINS: list[str] = os.getenv(
         "QF_CORS_ORIGINS",

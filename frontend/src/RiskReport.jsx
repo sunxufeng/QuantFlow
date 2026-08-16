@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { runMetricsExtended } from './api.js'
+import ExportBar from './ExportBar.jsx'
 
 function StatCard({ label, value, hint, tone }) {
   const color = tone === 'good' ? '#16a34a' : tone === 'bad' ? '#dc2626' : '#1f2937'
@@ -63,6 +64,30 @@ export default function RiskReport() {
   const fmtPct = (v) => (v === null || v === undefined) ? '—' : `${(v * 100).toFixed(2)}%`
   const fmtNum = (v, d = 4) => (v === null || v === undefined) ? '—' : Number(v).toFixed(d)
 
+  // 把当前结果转成可导出的章节（V96）。
+  const sections = data ? [
+    {
+      title: '核心风险指标',
+      kv: {
+        年化波动: fmtPct(risk.volatility),
+        下行波动: fmtPct(risk.downside_deviation),
+        索提诺: fmtNum(risk.sortino),
+        VaR95_年化: fmtPct(er.var95_annual),
+        CVaR95_年化: fmtPct(er.cvar95_annual),
+        Calmar: fmtNum(er.calmar),
+        Omega: fmtNum(er.omega),
+        期望收益每笔: fmtNum(er.expectancy, 2),
+        最大回撤: fmtPct(m?.max_drawdown),
+        夏普: fmtNum(m?.sharpe),
+      },
+    },
+    ...(periods.length ? [{
+      title: '回撤区间',
+      columns: ['start', 'end', 'depth', 'days'],
+      rows: periods.map((p) => ({ start: p.start, end: p.end, depth: fmtPct(p.depth), days: p.days })),
+    }] : []),
+  ] : []
+
   return (
     <div style={{ padding: 16 }}>
       <h2 style={{ margin: '0 0 4px' }}>扩展风险指标 <span style={{ fontSize: 12, color: '#16a34a' }}>V18</span></h2>
@@ -85,6 +110,7 @@ export default function RiskReport() {
 
       {data ? (
         <div>
+          <ExportBar sections={sections} baseName={`risk_report_${runId || 'run'}`} title="QuantFlow 扩展风险报告" />
           <div style={{ fontSize: 13, color: '#374151', marginBottom: 8 }}>
             策略：{data.strategy} · 标的：{(data.symbols || []).join(', ')} · 交易日：{m?.days}
           </div>

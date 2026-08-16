@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import {
   runReportPerformance, runReportCompare, runReportMulti, runReportPeriodic, runReportDashboard,
 } from './api.js'
-import { exportSectionsToExcel, exportSectionsToPdf } from './exportUtils.js'
+import ExportBar from './ExportBar.jsx'
 
 const TAB_LABEL = { performance: '综合绩效', compare: '快照对比', multi: '多策略对比', periodic: '周期报告', dashboard: '风险看板' }
 
@@ -104,9 +104,6 @@ export default function ReportsHub() {
     }
     return []
   }
-
-  const doExcel = () => exportSectionsToExcel(buildSections(), `quantflow_${tabk}.xls`, `QuantFlow 报告 - ${TAB_LABEL[tabk]}`)
-  const doPdf = () => exportSectionsToPdf(buildSections(), `QuantFlow 报告 - ${TAB_LABEL[tabk]}`)
 
   return (
     <div style={{ padding: 18, maxWidth: 1080 }}>
@@ -222,11 +219,7 @@ export default function ReportsHub() {
       )}
 
       {res && (
-        <div style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap' }}>
-          <button style={btn} onClick={doExcel}>导出 Excel</button>
-          <button style={{ ...btn, background: '#fff', color: '#2f6df6' }} onClick={doPdf}>导出 PDF</button>
-          <span className="qf-hint" style={{ alignSelf: 'center' }}>V95 · 零依赖导出当前报告</span>
-        </div>
+        <ExportBar sections={buildSections()} baseName={`report_${tabk}`} title={`QuantFlow 报告 - ${TAB_LABEL[tabk]}`} />
       )}
 
       {err && <div style={{ color: '#c0392b', marginTop: 10 }}>⚠ {err}</div>}
