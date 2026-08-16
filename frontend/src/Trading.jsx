@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { brokerGetConfig, getToken, getLivePositions, getLiveFills } from './api.js'
+import { brokerGetConfig, getToken, getLivePositions, getLiveFills, verifyOrder, marketSession } from './api.js'
 
 const SYMBOL_HINT = '示例：600519（贵州茅台）、000001（平安银行）、AAPL'
 
@@ -26,6 +26,9 @@ export default function Trading({ onNavigate }) {
   const [resetMsg, setResetMsg] = useState('')
   const [livePositions, setLivePositions] = useState([])
   const [liveFills, setLiveFills] = useState([])
+  const [session, setSession] = useState(null)          // V104 市场时段
+  const [verifyRes, setVerifyRes] = useState(null)        // V104 合规预检结果
+  const [verifyBusy, setVerifyBusy] = useState(false)
 
   const load = useCallback(() => {
     return Promise.all([
@@ -61,6 +64,7 @@ export default function Trading({ onNavigate }) {
       getLivePositions().then(setLivePositions).catch(() => setLivePositions([]))
       getLiveFills().then(setLiveFills).catch(() => setLiveFills([]))
     }
+    marketSession('stock').then(setSession).catch(() => {})
   }, [load])
 
   const submit = async (e) => {
@@ -90,6 +94,29 @@ export default function Trading({ onNavigate }) {
       setError(err.message)
     } finally {
       setBusy(false)
+    }
+  }
+
+  const verify = async () => {
+    if (!form.symbol || !form.qty) {
+      setError('请先填写标的与数量再做合规预检')
+      return
+    }
+    setVerifyBusy(true)
+    setVerifyRes(null)
+    try {
+      const res = await verifyOrder({
+        symbol: form.symbol,
+        side: form.side,
+        type: form.type,
+        qty: Number(form.qty),
+        price: form.type === 'limit' && form.price ? Number(form.price) : null,
+      })
+      setVerifyRes(res)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setVerifyBusy(false)
     }
   }
 
@@ -307,8 +334,14 @@ export default function Trading({ onNavigate }) {
       <div style={{ display: 'flex', gap: 16, marginTop: 18, flexWrap: 'wrap' }}>
         {/* 下单 */}
         <form onSubmit={submit} style={{ flex: '1 1 300px', minWidth: 280, border: '1px solid var(--border)', borderRadius: 10, padding: 14, background: '#fff' }}>
-          <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text)', marginBottom: 10 }}>
+          <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text)', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             下单（{mode === 'live' ? '实盘' : '模拟'}）
+            {session && (
+              <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 999, fontWeight: 500,
+                background: session.open ? '#dcfce7' : '#fee2e2', color: session.open ? '#166534' : '#991b1b' }}>
+                市场{session.open ? '开市' : '休市'}
+              </span>
+            )}
           </div>
           <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
             <button type="button" onClick={() => setForm(f => ({ ...f, side: 'buy' }))}
@@ -341,6 +374,25 @@ export default function Trading({ onNavigate }) {
           <button type="submit" className="qf-btn qf-btn-primary" disabled={busy || liveDisabled} style={{ width: '100%' }}>
             {busy ? '提交中…' : mode === 'live' ? '实盘委托' : '提交委托'}
           </button>
+          <button type="button" onClick={verify} disabled={verifyBusy} className="qf-btn" style={{ width: '100%', marginTop: 8 }}>
+            {verifyBusy ? '校验中…' : '交易合规预检'}
+          </button>
+          {verifyRes && (
+            <div style={{ marginTop: 10, fontSize: 12 }}>
+              {verifyRes.violations.length === 0 && (
+                <div style={{ color: '#166534', background: '#dcfce7', padding: '8px 10px', borderRadius: 8 }}>✓ 合规检查通过，无拦截项</div>
+              )}
+              {verifyRes.violations.map((v, i) => (
+                <div key={i} style={{ color: v.level === 'error' ? '#991b1b' : '#92400e',
+                  background: v.level === 'error' ? '#fee2e2' : '#fef3c7', padding: '6px 10px', borderRadius: 8, marginBottom: 6 }}>
+                  {v.level === 'error' ? '✕ ' : '⚠ '}{v.message}
+                </div>
+              ))}
+              {verifyRes.suggestions.map((s, i) => (
+                <div key={`s${i}`} style={{ color: '#1e40af', background: '#dbeafe', padding: '6px 10px', borderRadius: 8, marginBottom: 6 }}>💡 {s}</div>
+              ))}
+            </div>
+          )}
         </form>
 
         {/* 持仓 */}

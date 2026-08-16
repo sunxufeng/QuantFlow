@@ -337,4 +337,21 @@ def get_quotes(symbols: str = Query(..., description="逗号分隔的标的，�
             "low": last.low,
             "volume": last.volume,
         })
-    return {"items": out}
+    return {"items": out, "total": len(out)}
+
+
+@router.get("/session")
+def market_session(asset_type: str = "stock"):
+    """交易时段 / 开市状态（V104，移植自 panda TradeTimeManager）。
+
+    返回当前是否开市、状态标签、下一交易日。``asset_type`` 取值：
+    ``stock`` | ``future`` | ``future_day`` | ``future_night``。
+    """
+    from ..market.session import is_market_open, next_trade_date, session_label
+
+    return {
+        "asset_type": asset_type,
+        "open": is_market_open(asset_type),
+        "label": session_label(asset_type),
+        "next_trade_date": next_trade_date(),
+    }

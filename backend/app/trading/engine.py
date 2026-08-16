@@ -118,6 +118,10 @@ def submit_order(user_id: str, symbol: str, side: str, otype: str, qty: float, p
     if otype == "limit":
         if price is None or price <= 0:
             raise ValueError("限价单必须填写有效价格")
+        # 交易合规预检（V104，移植自 panda exchange/*_verify；默认关闭，见 env）
+        from .compliance import enforce_compliance
+
+        enforce_compliance(user_id, symbol, side, otype, qty, price)
         # 挂单
         order_id = _store._uid()
         _store.db.execute(

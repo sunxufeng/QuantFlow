@@ -145,6 +145,30 @@ def reset(payload: ResetIn = None, user: Dict[str, Any] = Depends(get_current_us
     return {"ok": True, "initial_cash": effective}
 
 
+class VerifyIn(BaseModel):
+    symbol: str
+    side: str          # buy | sell
+    type: str          # market | limit
+    qty: float
+    price: Optional[float] = None
+    today_qty: Optional[float] = None  # SHFE/INE 平今拆单所需的当日持仓
+
+
+@router.post("/trading/verify")
+def verify(payload: VerifyIn, user: Dict[str, Any] = Depends(get_current_user)):
+    """交易合规预检（V104，移植自 panda exchange/*_verify）。
+
+    对一笔拟下委托做：交易时段、账户/持仓充足、涨跌停限价、平今/平昨拆单
+    四项检查，返回 {ok, violations, suggestions}。不落库、不改变账户状态。
+    """
+    from ..trading.compliance import verify_order
+
+    return verify_order(
+        user["id"], payload.symbol, payload.side.lower(), payload.type.lower(),
+        float(payload.qty), payload.price, None, payload.today_qty,
+    )
+
+
 def _serialize(order: Optional[dict]) -> Optional[dict]:
     if not order:
         return None

@@ -329,3 +329,23 @@
 - 健康端点探测版本：**2.11.0**（背景预期 2.0.0，前次 16:02 为 2.7.0；仓库版本号持续前移，与任务背景不符，建议确认版本号来源）。
 - 已通过 lark-cli（--as bot --markdown，修正子命令为 `+messages-send --chat-id`）向同一 chat-id 发送成功消息（message_id om_x100b68d9dfd920acc32ee15ffd36725），含部署时间、版本、访问地址。
 - 访问地址 http://116.62.188.165:8080。
+
+## 2026-08-16 11:36 CST
+- **结果**：主机可达，部署成功（deploy-remote.sh exit=0），重跑并成功。
+- 后端 app/ + 前端 src/dist 已同步并重启服务，健康检查通过。
+- 健康端点探测版本：**103.0.0**（背景预期 2.0.0；仓库版本号持续前移，与任务背景不符，建议确认版本号来源）。
+- 已通过 lark-cli（im +messages-send --as bot --chat-id 紧跟 --chat-id、--markdown 紧跟 --markdown）向 chat-id oc_ea45f82679bd3c90715d83da8a46f247 发送成功消息（message_id om_x100b672748678ca0c392e4f6966127c），含部署时间、版本、访问地址。
+- 访问地址 http://116.62.188.165:8080。
+
+## 2026-08-16 12:34 CST
+- **结果**：部署异常退出（deploy-remote.sh exit=5）。
+- 主机可达，[1] 后端 app/ + [2] 前端构建（构建号 1786854770，版本 103.0.0）+ [3] 前端同步 + [4] 重启服务 均成功，但 [5] 健康探测 `/api/health` 失败（脚本回显：⚠️ 健康探测失败，请登录主机检查日志）。
+- 已发飞书告警到 chat-id oc_ea45f82679bd3c90715d83da8a46f247（开头「⚠️ QuantFlow 部署脚本异常退出（exit=5）」），建议 `journalctl -u quantflow.service -u quantflow-frontend.service` 排查（message_id om_x100b6727ae5dcd34c32e15ffa7c4c）。
+- 版本 103.0.0（背景预期 2.0.0，持续不符，待确认版本号来源）。
+
+## 2026-08-16 13:31 CST
+- **结果**：部署异常退出（deploy-remote.sh exit=5）。
+- 主机可达，[1] 后端 app/ + [2] 前端构建（构建号 1786858281，版本 103.0.0）+ [3] 前端同步 + [4] 重启服务 均成功，但 [5] 健康探测 `/api/health` 失败（脚本回显：⚠️ 健康探测失败，请登录主机检查日志）。
+- 已发飞书告警到 chat-id oc_ea45f82679bd3c90715d83da8a46f247（开头「⚠️ QuantFlow 部署脚本异常退出（exit=5）」），附构建号/版本/各步骤状态及 journalctl 排查建议（message_id om_x100b6720f71af8a4c42105ee373c580）。
+- 备注：首次 lark-cli 调用因环境 HTTP(S)_PROXY 指向不可达的 127.0.0.1:7897 而 network 失败（exit=4），临时 unset 代理后重发成功。后续同类告警建议先 unset 代理再调用。
+- 版本 103.0.0（背景预期 2.0.0，持续不符，待确认版本号来源）。

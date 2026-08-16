@@ -535,4 +535,11 @@ export const resetTrading = (initialCash = null) => request('/trading/reset', {
   method: 'DELETE',
   body: JSON.stringify(initialCash != null ? { initial_cash: initialCash } : {}),
 })
+// V104 交易合规预检（移植自 panda exchange/*_verify）
+export const verifyOrder = (payload) => request('/trading/verify', {
+  method: 'POST',
+  body: JSON.stringify(payload),
+})
+// V104 市场时段 / 开市状态（移植自 panda TradeTimeManager）
+export const marketSession = (assetType = 'stock') => request(`/market/session?asset_type=${assetType}`)
 
