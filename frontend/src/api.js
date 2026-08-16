@@ -547,4 +547,6 @@ export const hedgeCalc = (payload) => request('/trading/hedge', {
   method: 'POST',
   body: JSON.stringify(payload),
 })
+// V106 适配器目录（市场数据源 + 券商连接器接口缝）
+export const getAdapters = () => request('/adapters')
 

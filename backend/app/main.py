@@ -14,6 +14,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .api import (
+    adapters,
     alerts,
     auth,
     backtest,
@@ -156,6 +157,7 @@ app.include_router(workspace_api.router, prefix="/api")
 app.include_router(export_api.router, prefix="/api")
 app.include_router(execution_cost.router, prefix="/api")
 app.include_router(report_delivery.router, prefix="/api")
+app.include_router(adapters.router, prefix="/api")
 
 _START_TIME = time.time()
 

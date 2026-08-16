@@ -336,6 +336,114 @@ class TushareDataSource(MarketDataSource):
 
 
 # --------------------------------------------------------------------------- #
+# 实盘/外部行情数据源接口缝（V106，移植自 panda panda_trading 的 CTP/QMT/数字货币）
+# --------------------------------------------------------------------------- #
+# panda 的 CTP / QMT / 数字货币行情均为重柜台/交易所连接，无法直接移植到本项目的
+# paper-trading / SQLite 栈。此处只落地「接口缝」：复用 MarketDataSource 抽象，定义
+# 各数据源所需的凭证与 SDK，并在未配置时给出可读的 DataSourceError（不假装可用）。
+# 凭证/SDK 就绪后，可在各 fetch_* 内接入真实连接，无需改动服务层。
+class ExternalMarketSource(MarketDataSource):
+    """外部行情数据源抽象基类（接口缝）。
+
+    - ``required_env``：运行所需的环境变量；
+    - ``required_sdk``：所需第三方 SDK（人类可读名，用于提示安装）；
+    - ``_is_configured()``：env 齐备且 SDK 可导入时返回 True；
+    - 任意 fetch/symbols 在未就绪时抛 ``DataSourceError`` 并列出待办。
+    """
+
+    required_env: List[str] = []
+    required_sdk: str = ""
+
+    # 子类用：连接真实柜台的具体逻辑（接口缝占位，待凭证就绪实现）
+    def connect(self) -> None:  # pragma: no cover - 真实连接待实现
+        raise DataSourceError(
+            f"数据源 {self.name} 尚未接入：需 {self.required_sdk} 与凭证 "
+            f"{', '.join(self.required_env)}"
+        )
+
+    def _is_configured(self) -> bool:
+        import importlib
+
+        import os
+
+        if self.required_env and not all(os.getenv(e) for e in self.required_env):
+            return False
+        if self.required_sdk:
+            try:
+                importlib.import_module(self.required_sdk)
+            except Exception:
+                return False
+        return True
+
+    def _require_configured(self) -> None:
+        if not self._is_configured():
+            missing = [e for e in self.required_env if not __import__("os").getenv(e)]
+            sdk_hint = f"；并安装 {self.required_sdk}" if self.required_sdk else ""
+            raise DataSourceError(
+                f"外部行情源 {self.name} 未就绪：请配置环境变量 "
+                f"{', '.join(missing) if missing else '（凭证）'}{sdk_hint}"
+            )
+
+    def fetch_daily(self, symbol: str, start: str, end: str) -> List[Bar]:
+        self._require_configured()
+        self.connect()
+        raise DataSourceError(f"数据源 {self.name} 的 fetch_daily 尚未实现（接口缝）")
+
+    def fetch_minute(self, symbol: str, start: str, end: str) -> List[Bar]:
+        self._require_configured()
+        self.connect()
+        raise DataSourceError(f"数据源 {self.name} 的 fetch_minute 尚未实现（接口缝）")
+
+    def symbols(self) -> List[Instrument]:
+        self._require_configured()
+        self.connect()
+        raise DataSourceError(f"数据源 {self.name} 的 symbols 尚未实现（接口缝）")
+
+
+class CTPDataSource(ExternalMarketSource):
+    """CTP 期货行情（上期技术柜台）。
+
+    凭证/SDK：pyctp + QF_CTP_USER / QF_CTP_BROKER_ID / QF_CTP_TD_FRONT /
+    QF_CTP_MD_FRONT / QF_CTP_PASSWORD。
+    """
+
+    name = "ctp"
+    adjustment = "none"
+    required_env = [
+        "QF_CTP_USER",
+        "QF_CTP_BROKER_ID",
+        "QF_CTP_TD_FRONT",
+        "QF_CTP_MD_FRONT",
+        "QF_CTP_PASSWORD",
+    ]
+    required_sdk = "ctp"
+
+
+class QMTDataSource(ExternalMarketSource):
+    """QMT / 迅投 行情（miniQMT xt_trader）。
+
+    凭证/SDK：xt_trader + QF_QMT_ACCOUNT / QF_QMT_PATH。
+    """
+
+    name = "qmt"
+    adjustment = "qfq"
+    required_env = ["QF_QMT_ACCOUNT", "QF_QMT_PATH"]
+    required_sdk = "xt_trader"
+
+
+class CryptoDataSource(ExternalMarketSource):
+    """数字货币行情（交易所 REST/WS，如 binance/okx）。
+
+    凭证/SDK：ccxt + QF_CRYPTO_EXCHANGE / QF_CRYPTO_API_KEY / QF_CRYPTO_SECRET。
+    """
+
+    name = "crypto"
+    adjustment = "none"
+    required_env = ["QF_CRYPTO_EXCHANGE", "QF_CRYPTO_API_KEY", "QF_CRYPTO_SECRET"]
+    required_sdk = "ccxt"
+
+
+# --------------------------------------------------------------------------- #
 # 数据源注册与选择
 # --------------------------------------------------------------------------- #
 def default_data_source() -> MarketDataSource:
@@ -347,7 +455,18 @@ def default_data_source() -> MarketDataSource:
         return LocalDataSource()
     if provider == "tushare":
         return TushareDataSource(token=os.getenv("QF_TUSHARE_TOKEN", ""))
+    if provider == "ctp":
+        return CTPDataSource()
+    if provider == "qmt":
+        return QMTDataSource()
+    if provider == "crypto":
+        return CryptoDataSource()
     raise DataSourceError(f"Unsupported market data provider: {provider}")
+
+
+def available_data_sources() -> List[str]:
+    """返回所有已注册的市场数据源标识（含接口缝占位）。"""
+    return ["fixture", "tushare", "ctp", "qmt", "crypto"]
 
 
 def cache_key(provider: str, symbol: str, start: str, end: str, interval: str) -> str:

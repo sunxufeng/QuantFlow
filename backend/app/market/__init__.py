@@ -5,10 +5,14 @@ from .models import Bar, Instrument, bars_to_table
 from .repository import InMemoryMarketDataRepository, MarketDataRepository
 from .service import MarketService, market_service
 from .sources import (
+    CTPDataSource,
+    CryptoDataSource,
     DataSourceError,
     LocalDataSource,
     MarketDataSource,
+    QMTDataSource,
     TushareDataSource,
+    available_data_sources,
 )
 
 __all__ = [
@@ -27,4 +31,8 @@ __all__ = [
     "LocalDataSource",
     "MarketDataSource",
     "TushareDataSource",
+    "CTPDataSource",
+    "QMTDataSource",
+    "CryptoDataSource",
+    "available_data_sources",
 ]

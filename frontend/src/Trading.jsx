@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { brokerGetConfig, getToken, getLivePositions, getLiveFills, verifyOrder, marketSession, hedgeCalc } from './api.js'
+import { brokerGetConfig, getToken, getLivePositions, getLiveFills, verifyOrder, marketSession, hedgeCalc, getAdapters } from './api.js'
 
 const SYMBOL_HINT = '示例：600519（贵州茅台）、000001（平安银行）、AAPL'
 
@@ -13,7 +13,7 @@ export default function Trading({ onNavigate }) {
   const [positions, setPositions] = useState([])
   const [orders, setOrders] = useState([])
   const [analytics, setAnalytics] = useState(null)
-  const [tab, setTab] = useState('trade')           // trade | analytics | hedge
+  const [tab, setTab] = useState('trade')           // trade | analytics | hedge | adapters
   const [mode, setMode] = useState('paper')        // paper | live
   const [liveCapable, setLiveCapable] = useState(false)
   const [liveStatus, setLiveStatus] = useState(null)
@@ -29,6 +29,7 @@ export default function Trading({ onNavigate }) {
   const [session, setSession] = useState(null)          // V104 市场时段
   const [verifyRes, setVerifyRes] = useState(null)        // V104 合规预检结果
   const [verifyBusy, setVerifyBusy] = useState(false)
+  const [adapters, setAdapters] = useState(null)          // V106 适配器目录
 
   const load = useCallback(() => {
     return Promise.all([
@@ -65,6 +66,7 @@ export default function Trading({ onNavigate }) {
       getLiveFills().then(setLiveFills).catch(() => setLiveFills([]))
     }
     marketSession('stock').then(setSession).catch(() => {})
+    getAdapters().then(setAdapters).catch(() => setAdapters(null))
   }, [load])
 
   const submit = async (e) => {
@@ -205,6 +207,8 @@ export default function Trading({ onNavigate }) {
             style={toggleStyle(tab === 'analytics', '#0ea5e9')}>分析</button>
           <button type="button" onClick={() => setTab('hedge')}
             style={toggleStyle(tab === 'hedge', '#f59e0b')}>对冲</button>
+          <button type="button" onClick={() => setTab('adapters')}
+            style={toggleStyle(tab === 'adapters', '#10b981')}>连接</button>
         </div>
         {/* 模拟 / 实盘 切换 */}
         <div style={{ display: 'inline-flex', borderRadius: 8, overflow: 'hidden', border: '1px solid #cbd5e1' }}>
@@ -457,6 +461,8 @@ export default function Trading({ onNavigate }) {
       )}
 
       {tab === 'hedge' && <HedgeCalculator />}
+
+      {tab === 'adapters' && <AdaptersPanel data={adapters} onNavigate={onNavigate} onRefresh={load} />}
     </div>
   )
 }
@@ -652,6 +658,65 @@ function HedgeCalculator() {
           <div className="qf-success" style={{ marginTop: 10 }}>{res.note}</div>
         </div>
       )}
+    </div>
+  )
+}
+
+function AdaptersPanel({ data, onNavigate, onRefresh }) {
+  if (!data) {
+    return (
+      <div style={{ marginTop: 18, color: '#64748b', fontSize: 13 }}>加载适配器目录中…</div>
+    )
+  }
+  const badge = (ok) => (
+    <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 999, fontWeight: 600,
+      background: ok ? '#dcfce7' : '#fee2e2', color: ok ? '#166534' : '#991b1b' }}>
+      {ok ? '已就绪' : '未配置'}
+    </span>
+  )
+  const Section = ({ title, items, accent }) => (
+    <div style={{ marginTop: 18, border: '1px solid var(--border)', borderRadius: 10, padding: 14, background: '#fff' }}>
+      <div style={{ fontWeight: 600, fontSize: 13, color: accent, marginBottom: 10 }}>{title}</div>
+      {items.length === 0 && <div className="qf-prop-hint">暂无</div>}
+      {items.map((a, i) => (
+        <div key={a.id || i} style={{ border: '1px solid #eef2f7', borderRadius: 8, padding: 10, marginBottom: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span style={{ fontWeight: 600, fontSize: 13 }}>{a.name}</span>
+            {badge(!!a.configured)}
+            <span className="qf-hint" style={{ marginLeft: 'auto' }}>{a.mode}</span>
+          </div>
+          <div className="qf-hint" style={{ marginTop: 4 }}>{a.note}</div>
+          {a.required_env && a.required_env.length > 0 && (
+            <div style={{ marginTop: 6, fontSize: 11, color: '#64748b' }}>
+              所需：{a.required_env.join('、')}{a.required_sdk ? ` + ${a.required_sdk}` : ''}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+  const s = data.summary || {}
+  return (
+    <div style={{ marginTop: 18 }}>
+      <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text)', marginBottom: 10 }}>
+        适配器与连接（V106 · panda 多源接口缝）
+      </div>
+      <div className="qf-hint" style={{ marginBottom: 8 }}>
+        覆盖 panda_quantflow 的 Tushare / CTP / QMT / 数字货币 等多源行情与实盘柜台。
+        已就绪项可直接使用；未配置项为接口缝，配齐凭证/SDK 后即接入真实连接，无需改动上层。
+      </div>
+      <div className="qf-mcards" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))' }}>
+        <div className="qf-mcard"><div className="qf-mcard-value" style={{ color: '#10b981' }}>{s.configured_market || 0}/{s.total_market || 0}</div><div className="qf-mcard-label">市场源就绪</div></div>
+        <div className="qf-mcard"><div className="qf-mcard-value" style={{ color: '#6366f1' }}>{s.configured_brokers || 0}/{s.total_brokers || 0}</div><div className="qf-mcard-label">券商就绪</div></div>
+      </div>
+
+      <Section title="市场数据源" items={data.market_sources || []} accent="#10b981" />
+      <Section title="券商连接器" items={data.brokers || []} accent="#6366f1" />
+
+      <div style={{ marginTop: 12, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <button className="qf-btn qf-btn-sm" onClick={() => onRefresh && onRefresh()}>刷新</button>
+        <button className="qf-btn qf-btn-sm" onClick={() => onNavigate && onNavigate('broker')}>去券商设置</button>
+      </div>
     </div>
   )
 }
