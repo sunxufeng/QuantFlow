@@ -351,6 +351,19 @@ export const runTrackingError = (payload) => _mon('tracking-error', payload)
 export const runSectorExposure = (payload) => _mon('sector-exposure', payload)
 export const runRiskBudget = (payload) => _mon('risk-budget', payload)
 
+// ---- V101 监控告警规则 + 自动评估调度 ----
+export const listMonitorRules = () => request('/monalert/rules')
+export const createMonitorRule = (payload) => request('/monalert/rules', {
+  method: 'POST', body: JSON.stringify(payload),
+})
+export const deleteMonitorRule = (id) => request(`/monalert/rules/${id}`, { method: 'DELETE' })
+export const toggleMonitorRule = (id, enabled) => request(`/monalert/rules/${id}/toggle`, {
+  method: 'POST', body: JSON.stringify({ enabled }),
+})
+export const runMonitorEvaluate = () => request('/monalert/evaluate', { method: 'POST' })
+export const getMonitorScheduler = () => request('/monalert/scheduler')
+export const startMonitorScheduler = () => request('/monalert/scheduler/start', { method: 'POST' })
+
 // ---- 策略评估与显著性（V92–V96）----
 const _sig = (path, payload) => request(`/sig/${path}`, { method: 'POST', body: JSON.stringify(payload) })
 export const runDeflatedSharpe = (payload) => _sig('deflated-sharpe', payload)

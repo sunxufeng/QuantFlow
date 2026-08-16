@@ -175,6 +175,12 @@ async def startup() -> None:
     except Exception as exc:  # pragma: no cover - 启动容错
         logger.warning("预警自动评估调度启动失败（可忽略）：%s", exc)
     try:
+        from .monitoring.monalert_scheduler import start as monalert_scheduler_start
+
+        monalert_scheduler_start()
+    except Exception as exc:  # pragma: no cover - 启动容错
+        logger.warning("监控告警自动评估调度启动失败（可忽略）：%s", exc)
+    try:
         seeded = factor_library.seed_defaults()
         if seeded:
             logger.info("因子库已写入 %d 个内置因子", seeded)
@@ -199,6 +205,12 @@ async def shutdown() -> None:
         from .alerts.scheduler import shutdown as alerts_scheduler_shutdown
 
         alerts_scheduler_shutdown()
+    except Exception:  # pragma: no cover
+        pass
+    try:
+        from .monitoring.monalert_scheduler import shutdown as monalert_scheduler_shutdown
+
+        monalert_scheduler_shutdown()
     except Exception:  # pragma: no cover
         pass
 

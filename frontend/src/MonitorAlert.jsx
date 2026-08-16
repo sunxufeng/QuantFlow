@@ -1,7 +1,17 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import {
   runDriftMonitor, runReturnQuality, runTrackingError, runSectorExposure, runRiskBudget,
+  listMonitorRules, createMonitorRule, deleteMonitorRule, toggleMonitorRule,
+  runMonitorEvaluate, getMonitorScheduler, startMonitorScheduler,
 } from './api.js'
+
+const MONITOR_TYPES = [
+  ['drift', '持仓偏离'],
+  ['return_quality', '收益质量'],
+  ['tracking_error', '跟踪误差'],
+  ['sector_exposure', '行业敞口'],
+  ['risk_budget', '风险预算'],
+]
 
 const btn = {
   padding: '6px 14px', borderRadius: 8, border: '1px solid #2f6df6',
@@ -44,6 +54,50 @@ export default function MonitorAlert() {
   const [res, setRes] = useState(null)
   const [loading, setLoading] = useState(false)
   const [err, setErr] = useState(null)
+
+  // V101 监控告警规则
+  const [rules, setRules] = useState([])
+  const [sched, setSched] = useState(null)
+  const [ruleName, setRuleName] = useState('')
+  const [ruleType, setRuleType] = useState('drift')
+  const [ruleParams, setRuleParams] = useState('')
+  const [ruleCooldown, setRuleCooldown] = useState(60)
+  const [evalRes, setEvalRes] = useState(null)
+  const [evalRunning, setEvalRunning] = useState(false)
+  const [ruleMsg, setRuleMsg] = useState(null)
+
+  const loadRules = async () => {
+    try { setRules(await listMonitorRules()) } catch {}
+  }
+  const loadSched = async () => {
+    try { setSched(await getMonitorScheduler()) } catch {}
+  }
+  useEffect(() => { loadRules(); loadSched() }, [])
+
+  const addRule = async () => {
+    setRuleMsg(null)
+    try {
+      const params = JSON.parse(ruleParams || '{}')
+      await createMonitorRule({ name: ruleName || '未命名规则', monitor_type: ruleType, params, cooldown_minutes: +ruleCooldown })
+      setRuleMsg({ ok: true, text: '规则已添加' })
+      setRuleName(''); setRuleParams('')
+      await loadRules()
+    } catch (e) {
+      setRuleMsg({ ok: false, text: jsonErr(e.message) })
+    }
+  }
+  const removeRule = async (id) => { await deleteMonitorRule(id); loadRules() }
+  const toggleRule = async (id, enabled) => { await toggleMonitorRule(id, !enabled); loadRules() }
+  const runEval = async () => {
+    setEvalRunning(true); setEvalRes(null)
+    try {
+      const r = await runMonitorEvaluate()
+      setEvalRes(r)
+    } catch (e) { setRuleMsg({ ok: false, text: jsonErr(e.message) }) }
+    finally { setEvalRunning(false) }
+  }
+  const startSched = async () => { await startMonitorScheduler(); loadSched() }
+
   const run = async (fn, payload) => {
     setLoading(true); setErr(null)
     try { setRes(await fn(payload)) } catch (e) { setErr(jsonErr(e.message)) } finally { setLoading(false) }
@@ -54,6 +108,56 @@ export default function MonitorAlert() {
     <div style={{ padding: 18, maxWidth: 1080 }}>
       <h2 style={{ margin: '0 0 4px' }}>组合监控与预警（V87–V91）</h2>
       <p style={{ color: '#888', marginTop: 0, fontSize: 13 }}>持仓偏离 · 收益质量 · 跟踪误差 · 行业敞口 · 风险预算（集中度/流动性见风险页）</p>
+
+      {/* V101 监控告警推送 */}
+      <Card title="监控告警推送（命中即推送至已配置通知渠道）">
+        <p style={{ fontSize: 12, color: '#666', marginTop: 0 }}>
+          先到「设置 → 通知渠道」配置飞书/邮件/Webhook，再在此登记监控规则。定时自动评估默认开启（间隔 5 分钟，环境变量可调）。
+        </p>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 10 }}>
+          <button style={btn} disabled={evalRunning} onClick={runEval}>{evalRunning ? '评估中…' : '立即评估全部规则'}</button>
+          <button style={{ ...btn, background: '#fff', color: '#2f6df6' }} disabled={sched?.running} onClick={startSched}>
+            {sched?.running ? `自动评估运行中（${sched?.interval_minutes}分钟）` : '启动自动评估'}
+          </button>
+          {sched && <span style={{ fontSize: 12, color: '#888' }}>最近推送：{sched.last_triggered ?? 0} 条</span>}
+        </div>
+
+        {evalRes && (
+          <div style={{ background: '#f7f9fc', borderRadius: 8, padding: 10, fontSize: 12, marginBottom: 10 }}>
+            评估 {evalRes.evaluated} 条，已推送 {evalRes.notified} 条。
+            <pre style={pre}>{JSON.stringify(evalRes.results.filter((r) => r.triggered), null, 1)}</pre>
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginBottom: 10 }}>
+          <input placeholder="规则名称" value={ruleName} onChange={(e) => setRuleName(e.target.value)} style={{ padding: 6, borderRadius: 8, border: '1px solid #ccc', width: 140 }} />
+          <select value={ruleType} onChange={(e) => setRuleType(e.target.value)} style={{ padding: 6, borderRadius: 8, border: '1px solid #ccc' }}>
+            {MONITOR_TYPES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+          </select>
+          <input placeholder="冷却(分钟)" value={ruleCooldown} onChange={(e) => setRuleCooldown(e.target.value)} style={{ padding: 6, borderRadius: 8, border: '1px solid #ccc', width: 80 }} />
+          <button style={{ ...btn, background: '#27ae60' }} onClick={addRule}>添加规则</button>
+        </div>
+        <textarea placeholder='监控参数 JSON，例如 {"weights":[0.8,0.2],"target":[0.5,0.5],"asset_names":["A","B"],"threshold":0.05}'
+          rows={2} value={ruleParams} onChange={(e) => setRuleParams(e.target.value)}
+          style={{ width: '100%', fontFamily: 'monospace', fontSize: 12, marginBottom: 8 }} />
+        {ruleMsg && <div style={{ color: ruleMsg.ok ? '#1e7e34' : '#c0392b', fontSize: 12, marginBottom: 8 }}>{ruleMsg.text}</div>}
+
+        <div style={{ borderTop: '1px solid #eee', paddingTop: 8 }}>
+          {rules.length === 0 && <div style={{ fontSize: 12, color: '#999' }}>暂无规则</div>}
+          {rules.map((r) => (
+            <div key={r.id} style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '6px 0', borderBottom: '1px dashed #f0f0f0', flexWrap: 'wrap' }}>
+              <span style={{ fontWeight: 600, fontSize: 13 }}>{r.name}</span>
+              <span style={{ fontSize: 11, color: '#888' }}>{MONITOR_TYPES.find(([k]) => k === r.monitor_type)?.[1] || r.monitor_type}</span>
+              <span style={{ fontSize: 11, color: r.enabled ? '#1e7e34' : '#999' }}>{r.enabled ? '启用' : '停用'}</span>
+              <span style={{ fontSize: 11, color: '#888' }}>命中 {r.trigger_count} 次</span>
+              <span style={{ flex: 1 }} />
+              <button style={{ ...btn, padding: '4px 10px', background: '#fff', color: '#2f6df6' }} onClick={() => toggleRule(r.id, r.enabled)}>{r.enabled ? '停用' : '启用'}</button>
+              <button style={{ ...btn, padding: '4px 10px', background: '#fff', color: '#c0392b', borderColor: '#c0392b' }} onClick={() => removeRule(r.id)}>删除</button>
+            </div>
+          ))}
+        </div>
+      </Card>
+
       <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
         {[['drift', '持仓偏离'], ['rq', '收益质量'], ['te', '跟踪误差'], ['sector', '行业敞口'], ['budget', '风险预算']].map(([k, l]) => (
           <button key={k} style={tab(tabk, k)} onClick={() => { setTab(k); setRes(null); setErr(null) }}>{l}</button>

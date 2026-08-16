@@ -193,6 +193,22 @@ CREATE TABLE IF NOT EXISTS alert_rules (
     trigger_count    INTEGER NOT NULL DEFAULT 0
 );
 
+-- V101 监控告警规则：把 V87-V91 五大组合监控器(drift/收益质量/跟踪误差/行业敞口/
+-- 风险预算)的 breach 结果接入通知管道。params 存监控器入参(JSON)；评估命中 breach
+-- 时经 notification_service 推送至已配置渠道，并按 cooldown 去重。
+CREATE TABLE IF NOT EXISTS monitor_alert_rules (
+    id               TEXT PRIMARY KEY,
+    name             TEXT NOT NULL,
+    monitor_type     TEXT NOT NULL,
+    params           TEXT NOT NULL DEFAULT '{}',
+    cooldown_minutes INTEGER NOT NULL DEFAULT 60,
+    enabled          INTEGER NOT NULL DEFAULT 1,
+    created_at       TEXT NOT NULL,
+    last_triggered   TEXT,
+    trigger_count    INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_monitor_alert_rules_type ON monitor_alert_rules(monitor_type);
+
 CREATE TABLE IF NOT EXISTS watchlists (
     symbol     TEXT PRIMARY KEY,
     added_at   TEXT NOT NULL

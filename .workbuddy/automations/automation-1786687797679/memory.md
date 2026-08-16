@@ -1,5 +1,12 @@
 # QuantFlow 生产部署看守 — 执行记录
 
+## 2026-08-16 10:39 CST
+- **结果**：主机可达，部署成功（deploy-remote.sh exit=0），重跑并成功。
+- 后端 app/ + 前端 src/dist 已同步并重启服务，健康检查通过。
+- 健康端点探测版本：**100.0.0**（背景预期 2.0.0；仓库版本号持续前移，与任务背景不符，建议确认版本号来源）。
+- 已通过 lark-cli（im +messages-send --as bot --chat-id 紧跟 --chat-id、--markdown 紧跟 --markdown）向 chat-id oc_ea45f82679bd3c90715d83da8a46f247 发送成功消息（message_id om_x100b67267f0738a4c33477f017c59d1），含部署时间、版本、访问地址。
+- 访问地址 http://116.62.188.165:8080。
+
 ## 2026-08-16 09:48 CST
 - **结果**：主机可达，部署成功（deploy-remote.sh exit=0），重跑并成功。
 - 后端 app/ + 前端 src/dist 已同步并重启服务，健康检查通过。
