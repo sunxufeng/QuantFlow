@@ -319,6 +319,14 @@ export const runPIStressTest = (payload) => _pi('stress-test', payload)
 export const runPIRebalance = (payload) => _pi('rebalance', payload)
 export const runPIAggregate = (payload) => _pi('aggregate', payload)
 
+// ---- 风险归因与因子风险模型（V77–V81）----
+const _ra = (path, payload) => request(`/riskattr/${path}`, { method: 'POST', body: JSON.stringify(payload) })
+export const runFactorRisk = (payload) => _ra('factor-risk', payload)
+export const runFactorReturn = (payload) => _ra('factor-return', payload)
+export const runComponentVar = (payload) => _ra('component-var', payload)
+export const runRiskTree = (payload) => _ra('risk-tree', payload)
+export const runTailMetrics = (payload) => _ra('tail', payload)
+
 // ---- 因子库 CRUD（V1.1 N3）----
 export const factorLibraryList = (category) => request(
   `/factors/library${category ? `?category=${encodeURIComponent(category)}` : ''}`,

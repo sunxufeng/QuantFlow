@@ -37,6 +37,7 @@ const navItems = [
   { key: 'execution', label: '执行成本', abbr: '成' },
   { key: 'reports', label: '报告运维', abbr: '报' },
   { key: 'portfolioi', label: '组合增强', abbr: '组' },
+  { key: 'riskattrib', label: '风险归因', abbr: '因' },
   { key: 'factorbt', label: '因子回测', abbr: '测' },
   { key: 'factoreng', label: '因子工程', abbr: '工' },
   { key: 'notify', label: '通知渠道', abbr: '通' },

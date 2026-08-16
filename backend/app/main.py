@@ -35,6 +35,7 @@ from .api import (
     projects,
     reports_analytics,
     risk_analytics,
+    risk_attrib,
     strategies_ext,
     runs,
     schedules,
@@ -135,6 +136,7 @@ app.include_router(portfolio_opt_ext.router, prefix="/api")
 app.include_router(portfolio_i.router, prefix="/api")
 app.include_router(risk_analytics.router, prefix="/api")
 app.include_router(reports_analytics.router, prefix="/api")
+app.include_router(risk_attrib.router, prefix="/api")
 app.include_router(market_regime.router, prefix="/api")
 app.include_router(ml_analytics.router, prefix="/api")
 app.include_router(strategies_ext.router, prefix="/api")
