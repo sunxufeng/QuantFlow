@@ -343,6 +343,14 @@ export const runTrackingError = (payload) => _mon('tracking-error', payload)
 export const runSectorExposure = (payload) => _mon('sector-exposure', payload)
 export const runRiskBudget = (payload) => _mon('risk-budget', payload)
 
+// ---- 策略评估与显著性（V92–V96）----
+const _sig = (path, payload) => request(`/sig/${path}`, { method: 'POST', body: JSON.stringify(payload) })
+export const runDeflatedSharpe = (payload) => _sig('deflated-sharpe', payload)
+export const runProbabilisticSharpe = (payload) => _sig('probabilistic-sharpe', payload)
+export const runStrategyCapacity = (payload) => _sig('capacity', payload)
+export const runRegimeStats = (payload) => _sig('regime-stats', payload)
+export const runStrategyDiversification = (payload) => _sig('diversification', payload)
+
 // ---- 因子库 CRUD（V1.1 N3）----
 export const factorLibraryList = (category) => request(
   `/factors/library${category ? `?category=${encodeURIComponent(category)}` : ''}`,

@@ -59,6 +59,7 @@ import PortfolioI from './PortfolioI.jsx'
 import RiskAttrib from './RiskAttrib.jsx'
 import Derivatives from './Derivatives.jsx'
 import MonitorAlert from './MonitorAlert.jsx'
+import Significance from './Significance.jsx'
 import Attribution from './Attribution.jsx'
 import StressTest from './StressTest.jsx'
 import FactorBacktest from './FactorBacktest.jsx'
@@ -1126,6 +1127,7 @@ export default function App() {
           {view === 'riskattrib' && <RiskAttrib />}
           {view === 'deriv' && <Derivatives />}
           {view === 'monalert' && <MonitorAlert />}
+          {view === 'sig' && <Significance />}
           {view === 'stratelib' && <StrategyLibrary />}
           {view === 'synth' && <SyntheticLab />}
           {view === 'fwd' && <ForwardSim />}
