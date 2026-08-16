@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { listReportArchive, getReportArchive, deleteReportArchive } from './api.js'
 import ExportBar from './ExportBar.jsx'
+import { exportWorkbook } from './exportUtils.js'
 
 const btn = {
   padding: '6px 12px', borderRadius: 8, border: '1px solid #2f6df6',
@@ -40,6 +41,25 @@ export default function MyReports() {
     try { await deleteReportArchive(id); setOpen(null); await refresh() } catch (e) { setErr(e.message || '删除失败') }
   }
 
+  // V99 批量导出：把所有存档报告合并到一个 Excel 工作簿（每个报告一个 sheet）。
+  const exportAll = async () => {
+    try {
+      const list = await listReportArchive()
+      const its = list.items || []
+      if (!its.length) { setErr('没有可导出的报告'); return }
+      const sheets = []
+      for (const it of its) {
+        const rec = await getReportArchive(it.id)
+        const content = rec.content || {}
+        const sections = content.export_sections && content.export_sections.length
+          ? content.export_sections
+          : (content.summary ? [{ title: it.name, kv: content.summary }] : [{ title: it.name, kv: content }])
+        sheets.push({ name: it.name.slice(0, 31), sections })
+      }
+      exportWorkbook(sheets, 'my_reports.xls', '我的报告')
+    } catch (e) { setErr(e.message || '导出失败') }
+  }
+
   return (
     <div style={{ padding: 18, maxWidth: 1080 }}>
       <h2 style={{ margin: '0 0 4px' }}>我的报告 <span style={{ fontSize: 12, color: '#16a34a' }}>V98</span></h2>
@@ -49,6 +69,7 @@ export default function MyReports() {
 
       {!open && (
         <div style={{ marginTop: 12 }}>
+          <button style={{ ...btn, background: '#fff', color: '#2f6df6', marginBottom: 10 }} onClick={exportAll}>导出全部为 Excel（多 sheet）</button>
           {loading && <div style={{ color: '#888' }}>加载中…</div>}
           {!loading && items.length === 0 && <div style={{ color: '#888' }}>暂无存档，可在「综合报告」中点击「保存到存档」。</div>}
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, marginTop: 8 }}>
