@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { backtestReports, fetchOverview, fetchProjects, fetchWorkspace, listRuns } from './api.js'
+import StatusBlock from './StatusBlock.jsx'
 
 const fmtMoney = (v) =>
   v == null
@@ -92,8 +93,7 @@ export default function Dashboard({ onNavigate }) {
         欢迎使用 QuantFlow 量化工作流平台 · 当前版本 v{overview?.server?.version || workspace ? '7.0.1' : '1.7.0'}
       </div>
 
-      {error && <div className="qf-error">{error}</div>}
-
+      <StatusBlock loading={loading} error={error} loadingText="正在加载概览…">
       <div className="qf-mcards" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))' }}>
         <StatCard label="项目" value={projects.length} />
         <StatCard label="运行总数" value={runStats.total} sub={`成功 ${runStats.succeeded}`} accent="#22c55e" />
@@ -206,6 +206,7 @@ export default function Dashboard({ onNavigate }) {
           <button className="qf-btn" onClick={() => onNavigate('reports')}>回测报告</button>
         </div>
       </div>
+      </StatusBlock>
     </div>
   )
 }

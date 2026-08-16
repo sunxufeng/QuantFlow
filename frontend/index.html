@@ -7,6 +7,16 @@
     <style>
       html, body, #root { height: 100%; margin: 0; font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; }
       * { box-sizing: border-box; }
+      @keyframes qf-spin { to { transform: rotate(360deg); } }
+      /* V100 全局打印样式：打印 / 另存为 PDF 时隐藏应用框架，仅保留内容。 */
+      @media print {
+        .qf-sidebar, .qf-app-shell, .qf-layout, .qf-topbar, nav, button, .qf-btn, .qf-tabs { display: none !important; }
+        body, #root { height: auto !important; overflow: visible !important; background: #fff !important; }
+        .qf-main, main { margin: 0 !important; padding: 0 !important; width: 100% !important; box-shadow: none !important; }
+        table { border-collapse: collapse; }
+        td, th { border: 1px solid #ccc !important; padding: 4px 8px !important; }
+        h2, h3 { break-after: avoid; }
+      }
     </style>
   </head>
   <body>
