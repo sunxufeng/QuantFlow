@@ -243,6 +243,20 @@ CREATE TABLE IF NOT EXISTS report_archive (
 );
 CREATE INDEX IF NOT EXISTS idx_report_archive_owner ON report_archive(owner_id);
 
+-- V102 报告投递任务：定时生成绩效/风险/周期/综合报告并推送至通知渠道。
+CREATE TABLE IF NOT EXISTS report_delivery_jobs (
+    id               TEXT PRIMARY KEY,
+    name             TEXT NOT NULL,
+    report_type      TEXT NOT NULL,
+    params           TEXT NOT NULL DEFAULT '{}',
+    interval_minutes INTEGER NOT NULL DEFAULT 60,
+    enabled          INTEGER NOT NULL DEFAULT 1,
+    created_at       TEXT NOT NULL,
+    last_run_at      TEXT,
+    last_run_status  TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_report_delivery_jobs_type ON report_delivery_jobs(report_type);
+
 """
 
 

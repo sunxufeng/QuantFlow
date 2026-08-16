@@ -43,6 +43,7 @@ const navItems = [
   { key: 'sig', label: '策略评估', abbr: '评' },
   { key: 'consolidate', label: '综合报告', abbr: '综' },
   { key: 'myreports', label: '我的报告', abbr: '存' },
+  { key: 'report-delivery', label: '报告投递', abbr: '递' },
   { key: 'factorbt', label: '因子回测', abbr: '测' },
   { key: 'factoreng', label: '因子工程', abbr: '工' },
   { key: 'notify', label: '通知渠道', abbr: '通' },

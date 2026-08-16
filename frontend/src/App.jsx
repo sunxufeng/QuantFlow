@@ -62,6 +62,7 @@ import MonitorAlert from './MonitorAlert.jsx'
 import Significance from './Significance.jsx'
 import ConsolidateReport from './ConsolidateReport.jsx'
 import MyReports from './MyReports.jsx'
+import ReportDelivery from './ReportDelivery.jsx'
 import Attribution from './Attribution.jsx'
 import StressTest from './StressTest.jsx'
 import FactorBacktest from './FactorBacktest.jsx'
@@ -1132,6 +1133,7 @@ export default function App() {
           {view === 'sig' && <Significance />}
           {view === 'consolidate' && <ConsolidateReport />}
           {view === 'myreports' && <MyReports />}
+          {view === 'report-delivery' && <ReportDelivery />}
           {view === 'stratelib' && <StrategyLibrary />}
           {view === 'synth' && <SyntheticLab />}
           {view === 'fwd' && <ForwardSim />}

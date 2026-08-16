@@ -319,6 +319,21 @@ export const listReportArchive = () => request('/reports/archive')
 export const getReportArchive = (id) => request(`/reports/archive/${id}`)
 export const deleteReportArchive = (id) => request(`/reports/archive/${id}`, { method: 'DELETE' })
 
+// ---- V102 定时报告自动投递 ----
+export const deliverReport = (payload) => _rep('deliver', payload)
+export const listDeliveryJobs = () => request('/reports/delivery-jobs')
+export const createDeliveryJob = (payload) => request('/reports/delivery-jobs', {
+  method: 'POST', body: JSON.stringify(payload),
+})
+export const deleteDeliveryJob = (id) => request(`/reports/delivery-jobs/${id}`, { method: 'DELETE' })
+export const toggleDeliveryJob = (id, enabled) => request(`/reports/delivery-jobs/${id}/toggle`, {
+  method: 'POST', body: JSON.stringify({ enabled }),
+})
+export const runDeliveryJob = (id) => request(`/reports/delivery-jobs/${id}/run`, { method: 'POST' })
+export const getDeliveryScheduler = () => request('/reports/delivery/scheduler')
+export const startDeliveryScheduler = () => request('/reports/delivery/scheduler/start', { method: 'POST' })
+export const triggerDeliveryScheduler = () => request('/reports/delivery/scheduler/trigger', { method: 'POST' })
+
 // ---- 组合层面增强（V72–V76）----
 const _pi = (path, payload) => request(`/portfolioi/${path}`, { method: 'POST', body: JSON.stringify(payload) })
 export const runPIBlackLitterman = (payload) => _pi('black-litterman', payload)

@@ -49,6 +49,7 @@ from .api import (
     trading,
     workflows,
     workspace as workspace_api,
+    report_delivery,
 )
 from .config import settings
 from .core import runs as run_module
@@ -154,6 +155,7 @@ app.include_router(alerts.router, prefix="/api")
 app.include_router(workspace_api.router, prefix="/api")
 app.include_router(export_api.router, prefix="/api")
 app.include_router(execution_cost.router, prefix="/api")
+app.include_router(report_delivery.router, prefix="/api")
 
 _START_TIME = time.time()
 
@@ -180,6 +182,12 @@ async def startup() -> None:
         monalert_scheduler_start()
     except Exception as exc:  # pragma: no cover - 启动容错
         logger.warning("监控告警自动评估调度启动失败（可忽略）：%s", exc)
+    try:
+        from .reports.delivery_scheduler import start as delivery_scheduler_start
+
+        delivery_scheduler_start()
+    except Exception as exc:  # pragma: no cover - 启动容错
+        logger.warning("报告投递自动调度启动失败（可忽略）：%s", exc)
     try:
         seeded = factor_library.seed_defaults()
         if seeded:
@@ -211,6 +219,12 @@ async def shutdown() -> None:
         from .monitoring.monalert_scheduler import shutdown as monalert_scheduler_shutdown
 
         monalert_scheduler_shutdown()
+    except Exception:  # pragma: no cover
+        pass
+    try:
+        from .reports.delivery_scheduler import shutdown as delivery_scheduler_shutdown
+
+        delivery_scheduler_shutdown()
     except Exception:  # pragma: no cover
         pass
 
