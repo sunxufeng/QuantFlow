@@ -266,6 +266,7 @@ export const runTailRisk = (payload) => _risk('tail', payload)
 export const runLiquidity = (payload) => _risk('liquidity', payload)
 export const runConcentration = (payload) => _risk('concentration', payload)
 export const getLivePositions = () => request('/trading/live/positions')
+export const getLiveAccount = () => request('/trading/live/account')
 
 // ---- 市场状态与择时（V47–V51）----
 const _mkt = (path, payload) => request(`/market/${path}`, { method: 'POST', body: JSON.stringify(payload) })

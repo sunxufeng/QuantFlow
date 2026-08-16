@@ -252,6 +252,10 @@ class LiveExecutionGateway(BaseExecutionGateway):
 
     def reset(self, cash: float) -> None:
         self._ensure_configured()
+        # 虚拟券商支持本地重置（清空本地账本）；真实柜台不支持，保持 NotImplementedError
+        if self._connector is not None and self._connector.is_configured() and hasattr(self._connector, "reset"):
+            self._connector.reset(cash)
+            return
         raise NotImplementedError("LiveExecutionGateway 为实盘，不支持本地重置")
 
 

@@ -71,6 +71,12 @@ def get_live_fills(user: Dict[str, Any] = Depends(get_current_user)):
         raise HTTPException(status_code=501, detail="实盘成交查询待券商 SDK 就绪后启用")
 
 
+@router.get("/trading/live/account")
+def get_live_account(user: Dict[str, Any] = Depends(get_current_user)):
+    """V107 实盘账户快照（权益/现金/持仓市值/盈亏）；虚拟券商返回本地账本。"""
+    return engine.live_account()
+
+
 @router.post("/trading/live/orders")
 def place_live(payload: OrderIn, user: Dict[str, Any] = Depends(get_current_user)):
     fill = engine.place_live_order(

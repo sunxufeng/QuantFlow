@@ -220,6 +220,9 @@ def live_capable() -> bool:
     """是否具备实盘条件：配置了真实券商且连接器就绪（SDK + 凭证）。"""
     cfg = load_broker_config()
     broker = cfg.get("broker", "none")
+    if broker == "virtual":
+        # V107：虚拟券商永远就绪（无需凭证/SDK）
+        return True
     if broker in ("qmt", "ctp"):
         from ..core.broker.registry import get_live_connector
         conn = get_live_connector(cfg)
@@ -241,11 +244,24 @@ def _live_connector():
 
 
 def live_status() -> dict:
-    """V31 实盘就绪详情：列出缺失的凭证字段与可读提示，按券商类型区分（QMT/CTP/通用）。"""
+    """V31 实盘就绪详情：列出缺失的凭证字段与可读提示，按券商类型区分（QMT/CTP/通用/虚拟）。"""
     cfg = load_broker_config()
     broker = cfg.get("broker", "none")
     capable = live_capable()
     missing = []
+    if broker == "virtual":
+        # V107：虚拟券商——功能已就绪，无需凭证
+        return {
+            "live_capable": True,
+            "broker": "virtual",
+            "mode": "virtual",
+            "has_api_key": False,
+            "has_api_secret": False,
+            "has_base_url": False,
+            "has_account_id": False,
+            "missing": [],
+            "message": "虚拟券商已就绪：等价 CTP/QMT 接口，本地账本撮合，无需凭证/SDK",
+        }
     if broker in ("qmt", "ctp", "universal", "easytrade", "xuntou"):
         if broker == "qmt" and not cfg.get("api_key") and not __import__("os").environ.get("QF_QMT_ACCOUNT"):
             missing.append("QF_QMT_ACCOUNT(资金账号)+xt_trader SDK")
@@ -289,22 +305,61 @@ def live_fills() -> list:
     return gw.get_fills()
 
 
+def live_account(prices: dict | None = None) -> dict:
+    """实盘账户快照（权益/现金/持仓市值；虚拟券商返回本地账本）。"""
+    from ..execution.gateway import LiveExecutionGateway
+    gw = LiveExecutionGateway()
+    try:
+        acc = gw.get_account(prices)
+    except NotImplementedError:
+        raise HTTPException(status_code=501, detail="实盘账户查询待真实券商 SDK 就绪后启用")
+    except GatewayNotConfigured as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    # 计算盈亏（相对初始权益）
+    initial = acc.get("initial_cash") or 0.0
+    equity = acc.get("equity") or 0.0
+    acc["pnl"] = round(equity - initial, 4)
+    acc["pnl_pct"] = round((equity - initial) / initial * 100, 4) if initial else 0.0
+    return acc
+
+
+def _infer_market(symbol: str) -> str:
+    """从标的代码推断市场类型（股票/期货），供实盘连接器下单使用。"""
+    s = (symbol or "").upper()
+    if any(s.endswith(suf) for suf in (".SHF", ".CZC", ".DCE", ".INE", ".CFE", ".SHFE", ".CFFEX")):
+        return "future"
+    return "stock"
+
+
 def place_live_order(user_id, symbol, side, otype, qty, price=None):
     """实盘下单：接入 LiveExecutionGateway；凭证/SDK 就绪前返回结构化的 4xx/5xx。"""
     if not live_capable():
         raise HTTPException(
             status_code=409,
-            detail="实盘未配置：请在「券商设置」中配置真实券商凭证（universal/easytrade/xuntou）",
+            detail="实盘未配置：请在「券商设置」中配置真实券商凭证（universal/easytrade/xuntou），或先启用虚拟券商",
         )
     gw = LiveExecutionGateway()
+    market = _infer_market(symbol)
+    px = float(price) if price not in (None, "") else None
+    last_price = px
+    if last_price is None:
+        # 市价单需解析最新行情价（虚拟/真实券商均依赖行情）；无行情时明确提示改用限价单
+        lp = _store.last_price(symbol)
+        if lp is None:
+            raise HTTPException(
+                status_code=409,
+                detail=f"缺少标的 {symbol} 的最新行情价格，请改用限价单，或先同步行情后再市价下单",
+            )
+        last_price = lp
     order = LiveOrder(
         symbol=symbol,
         side=LiveOrderSide(side),
         quantity=float(qty),
-        price=float(price) if price not in (None, "") else None,
+        market=market,
+        price=px,
     )
     try:
-        fill = gw.submit_order(order)
+        fill = gw.submit_order(order, last_price=last_price)
     except NotImplementedError:
         raise HTTPException(
             status_code=501,

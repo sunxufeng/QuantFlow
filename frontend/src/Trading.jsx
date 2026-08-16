@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { brokerGetConfig, getToken, getLivePositions, getLiveFills, verifyOrder, marketSession, hedgeCalc, getAdapters } from './api.js'
+import { brokerGetConfig, brokerSaveConfig, getToken, getLivePositions, getLiveFills, getLiveAccount, verifyOrder, marketSession, hedgeCalc, getAdapters } from './api.js'
 
 const SYMBOL_HINT = '示例：600519（贵州茅台）、000001（平安银行）、AAPL'
 
@@ -30,6 +30,8 @@ export default function Trading({ onNavigate }) {
   const [verifyRes, setVerifyRes] = useState(null)        // V104 合规预检结果
   const [verifyBusy, setVerifyBusy] = useState(false)
   const [adapters, setAdapters] = useState(null)          // V106 适配器目录
+  const [liveAccount, setLiveAccount] = useState(null)     // V107 实盘账户/盈亏监控
+  const [enablingVirtual, setEnablingVirtual] = useState(false)  // V107 启用虚拟券商
 
   const load = useCallback(() => {
     return Promise.all([
@@ -62,12 +64,40 @@ export default function Trading({ onNavigate }) {
       .then(setLiveStatus)
       .catch(() => {})
     if (liveCapable) {
-      getLivePositions().then(setLivePositions).catch(() => setLivePositions([]))
-      getLiveFills().then(setLiveFills).catch(() => setLiveFills([]))
+      refreshLive()
     }
     marketSession('stock').then(setSession).catch(() => {})
     getAdapters().then(setAdapters).catch(() => setAdapters(null))
   }, [load])
+
+  const refreshLive = useCallback(() => {
+    if (!liveCapable) return
+    getLivePositions().then(setLivePositions).catch(() => setLivePositions([]))
+    getLiveFills().then(setLiveFills).catch(() => setLiveFills([]))
+    getLiveAccount().then(setLiveAccount).catch(() => setLiveAccount(null))
+  }, [liveCapable])
+
+  const enableVirtual = async () => {
+    setEnablingVirtual(true)
+    setError('')
+    try {
+      await brokerSaveConfig({ broker: 'virtual' })
+      const [brk, mode, status] = await Promise.all([
+        brokerGetConfig().catch(() => null),
+        fetch('/api/trading/mode', { headers: authHeaders() }).then(r => r.json()).catch(() => null),
+        fetch('/api/trading/live/status', { headers: authHeaders() }).then(r => r.json()).catch(() => null),
+      ])
+      if (brk) setBroker(brk)
+      if (mode) setLiveCapable(!!mode.live_capable)
+      if (status) setLiveStatus(status)
+      setMode('live')
+      refreshLive()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setEnablingVirtual(false)
+    }
+  }
 
   const submit = async (e) => {
     e.preventDefault()
@@ -92,6 +122,7 @@ export default function Trading({ onNavigate }) {
       }
       setForm({ symbol: '', side: 'buy', type: 'market', qty: '', price: '' })
       if (mode === 'paper') await load()
+      else if (mode === 'live') refreshLive()
     } catch (err) {
       setError(err.message)
     } finally {
@@ -262,22 +293,46 @@ export default function Trading({ onNavigate }) {
       {liveDisabled && (
         <div className="qf-hint" style={{ background: '#fff7ed', border: '1px solid #fed7aa', padding: 10, borderRadius: 8, marginBottom: 12 }}>
           实盘模式尚未配置（{liveStatus?.message || '缺少券商凭证'}）。
-          请在「券商设置」中选择 universal / easytrade / xuntou 并填写 api_key 等凭证；
-          凭证就绪后这里即可切换到真实下单。
-          <button className="qf-btn qf-btn-sm" style={{ marginLeft: 8 }} onClick={() => onNavigate && onNavigate('broker')}>去券商设置</button>
+          可先启用<b>虚拟券商</b>（等价 CTP/QMT 接口，本地账本撮合，无需任何凭证），体验完整实盘下单/持仓/盈亏监控流程：
+          <button className="qf-btn qf-btn-primary qf-btn-sm" style={{ marginLeft: 8 }} onClick={enableVirtual} disabled={enablingVirtual}>
+            {enablingVirtual ? '启用中…' : '启用虚拟券商（无需凭证）'}
+          </button>
+          <button className="qf-btn qf-btn-sm" style={{ marginLeft: 4 }} onClick={() => onNavigate && onNavigate('broker')}>去券商设置</button>
         </div>
       )}
 
       {mode === 'live' && liveCapable && (
         <div className="qf-hint" style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', padding: 10, borderRadius: 8, marginBottom: 12 }}>
-          实盘已具备条件（券商：{liveStatus?.broker}）。真实下单/查询已接入 {liveStatus?.broker?.toUpperCase()} 连接器，凭证就绪后直接连线真实柜台。
+          {liveStatus?.broker === 'virtual'
+            ? '虚拟券商已就绪：等价 CTP/QMT 接口，本地账本撮合，无需凭证/SDK（用于前向测试与演示）。'
+            : `实盘已具备条件（券商：${liveStatus?.broker}）。真实下单/查询已接入 ${liveStatus?.broker?.toUpperCase()} 连接器，凭证就绪后直接连线真实柜台。`}
+        </div>
+      )}
+
+      {mode === 'live' && liveCapable && liveAccount && (
+        <div style={{ marginTop: 12, border: '1px solid #16a34a', borderRadius: 10, padding: 14, background: '#f0fdf4' }}>
+          <div style={{ fontWeight: 600, fontSize: 13, color: '#15803d', marginBottom: 8 }}>
+            实盘账户监控（V107 · 权益 / 盈亏）
+          </div>
+          <div className="qf-mcards" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))' }}>
+            <div className="qf-mcard"><div className="qf-mcard-value">{Number(liveAccount.equity).toLocaleString()}</div><div className="qf-mcard-label">账户权益</div></div>
+            <div className="qf-mcard"><div className="qf-mcard-value">{Number(liveAccount.cash).toLocaleString()}</div><div className="qf-mcard-label">可用现金</div></div>
+            <div className="qf-mcard"><div className="qf-mcard-value">{Number(liveAccount.market_value).toLocaleString()}</div><div className="qf-mcard-label">持仓市值</div></div>
+            <div className="qf-mcard"><div className="qf-mcard-value" style={{ color: Number(liveAccount.pnl) >= 0 ? '#e11d48' : '#0891b2' }}>{Number(liveAccount.pnl).toLocaleString()}</div><div className="qf-mcard-label">累计盈亏</div></div>
+            <div className="qf-mcard"><div className="qf-mcard-value" style={{ color: Number(liveAccount.pnl_pct) >= 0 ? '#e11d48' : '#0891b2' }}>{Number(liveAccount.pnl_pct).toFixed(2)}%</div><div className="qf-mcard-label">收益率</div></div>
+            <div className="qf-mcard"><div className="qf-mcard-value">{Number(liveAccount.initial_cash).toLocaleString()}</div><div className="qf-mcard-label">初始资金</div></div>
+          </div>
+          <div className="qf-hint" style={{ marginTop: 6 }}>对手方来源：{liveAccount.mode} · 实时刷新请点击下方「刷新实盘」。</div>
         </div>
       )}
 
       {mode === 'live' && liveCapable && (
         <div style={{ display: 'flex', gap: 16, marginTop: 12, flexWrap: 'wrap' }}>
           <div style={{ flex: '1 1 320px', minWidth: 300, border: '1px solid var(--border)', borderRadius: 10, padding: 14, background: '#fff' }}>
-            <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text)', marginBottom: 10 }}>实盘持仓（{liveStatus?.broker?.toUpperCase()} 柜台）</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+              <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text)' }}>实盘持仓（{liveStatus?.broker?.toUpperCase()} 柜台）</div>
+              <button type="button" className="qf-btn qf-btn-sm" style={{ marginLeft: 'auto' }} onClick={refreshLive}>刷新实盘</button>
+            </div>
             {livePositions.length === 0 && <div className="qf-prop-hint">暂无实盘持仓</div>}
             {livePositions.length > 0 && (
               <table className="qf-state-table">

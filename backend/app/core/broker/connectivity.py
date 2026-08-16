@@ -47,6 +47,14 @@ def test_broker_config(cfg: Dict[str, Any]) -> Dict[str, Any]:
             "detail": "模拟盘模式：无需外部凭证，本地撮合即可运行。",
         }
 
+    if broker == "virtual":
+        return {
+            "ok": True,
+            "broker": broker,
+            "configured": True,
+            "detail": "虚拟券商：等价 CTP/QMT 接口，本地账本撮合，无需任何凭证或 SDK。",
+        }
+
     if broker in ("qmt", "ctp"):
         # QMT/CTP 走本地 SDK，不做 HTTP 可达性探测，仅确认连接器已识别
         return {

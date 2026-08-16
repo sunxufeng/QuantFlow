@@ -73,7 +73,21 @@ def _brokers() -> List[Dict[str, Any]]:
     ]
     live = engine.live_status()
     broker = live.get("broker", "none")
-    if broker not in ("none", "simulated"):
+    if broker == "virtual":
+        # V107：虚拟券商——功能已就绪，接口等价 CTP/QMT
+        out.append(
+            {
+                "id": "virtual",
+                "name": "虚拟券商（Virtual）",
+                "kind": "broker",
+                "mode": "virtual",
+                "configured": True,
+                "required_env": [],
+                "required_sdk": "",
+                "note": live.get("message", "等价 CTP/QMT 接口，本地账本撮合，无需凭证/SDK"),
+            }
+        )
+    elif broker not in ("none", "simulated"):
         out.append(
             {
                 "id": "live",

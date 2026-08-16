@@ -205,7 +205,8 @@ def test_live_order_configured_wires_gateway():
         "broker": "universal", "api_key": "x", "api_secret": "", "base_url": "", "account_id": ""
     }
     try:
-        res = engine.place_live_order("u_demo", "AAPL", "buy", "market", 10)
+        # 限价单无需行情价，仅验证网关接线（市价单需行情，见 test_v107）
+        res = engine.place_live_order("u_demo", "AAPL", "buy", "limit", 10, 100.0)
         assert res["mode"] == "live"
         assert res["price"] == 123.0
         assert res["symbol"] == "AAPL"
