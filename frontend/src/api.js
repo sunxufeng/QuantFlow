@@ -335,6 +335,14 @@ export const runPortfolioInsurance = (payload) => _deriv('insurance', payload)
 export const runPortfolioGreeks = (payload) => _deriv('portfolio-greeks', payload)
 export const runVolSurface = (payload) => _deriv('vol-surface', payload)
 
+// ---- 组合监控与预警（V87–V91）----
+const _mon = (path, payload) => request(`/monalert/${path}`, { method: 'POST', body: JSON.stringify(payload) })
+export const runDriftMonitor = (payload) => _mon('drift', payload)
+export const runReturnQuality = (payload) => _mon('return-quality', payload)
+export const runTrackingError = (payload) => _mon('tracking-error', payload)
+export const runSectorExposure = (payload) => _mon('sector-exposure', payload)
+export const runRiskBudget = (payload) => _mon('risk-budget', payload)
+
 // ---- 因子库 CRUD（V1.1 N3）----
 export const factorLibraryList = (category) => request(
   `/factors/library${category ? `?category=${encodeURIComponent(category)}` : ''}`,

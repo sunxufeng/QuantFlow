@@ -39,6 +39,7 @@ const navItems = [
   { key: 'portfolioi', label: '组合增强', abbr: '组' },
   { key: 'riskattrib', label: '风险归因', abbr: '因' },
   { key: 'deriv', label: '衍生品对冲', abbr: '衍' },
+  { key: 'monalert', label: '组合监控', abbr: '警' },
   { key: 'factorbt', label: '因子回测', abbr: '测' },
   { key: 'factoreng', label: '因子工程', abbr: '工' },
   { key: 'notify', label: '通知渠道', abbr: '通' },
