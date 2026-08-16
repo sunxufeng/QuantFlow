@@ -216,6 +216,17 @@ CREATE INDEX IF NOT EXISTS idx_workflow_templates_owner ON workflow_templates(ow
 -- 惰性补齐（ALTER TABLE ADD COLUMN），避免对「已存在旧表」重复执行 CREATE TABLE 时
 -- 因列缺失导致 CREATE INDEX 失败。详见 core/template_store.py。
 
+-- V98 报告存档（用户保存的综合/分析报告的 JSON 快照，可回看与再导出）
+CREATE TABLE IF NOT EXISTS report_archive (
+    id          TEXT PRIMARY KEY,
+    name        TEXT NOT NULL,
+    type        TEXT NOT NULL DEFAULT 'consolidate',
+    content     TEXT NOT NULL,
+    owner_id    TEXT,
+    created_at  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_report_archive_owner ON report_archive(owner_id);
+
 """
 
 

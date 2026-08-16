@@ -312,6 +312,13 @@ export const runReportPeriodic = (payload) => _rep('periodic', payload)
 export const runReportDashboard = (payload) => _rep('dashboard', payload)
 export const runConsolidate = (payload) => _rep('consolidate', payload)
 
+// V98 报告存档
+export const saveReportArchive = (name, type, content) =>
+  request('/reports/archive', { method: 'POST', body: JSON.stringify({ name, type, content }) })
+export const listReportArchive = () => request('/reports/archive')
+export const getReportArchive = (id) => request(`/reports/archive/${id}`)
+export const deleteReportArchive = (id) => request(`/reports/archive/${id}`, { method: 'DELETE' })
+
 // ---- 组合层面增强（V72–V76）----
 const _pi = (path, payload) => request(`/portfolioi/${path}`, { method: 'POST', body: JSON.stringify(payload) })
 export const runPIBlackLitterman = (payload) => _pi('black-litterman', payload)

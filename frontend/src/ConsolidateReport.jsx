@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { runConsolidate } from './api.js'
+import { runConsolidate, saveReportArchive } from './api.js'
 import ExportBar from './ExportBar.jsx'
 
 const btn = {
@@ -38,6 +38,7 @@ export default function ConsolidateReport() {
   const [res, setRes] = useState(null)
   const [loading, setLoading] = useState(false)
   const [err, setErr] = useState(null)
+  const [saved, setSaved] = useState(false)
 
   const run = async () => {
     setLoading(true); setErr(null)
@@ -52,9 +53,18 @@ export default function ConsolidateReport() {
       const b = document.getElementById('crb').value.trim()
       if (b) payload.benchmark = JSON.parse(b)
       setRes(await runConsolidate(payload))
+      setSaved(false)
     } catch (e) {
       setErr(jsonErr(e.message))
     } finally { setLoading(false) }
+  }
+
+  const save = async () => {
+    if (!res) return
+    try {
+      await saveReportArchive('综合报告 ' + new Date().toLocaleString(), 'consolidate', res)
+      setSaved(true)
+    } catch (e) { setErr(jsonErr(e.message)) }
   }
 
   return (
@@ -70,6 +80,8 @@ export default function ConsolidateReport() {
         <div style={{ marginTop: 8 }}>
           {num('crppy', 252, 'ppz')}{num('crconf', 0.95, '置信度')}
           <button style={{ ...btn, marginLeft: 8 }} disabled={loading} onClick={run}>{loading ? '生成中…' : '生成综合报告'}</button>
+          <button style={{ ...btn, marginLeft: 8, background: '#fff', color: '#2f6df6' }} disabled={!res} onClick={save}>保存到存档</button>
+          {saved && <span style={{ color: '#16a34a', alignSelf: 'center' }}>已保存</span>}
         </div>
       </Card>
 

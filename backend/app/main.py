@@ -35,6 +35,7 @@ from .api import (
     projects,
     reports_analytics,
     consolidate,
+    report_archive,
     risk_analytics,
     risk_attrib,
     derivatives,
@@ -141,6 +142,7 @@ app.include_router(portfolio_i.router, prefix="/api")
 app.include_router(risk_analytics.router, prefix="/api")
 app.include_router(reports_analytics.router, prefix="/api")
 app.include_router(consolidate.router, prefix="/api")
+app.include_router(report_archive.router, prefix="/api")
 app.include_router(risk_attrib.router, prefix="/api")
 app.include_router(derivatives.router, prefix="/api")
 app.include_router(monitor_alerts.router, prefix="/api")
