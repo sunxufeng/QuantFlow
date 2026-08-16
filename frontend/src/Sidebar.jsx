@@ -82,13 +82,12 @@ export default function Sidebar({
   return (
     <div
       className="qf-sidebar"
+      data-collapsed={collapsed ? '1' : '0'}
       style={{
-        width: collapsed ? 56 : 180,
         transition: 'width .2s ease',
         background: '#0f172a',
         borderRight: '1px solid #1e293b',
         display: 'flex',
-        flexDirection: 'column',
         color: '#e2e8f0',
         flexShrink: 0,
         overflow: 'hidden',
@@ -191,7 +190,7 @@ export default function Sidebar({
       </nav>
 
       {/* footer: project & user */}
-      <div style={{ borderTop: '1px solid #1e293b', padding: '10px 6px' }}>
+      <div className="qf-sidebar-footer" style={{ borderTop: '1px solid #1e293b', padding: '10px 6px' }}>
         {!collapsed && (
           <>
             <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>

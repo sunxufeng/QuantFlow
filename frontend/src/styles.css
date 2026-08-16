@@ -45,6 +45,10 @@
   background: #f8fafc;
 }
 
+/* 侧栏宽度/方向由 data-collapsed 控制，便于移动端媒体查询覆盖 */
+.qf-sidebar { width: 180px; flex-direction: column; }
+.qf-sidebar[data-collapsed="1"] { width: 56px; }
+
 /* ---------- 布局 ---------- */
 .qf-layout {
   display: flex;
@@ -526,6 +530,24 @@
     border-top: 1px solid var(--border);
     min-height: 46vh;
   }
+
+  /* 主应用壳：侧栏变顶部横向导航，主内容堆叠，整页可滚动 */
+  .qf-app-shell { flex-direction: column; height: auto; min-height: 100vh; overflow: visible; }
+  .qf-main { overflow: visible; }
+  .qf-sidebar,
+  .qf-sidebar[data-collapsed="1"] {
+    width: 100%;
+    flex-direction: row;
+    height: auto;
+    overflow-x: auto;
+    overflow-y: hidden;
+    border-right: none;
+    border-bottom: 1px solid #1e293b;
+  }
+  .qf-sidebar nav { flex-direction: row; flex-wrap: nowrap; padding: 6px; }
+  .qf-sidebar nav button { width: auto !important; padding: 8px 12px; flex-shrink: 0; }
+  .qf-sidebar-footer { display: none; }
+  .qf-table { display: block; overflow-x: auto; white-space: nowrap; }
 }
 
 @media (max-width: 540px) {
