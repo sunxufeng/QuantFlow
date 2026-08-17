@@ -291,24 +291,24 @@ def live_status() -> dict:
     }
 
 
-def live_positions() -> list:
-    """实盘持仓（经连接器查询真实柜台；未配置时抛 GatewayNotConfigured）。"""
+def live_positions(account_key: str = "default") -> list:
+    """实盘持仓（虚拟券商按账户键隔离；真实柜台按其账户配置查询）。"""
     from ..execution.gateway import LiveExecutionGateway
-    gw = LiveExecutionGateway()
+    gw = LiveExecutionGateway(account_key=account_key)
     return [p.to_dict() for p in gw.get_positions()]
 
 
-def live_fills() -> list:
-    """实盘成交（经连接器查询真实柜台；未配置时抛 GatewayNotConfigured）。"""
+def live_fills(account_key: str = "default") -> list:
+    """实盘成交（虚拟券商按账户键隔离；真实柜台按其账户配置查询）。"""
     from ..execution.gateway import LiveExecutionGateway
-    gw = LiveExecutionGateway()
+    gw = LiveExecutionGateway(account_key=account_key)
     return gw.get_fills()
 
 
-def live_account(prices: dict | None = None) -> dict:
-    """实盘账户快照（权益/现金/持仓市值；虚拟券商返回本地账本）。"""
+def live_account(prices: dict | None = None, account_key: str = "default") -> dict:
+    """实盘账户快照（虚拟券商按账户键隔离）。"""
     from ..execution.gateway import LiveExecutionGateway
-    gw = LiveExecutionGateway()
+    gw = LiveExecutionGateway(account_key=account_key)
     try:
         acc = gw.get_account(prices)
     except NotImplementedError:
@@ -338,7 +338,7 @@ def place_live_order(user_id, symbol, side, otype, qty, price=None):
             status_code=409,
             detail="实盘未配置：请在「券商设置」中配置真实券商凭证（universal/easytrade/xuntou），或先启用虚拟券商",
         )
-    gw = LiveExecutionGateway()
+    gw = LiveExecutionGateway(account_key=str(user_id))
     market = _infer_market(symbol)
     px = float(price) if price not in (None, "") else None
     last_price = px

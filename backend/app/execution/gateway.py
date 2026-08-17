@@ -206,9 +206,10 @@ class LiveExecutionGateway(BaseExecutionGateway):
     name = "live"
     mode = "live"
 
-    def __init__(self) -> None:
+    def __init__(self, account_key: str = "default") -> None:
         # 优先级：持久化配置（页面设置）> 环境变量
         cfg = load_broker_config()
+        cfg["account_key"] = str(account_key or "default")
         self._api_key = cfg.get("api_key") or os.getenv("QF_BROKER_API_KEY", "")
         self._api_secret = cfg.get("api_secret") or os.getenv("QF_BROKER_SECRET", "")
         self._broker = cfg.get("broker") or os.getenv("QF_BROKER", "simulated-broker")

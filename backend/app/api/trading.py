@@ -35,6 +35,14 @@ class ResetIn(BaseModel):
     initial_cash: Optional[float] = None
 
 
+class FuturesCalcIn(BaseModel):
+    symbol: str                                   # 如 IF2409 / cu2501 / sc2501
+    price: float                                  # 当前/委托价格
+    qty: int                                      # 手数
+    prev_close: Optional[float] = None            # 昨结算价（用于算涨跌停）
+    margin_rate: Optional[float] = None           # 覆盖保证金率（如券商加收）
+
+
 @router.get("/trading/mode")
 def get_mode(user: Dict[str, Any] = Depends(get_current_user)):
     return {
@@ -53,7 +61,7 @@ def get_live_status(user: Dict[str, Any] = Depends(get_current_user)):
 def get_live_positions(user: Dict[str, Any] = Depends(get_current_user)):
     """V31 实盘持仓：经 QMT/CTP 连接器查询真实柜台；未配置返回 409。"""
     try:
-        return engine.live_positions()
+        return engine.live_positions(user["id"])
     except GatewayNotConfigured as exc:
         raise HTTPException(status_code=409, detail=str(exc))
     except NotImplementedError:
@@ -64,7 +72,7 @@ def get_live_positions(user: Dict[str, Any] = Depends(get_current_user)):
 def get_live_fills(user: Dict[str, Any] = Depends(get_current_user)):
     """V31 实盘成交：经 QMT/CTP 连接器查询真实柜台；未配置返回 409。"""
     try:
-        return engine.live_fills()
+        return engine.live_fills(user["id"])
     except GatewayNotConfigured as exc:
         raise HTTPException(status_code=409, detail=str(exc))
     except NotImplementedError:
@@ -74,7 +82,12 @@ def get_live_fills(user: Dict[str, Any] = Depends(get_current_user)):
 @router.get("/trading/live/account")
 def get_live_account(user: Dict[str, Any] = Depends(get_current_user)):
     """V107 实盘账户快照（权益/现金/持仓市值/盈亏）；虚拟券商返回本地账本。"""
-    return engine.live_account()
+    try:
+        return engine.live_account(account_key=user["id"])
+    except GatewayNotConfigured as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    except NotImplementedError:
+        raise HTTPException(status_code=501, detail="实盘账户查询待券商 SDK 就绪后启用")
 
 
 @router.post("/trading/live/orders")
@@ -209,6 +222,33 @@ def hedge(payload: HedgeIn, user: Dict[str, Any] = Depends(get_current_user)):
         return compute_hedge(payload.model_dump())
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+
+
+@router.post("/trading/futures_calc")
+def futures_calc(payload: FuturesCalcIn, user: Dict[str, Any] = Depends(get_current_user)):
+    """期货规格计算器（V108，移植自 panda FutureInfoMap 的品种元数据）。
+
+    输入合约符号、价格、手数（及可选昨结算价/保证金率），返回：
+    品种规格、单手持仓价值、总持仓价值、保证金、手续费、涨跌停价。
+    纯计算，不落库、不改变账户状态。
+    """
+    from ..trading.futures_spec import SpecNotFound, compute_futures
+
+    try:
+        return compute_futures(
+            payload.symbol, payload.price, payload.qty,
+            payload.prev_close, payload.margin_rate,
+        )
+    except SpecNotFound as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@router.get("/trading/futures_specs")
+def futures_specs(user: Dict[str, Any] = Depends(get_current_user)):
+    """列出全部期货品种规格（供前端下拉选择）。"""
+    from ..trading.futures_spec import list_specs
+
+    return list_specs()
 
 
 def _serialize(order: Optional[dict]) -> Optional[dict]:

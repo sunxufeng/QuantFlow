@@ -5,6 +5,8 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.market.repository import SQLiteMarketDataRepository
 from app.market.scheduler import DataSyncService
+from app.market.service import market_service
+from app.market.sources import cache_key
 
 client = TestClient(app)
 
@@ -24,6 +26,15 @@ def test_market_bars_persist_to_sqlite():
     repo = SQLiteMarketDataRepository()
     repo.clear()
     headers = _auth_headers("sync_user")
+    market_service.cache.delete(
+        cache_key(
+            market_service.primary.name,
+            "TEST.STOCK",
+            "2024-01-01",
+            "2024-02-01",
+            "daily",
+        )
+    )
     # 首次请求回源并落库
     resp = client.get(
         "/api/market/bars",

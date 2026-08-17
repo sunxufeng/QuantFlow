@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { brokerGetConfig, brokerSaveConfig, getToken, getLivePositions, getLiveFills, getLiveAccount, verifyOrder, marketSession, hedgeCalc, getAdapters } from './api.js'
+import { brokerGetConfig, brokerSaveConfig, getToken, getLivePositions, getLiveFills, getLiveAccount, verifyOrder, marketSession, hedgeCalc, getAdapters, futuresSpecs, futuresCalc } from './api.js'
 
 const SYMBOL_HINT = '示例：600519（贵州茅台）、000001（平安银行）、AAPL'
 
@@ -13,7 +13,7 @@ export default function Trading({ onNavigate }) {
   const [positions, setPositions] = useState([])
   const [orders, setOrders] = useState([])
   const [analytics, setAnalytics] = useState(null)
-  const [tab, setTab] = useState('trade')           // trade | analytics | hedge | adapters
+  const [tab, setTab] = useState('trade')           // trade | analytics | hedge | adapters | futures
   const [mode, setMode] = useState('paper')        // paper | live
   const [liveCapable, setLiveCapable] = useState(false)
   const [liveStatus, setLiveStatus] = useState(null)
@@ -240,6 +240,8 @@ export default function Trading({ onNavigate }) {
             style={toggleStyle(tab === 'hedge', '#f59e0b')}>对冲</button>
           <button type="button" onClick={() => setTab('adapters')}
             style={toggleStyle(tab === 'adapters', '#10b981')}>连接</button>
+          <button type="button" onClick={() => setTab('futures')}
+            style={toggleStyle(tab === 'futures', '#ef4444')}>期货</button>
         </div>
         {/* 模拟 / 实盘 切换 */}
         <div style={{ display: 'inline-flex', borderRadius: 8, overflow: 'hidden', border: '1px solid #cbd5e1' }}>
@@ -518,6 +520,8 @@ export default function Trading({ onNavigate }) {
       {tab === 'hedge' && <HedgeCalculator />}
 
       {tab === 'adapters' && <AdaptersPanel data={adapters} onNavigate={onNavigate} onRefresh={load} />}
+
+      {tab === 'futures' && <FuturesCalculator />}
     </div>
   )
 }
@@ -772,6 +776,135 @@ function AdaptersPanel({ data, onNavigate, onRefresh }) {
         <button className="qf-btn qf-btn-sm" onClick={() => onRefresh && onRefresh()}>刷新</button>
         <button className="qf-btn qf-btn-sm" onClick={() => onNavigate && onNavigate('broker')}>去券商设置</button>
       </div>
+    </div>
+  )
+}
+
+function FuturesCalculator() {
+  const [specs, setSpecs] = useState([])
+  const [symbol, setSymbol] = useState('IF2409')
+  const [price, setPrice] = useState('3800')
+  const [qty, setQty] = useState('1')
+  const [prevClose, setPrevClose] = useState('')
+  const [marginRate, setMarginRate] = useState('')
+  const [res, setRes] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    futuresSpecs().then(setSpecs).catch(() => setSpecs([]))
+  }, [])
+
+  const calc = async () => {
+    setBusy(true)
+    setError('')
+    setRes(null)
+    try {
+      const data = await futuresCalc({
+        symbol,
+        price: Number(price),
+        qty: Number(qty),
+        prev_close: prevClose ? Number(prevClose) : undefined,
+        margin_rate: marginRate ? Number(marginRate) : undefined,
+      })
+      setRes(data)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const selected = specs.find(s => symbol && s.code.toLowerCase() === symbol.replace(/\d|\..*/g, '').toLowerCase())
+  const card = { flex: '1 1 360px', minWidth: 320, border: '1px solid var(--border)', borderRadius: 10, padding: 14, background: '#fff' }
+
+  return (
+    <div style={{ marginTop: 18 }}>
+      <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text)', marginBottom: 10 }}>
+        期货品种规格与计算器（V108 · 移植自 panda FutureInfoMap 品种元数据）
+      </div>
+      {error && <div className="qf-error">{error}</div>}
+
+      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+        <div style={{ ...card }}>
+          <label className="qf-prop-field" style={{ marginBottom: 10 }}>
+            <span className="qf-prop-label">品种（输入合约或选择）</span>
+            <input className="qf-name-input" list="futures-specs" value={symbol}
+              onChange={(e) => setSymbol(e.target.value)} placeholder="如 IF2409 / cu2501 / sc2501" />
+            <datalist id="futures-specs">
+              {specs.map((s) => (
+                <option key={s.code} value={s.code}>{s.name}（{s.exchange_name}）</option>
+              ))}
+            </datalist>
+          </label>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <label className="qf-prop-field" style={{ flex: 1, minWidth: 120 }}>
+              <span className="qf-prop-label">价格</span>
+              <input className="qf-name-input" type="number" value={price} onChange={(e) => setPrice(e.target.value)} />
+            </label>
+            <label className="qf-prop-field" style={{ flex: 1, minWidth: 120 }}>
+              <span className="qf-prop-label">手数</span>
+              <input className="qf-name-input" type="number" min="1" value={qty} onChange={(e) => setQty(e.target.value)} />
+            </label>
+          </div>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 10 }}>
+            <label className="qf-prop-field" style={{ flex: 1, minWidth: 120 }}>
+              <span className="qf-prop-label">昨结算价（算涨跌停）</span>
+              <input className="qf-name-input" type="number" value={prevClose} onChange={(e) => setPrevClose(e.target.value)} placeholder="可选" />
+            </label>
+            <label className="qf-prop-field" style={{ flex: 1, minWidth: 120 }}>
+              <span className="qf-prop-label">保证金率覆盖</span>
+              <input className="qf-name-input" type="number" step="0.01" value={marginRate} onChange={(e) => setMarginRate(e.target.value)} placeholder="默认见规格" />
+            </label>
+          </div>
+          <button className="qf-btn qf-btn-primary" onClick={calc} disabled={busy} style={{ marginTop: 12, width: '100%' }}>
+            {busy ? '计算中…' : '计算'}
+          </button>
+          {selected && (
+            <div className="qf-hint" style={{ marginTop: 10 }}>
+              规格：{selected.name}（{selected.exchange_name}）· 乘数 {selected.multiplier} · 保证金率 {(selected.margin_rate * 100).toFixed(1)}% · 涨跌停 ±{(selected.price_limit * 100).toFixed(1)}% · 最小价位 {selected.min_tick}
+            </div>
+          )}
+        </div>
+
+        <div style={{ ...card, flex: '1 1 320px' }}>
+          <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text)', marginBottom: 10 }}>全部品种（参考）</div>
+          <div style={{ maxHeight: 320, overflowY: 'auto' }}>
+            <table className="qf-state-table">
+              <thead><tr><th>品种</th><th>名称</th><th>交易所</th><th>乘数</th><th>保证金</th><th>涨跌停</th></tr></thead>
+              <tbody>
+                {specs.map((s) => (
+                  <tr key={s.code} onClick={() => setSymbol(s.code)} style={{ cursor: 'pointer' }}>
+                    <td>{s.code}</td>
+                    <td>{s.name}</td>
+                    <td>{s.exchange_name}</td>
+                    <td>{s.multiplier}</td>
+                    <td>{(s.margin_rate * 100).toFixed(1)}%</td>
+                    <td>±{(s.price_limit * 100).toFixed(1)}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="qf-hint" style={{ marginTop: 8 }}>点击行可快速填入品种。保证金率/涨跌停为常用参考值，实盘以交易所与券商为准。</div>
+        </div>
+      </div>
+
+      {res && (
+        <div style={{ marginTop: 14, border: '1px solid #ef4444', borderRadius: 10, padding: 14, background: '#fef2f2' }}>
+          <div style={{ fontWeight: 600, fontSize: 13, color: '#b91c1c', marginBottom: 8 }}>
+            {res.symbol} 计算结果
+          </div>
+          <div className="qf-mcards" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))' }}>
+            <div className="qf-mcard"><div className="qf-mcard-value">{Number(res.contract_value_per_lot).toLocaleString()}</div><div className="qf-mcard-label">单手持仓价值</div></div>
+            <div className="qf-mcard"><div className="qf-mcard-value">{Number(res.total_contract_value).toLocaleString()}</div><div className="qf-mcard-label">总持仓价值</div></div>
+            <div className="qf-mcard"><div className="qf-mcard-value" style={{ color: '#b91c1c' }}>{Number(res.margin_required).toLocaleString()}</div><div className="qf-mcard-label">保证金占用</div></div>
+            <div className="qf-mcard"><div className="qf-mcard-value">{Number(res.commission).toLocaleString()}</div><div className="qf-mcard-label">手续费</div></div>
+            <div className="qf-mcard"><div className="qf-mcard-value">{res.limit_up != null ? Number(res.limit_up).toLocaleString() : '-'}</div><div className="qf-mcard-label">涨停价</div></div>
+            <div className="qf-mcard"><div className="qf-mcard-value">{res.limit_down != null ? Number(res.limit_down).toLocaleString() : '-'}</div><div className="qf-mcard-label">跌停价</div></div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
