@@ -22,7 +22,7 @@ def get_live_connector(cfg: Dict[str, Any]):
     if broker in ("virtual", "simulated", "simulated-broker"):
         # V107：虚拟券商——接口等价 CTP/QMT，本地账本撮合，无需凭证/SDK
         from .virtual import VirtualBrokerConnector
-        return VirtualBrokerConnector()
+        return VirtualBrokerConnector(account_key=cfg.get("account_key", "default"))
     # universal/easytrade/xuntou 为通用 REST 类柜台，无独立连接器类，
     # 由 LiveExecutionGateway 通用实现（凭证齐备即视为可配置），故返回 None。
     return None

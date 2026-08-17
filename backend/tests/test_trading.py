@@ -195,6 +195,9 @@ def test_live_order_configured_wires_gateway():
     class FakeGateway:
         mode = "live"
 
+        def __init__(self, account_key="default"):
+            self.account_key = account_key
+
         def submit_order(self, order, last_price=None):
             return FakeFill()
 

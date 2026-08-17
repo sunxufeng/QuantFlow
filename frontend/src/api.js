@@ -550,4 +550,10 @@ export const hedgeCalc = (payload) => request('/trading/hedge', {
 })
 // V106 适配器目录（市场数据源 + 券商连接器接口缝）
 export const getAdapters = () => request('/adapters')
+// V108 期货品种规格与计算器（移植自 panda FutureInfoMap 的品种元数据）
+export const futuresSpecs = () => request('/trading/futures_specs')
+export const futuresCalc = (payload) => request('/trading/futures_calc', {
+  method: 'POST',
+  body: JSON.stringify(payload),
+})
 

@@ -2,7 +2,7 @@
 
 解决「真实券商（CTP/QMT/通用 REST）需要柜台 SDK + 凭证，沙箱无法直连」的阻断：
 提供一套**接口完全等价**的虚拟连接器，内部复用 :class:`app.execution.gateway.PaperExecutionGateway`
-的本地撮合账本，但**以进程级单例账本**承载，使跨请求的下单/持仓/成交状态得以持久。
+的本地撮合账本，并以进程级、按账户键隔离的账本集合承载，使同一账户跨请求的下单/持仓/成交状态得以持续。
 
 - 不需要任何外部凭证或 SDK；``is_configured()`` 恒为 True；
 - 与 CTP/QMT 连接器共用 ``Order / Fill / Position`` 协议，未来接真实柜台时只需替换连接器；
@@ -25,19 +25,18 @@ from ...execution.gateway import (
 )
 
 
-# 进程级共享账本：引擎每次 ``LiveExecutionGateway()`` 都会新建实例，
-# 但所有虚拟连接器都指向同一本账，保证下单/持仓/成交跨请求持久。
-_VIRTUAL_BOOK: Optional[PaperExecutionGateway] = None
-_BOOK_LOCK = threading.Lock()
+# 进程级共享账本：按账户键隔离。引擎每次 ``LiveExecutionGateway()`` 都会新建实例，
+# 但同一账户的虚拟连接器指向同一本账，保证跨请求持仓/成交持续且用户间不串账。
+_VIRTUAL_BOOKS: Dict[str, PaperExecutionGateway] = {}
+_BOOK_LOCK = threading.RLock()
 
 
-def _book() -> PaperExecutionGateway:
-    global _VIRTUAL_BOOK
-    if _VIRTUAL_BOOK is None:
-        with _BOOK_LOCK:
-            if _VIRTUAL_BOOK is None:
-                _VIRTUAL_BOOK = PaperExecutionGateway(initial_cash=1_000_000.0)
-    return _VIRTUAL_BOOK
+def _book(account_key: str = "default") -> PaperExecutionGateway:
+    key = str(account_key or "default")
+    with _BOOK_LOCK:
+        if key not in _VIRTUAL_BOOKS:
+            _VIRTUAL_BOOKS[key] = PaperExecutionGateway(initial_cash=1_000_000.0)
+        return _VIRTUAL_BOOKS[key]
 
 
 class VirtualBrokerConnector:
@@ -46,9 +45,9 @@ class VirtualBrokerConnector:
     name = "virtual"
     mode = "virtual"
 
-    def __init__(self) -> None:
-        # 共享同一本账；实例本身无状态
-        self._book = _book()
+    def __init__(self, account_key: str = "default") -> None:
+        self.account_key = str(account_key or "default")
+        self._book = _book(self.account_key)
 
     # --- 配置/就绪 ---
     def is_configured(self) -> bool:
@@ -61,18 +60,22 @@ class VirtualBrokerConnector:
 
     # --- 撮合 ---
     def submit_order(self, order: Order, last_price: Optional[float] = None) -> Fill:
-        return self._book.submit_order(order, last_price)
+        with _BOOK_LOCK:
+            return self._book.submit_order(order, last_price)
 
     def get_positions(self) -> List[Position]:
-        return self._book.get_positions()
+        with _BOOK_LOCK:
+            return [Position(**position.to_dict()) for position in self._book.get_positions()]
 
     def get_account(self, prices: Optional[Dict[str, float]] = None) -> dict:
-        acc = self._book.get_account(prices)
-        acc["mode"] = self.mode  # 标记为虚拟券商来源
-        return acc
+        with _BOOK_LOCK:
+            acc = self._book.get_account(prices)
+            acc["mode"] = self.mode  # 标记为虚拟券商来源
+            return acc
 
     def get_fills(self) -> List[dict]:
-        return [f.to_dict() for f in self._book._fills]
+        with _BOOK_LOCK:
+            return [f.to_dict() for f in self._book._fills]
 
     def reset(self, cash: float) -> None:
         with _BOOK_LOCK:
