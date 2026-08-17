@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { brokerGetConfig, brokerSaveConfig, getToken, getLivePositions, getLiveFills, getLiveAccount, verifyOrder, marketSession, hedgeCalc, getAdapters, futuresSpecs, futuresCalc } from './api.js'
+import { brokerGetConfig, brokerSaveConfig, getToken, getLivePositions, getLiveFills, getLiveAccount, verifyOrder, marketSession, hedgeCalc, getAdapters, futuresSpecs, futuresCalc, optionsCalc } from './api.js'
 
 const SYMBOL_HINT = '示例：600519（贵州茅台）、000001（平安银行）、AAPL'
 
@@ -13,7 +13,7 @@ export default function Trading({ onNavigate }) {
   const [positions, setPositions] = useState([])
   const [orders, setOrders] = useState([])
   const [analytics, setAnalytics] = useState(null)
-  const [tab, setTab] = useState('trade')           // trade | analytics | hedge | adapters | futures
+  const [tab, setTab] = useState('trade')           // trade | analytics | hedge | adapters | futures | options
   const [mode, setMode] = useState('paper')        // paper | live
   const [liveCapable, setLiveCapable] = useState(false)
   const [liveStatus, setLiveStatus] = useState(null)
@@ -242,6 +242,8 @@ export default function Trading({ onNavigate }) {
             style={toggleStyle(tab === 'adapters', '#10b981')}>连接</button>
           <button type="button" onClick={() => setTab('futures')}
             style={toggleStyle(tab === 'futures', '#ef4444')}>期货</button>
+          <button type="button" onClick={() => setTab('options')}
+            style={toggleStyle(tab === 'options', '#8b5cf6')}>期权</button>
         </div>
         {/* 模拟 / 实盘 切换 */}
         <div style={{ display: 'inline-flex', borderRadius: 8, overflow: 'hidden', border: '1px solid #cbd5e1' }}>
@@ -522,6 +524,7 @@ export default function Trading({ onNavigate }) {
       {tab === 'adapters' && <AdaptersPanel data={adapters} onNavigate={onNavigate} onRefresh={load} />}
 
       {tab === 'futures' && <FuturesCalculator />}
+      {tab === 'options' && <OptionsCalculator />}
     </div>
   )
 }
@@ -902,6 +905,134 @@ function FuturesCalculator() {
             <div className="qf-mcard"><div className="qf-mcard-value">{Number(res.commission).toLocaleString()}</div><div className="qf-mcard-label">手续费</div></div>
             <div className="qf-mcard"><div className="qf-mcard-value">{res.limit_up != null ? Number(res.limit_up).toLocaleString() : '-'}</div><div className="qf-mcard-label">涨停价</div></div>
             <div className="qf-mcard"><div className="qf-mcard-value">{res.limit_down != null ? Number(res.limit_down).toLocaleString() : '-'}</div><div className="qf-mcard-label">跌停价</div></div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function OptionsCalculator() {
+  const [spot, setSpot] = useState('100')
+  const [strike, setStrike] = useState('100')
+  const [maturity, setMaturity] = useState('0.25')
+  const [rate, setRate] = useState('0.03')
+  const [volatility, setVolatility] = useState('0.2')
+  const [optionType, setOptionType] = useState('call')
+  const [marketPrice, setMarketPrice] = useState('')
+  const [res, setRes] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  const calc = async () => {
+    setBusy(true)
+    setError('')
+    setRes(null)
+    try {
+      const data = await optionsCalc({
+        spot: Number(spot),
+        strike: Number(strike),
+        maturity: Number(maturity),
+        rate: Number(rate),
+        volatility: Number(volatility),
+        option_type: optionType,
+        market_price: marketPrice ? Number(marketPrice) : undefined,
+      })
+      setRes(data)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const card = { flex: '1 1 360px', minWidth: 320, border: '1px solid var(--border)', borderRadius: 10, padding: 14, background: '#fff' }
+  const g = res?.greeks || {}
+
+  return (
+    <div style={{ marginTop: 18 }}>
+      <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text)', marginBottom: 10 }}>
+        期权定价与希腊值计算器（V109 · Black-Scholes 欧式期权，纯数学零依赖）
+      </div>
+      {error && <div className="qf-error">{error}</div>}
+
+      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+        <div style={{ ...card }}>
+          <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
+            <button type="button" onClick={() => setOptionType('call')} style={btnStyle(optionType === 'call', '#8b5cf6')}>看涨 Call</button>
+            <button type="button" onClick={() => setOptionType('put')} style={btnStyle(optionType === 'put', '#8b5cf6')}>看跌 Put</button>
+          </div>
+
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <label className="qf-prop-field" style={{ flex: 1, minWidth: 120 }}>
+              <span className="qf-prop-label">标的现价 S</span>
+              <input className="qf-name-input" type="number" value={spot} onChange={(e) => setSpot(e.target.value)} />
+            </label>
+            <label className="qf-prop-field" style={{ flex: 1, minWidth: 120 }}>
+              <span className="qf-prop-label">行权价 K</span>
+              <input className="qf-name-input" type="number" value={strike} onChange={(e) => setStrike(e.target.value)} />
+            </label>
+          </div>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 10 }}>
+            <label className="qf-prop-field" style={{ flex: 1, minWidth: 120 }}>
+              <span className="qf-prop-label">到期（年）</span>
+              <input className="qf-name-input" type="number" step="0.01" value={maturity} onChange={(e) => setMaturity(e.target.value)} placeholder="0.25=3个月" />
+            </label>
+            <label className="qf-prop-field" style={{ flex: 1, minWidth: 120 }}>
+              <span className="qf-prop-label">无风险利率 r</span>
+              <input className="qf-name-input" type="number" step="0.001" value={rate} onChange={(e) => setRate(e.target.value)} placeholder="0.03=3%" />
+            </label>
+          </div>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 10 }}>
+            <label className="qf-prop-field" style={{ flex: 1, minWidth: 120 }}>
+              <span className="qf-prop-label">波动率 σ</span>
+              <input className="qf-name-input" type="number" step="0.01" value={volatility} onChange={(e) => setVolatility(e.target.value)} placeholder="0.2=20%" />
+            </label>
+            <label className="qf-prop-field" style={{ flex: 1, minWidth: 120 }}>
+              <span className="qf-prop-label">市价（反解 IV）</span>
+              <input className="qf-name-input" type="number" value={marketPrice} onChange={(e) => setMarketPrice(e.target.value)} placeholder="可选" />
+            </label>
+          </div>
+
+          <button className="qf-btn qf-btn-primary" onClick={calc} disabled={busy} style={{ marginTop: 12, width: '100%' }}>
+            {busy ? '计算中…' : '计算'}
+          </button>
+          <div className="qf-hint" style={{ marginTop: 8 }}>
+            填入「市价」可按 Black-Scholes 反解隐含波动率（二分法）；若市价低于内在价值则无解。单位：Vega 每波动率 +100%，Theta 每年，均附友好单位。
+          </div>
+        </div>
+
+        <div style={{ ...card, flex: '1 1 320px' }}>
+          <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text)', marginBottom: 10 }}>公式与约定</div>
+          <div className="qf-hint" style={{ lineHeight: 1.7 }}>
+            d1 = [ln(S/K) + (r + σ²/2)·T] / (σ·√T)<br />
+            d2 = d1 − σ·√T<br />
+            Call = S·N(d1) − K·e^(−rT)·N(d2)<br />
+            Put = K·e^(−rT)·N(−d2) − S·N(−d1)<br />
+            <br />
+            Δ = N(d1) / N(d1)−1<br />
+            Γ = N'(d1) / (S·σ·√T)<br />
+            Vega = S·N'(d1)·√T<br />
+            Θ、Rho 按连续复利推导。
+          </div>
+        </div>
+      </div>
+
+      {res && (
+        <div style={{ marginTop: 14, border: '1px solid #8b5cf6', borderRadius: 10, padding: 14, background: '#faf5ff' }}>
+          <div style={{ fontWeight: 600, fontSize: 13, color: '#6d28d9', marginBottom: 8 }}>
+            理论价与希腊值（{res.option_type === 'call' ? '看涨 Call' : '看跌 Put'}）
+          </div>
+          <div className="qf-mcards" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))' }}>
+            <div className="qf-mcard"><div className="qf-mcard-value" style={{ color: '#6d28d9' }}>{Number(res.price).toLocaleString()}</div><div className="qf-mcard-label">理论期权价</div></div>
+            <div className="qf-mcard"><div className="qf-mcard-value">{Number(g.delta).toLocaleString()}</div><div className="qf-mcard-label">Delta Δ</div></div>
+            <div className="qf-mcard"><div className="qf-mcard-value">{Number(g.gamma).toLocaleString()}</div><div className="qf-mcard-label">Gamma Γ</div></div>
+            <div className="qf-mcard"><div className="qf-mcard-value">{Number(g.vega).toLocaleString()}</div><div className="qf-mcard-label">Vega（每100%）</div></div>
+            <div className="qf-mcard"><div className="qf-mcard-value">{Number(g.vega_per_1pct).toLocaleString()}</div><div className="qf-mcard-label">Vega（每1%）</div></div>
+            <div className="qf-mcard"><div className="qf-mcard-value">{Number(g.theta).toLocaleString()}</div><div className="qf-mcard-label">Theta（每年）</div></div>
+            <div className="qf-mcard"><div className="qf-mcard-value">{Number(g.theta_per_day).toLocaleString()}</div><div className="qf-mcard-label">Theta（每天）</div></div>
+            <div className="qf-mcard"><div className="qf-mcard-value">{Number(g.rho).toLocaleString()}</div><div className="qf-mcard-label">Rho（每100%）</div></div>
+            <div className="qf-mcard"><div className="qf-mcard-value" style={{ color: '#6d28d9' }}>{res.implied_volatility != null ? (Number(res.implied_volatility) * 100).toFixed(2) + '%' : '—'}</div><div className="qf-mcard-label">隐含波动率</div></div>
           </div>
         </div>
       )}

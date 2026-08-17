@@ -556,4 +556,9 @@ export const futuresCalc = (payload) => request('/trading/futures_calc', {
   method: 'POST',
   body: JSON.stringify(payload),
 })
+// V109 期权定价与希腊值计算器（Black-Scholes 欧式期权）
+export const optionsCalc = (payload) => request('/trading/options_calc', {
+  method: 'POST',
+  body: JSON.stringify(payload),
+})
 

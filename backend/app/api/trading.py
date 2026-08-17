@@ -251,6 +251,34 @@ def futures_specs(user: Dict[str, Any] = Depends(get_current_user)):
     return list_specs()
 
 
+class OptionsCalcIn(BaseModel):
+    spot: float                                   # 标的现价
+    strike: float                                 # 行权价
+    maturity: float                               # 到期时间（年，0.25=3 个月）
+    rate: float                                   # 无风险利率（年化连续复利，如 0.03）
+    volatility: float                             # 波动率（年化，如 0.2=20%）
+    option_type: str = "call"                     # call | put
+    market_price: Optional[float] = None          # 市场期权价（用于反解隐含波动率）
+
+
+@router.post("/trading/options_calc")
+def options_calc(payload: OptionsCalcIn, user: Dict[str, Any] = Depends(get_current_user)):
+    """期权定价与希腊值计算器（V109，Black-Scholes 欧式期权）。
+
+    输入标的价格/行权价/到期/利率/波动率（及可选市场价），返回理论价、
+    五大希腊值（含 per_day/per_1pct 友好单位）与隐含波动率。纯计算。
+    """
+    from ..trading.options import InvalidOptionInput, compute_options
+
+    try:
+        return compute_options(
+            payload.spot, payload.strike, payload.maturity, payload.rate,
+            payload.volatility, payload.option_type, payload.market_price,
+        )
+    except InvalidOptionInput as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
 def _serialize(order: Optional[dict]) -> Optional[dict]:
     if not order:
         return None
