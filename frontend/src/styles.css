@@ -49,6 +49,22 @@
 .qf-sidebar { width: 180px; flex-direction: column; }
 .qf-sidebar[data-collapsed="1"] { width: 56px; }
 
+/* 侧栏滚动条（美化） */
+.qf-sidebar-nav {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 6px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, .35) transparent;
+}
+.qf-sidebar-nav::-webkit-scrollbar { width: 6px; }
+.qf-sidebar-nav::-webkit-scrollbar-track { background: transparent; }
+.qf-sidebar-nav::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, .35);
+  border-radius: 3px;
+}
+.qf-sidebar-nav::-webkit-scrollbar-thumb:hover { background: rgba(148, 163, 184, .55); }
+
 /* ---------- 布局 ---------- */
 .qf-layout {
   display: flex;
@@ -543,7 +559,16 @@
     overflow-y: hidden;
     border-right: none;
     border-bottom: 1px solid #1e293b;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(148, 163, 184, .35) transparent;
   }
+  .qf-sidebar::-webkit-scrollbar { height: 5px; }
+  .qf-sidebar::-webkit-scrollbar-track { background: transparent; }
+  .qf-sidebar::-webkit-scrollbar-thumb {
+    background: rgba(148, 163, 184, .35);
+    border-radius: 3px;
+  }
+  .qf-sidebar::-webkit-scrollbar-thumb:hover { background: rgba(148, 163, 184, .55); }
   .qf-sidebar nav { flex-direction: row; flex-wrap: nowrap; padding: 6px; }
   .qf-sidebar nav button { width: auto !important; padding: 8px 12px; flex-shrink: 0; }
   .qf-sidebar-footer { display: none; }

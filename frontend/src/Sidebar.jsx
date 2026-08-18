@@ -132,7 +132,7 @@ export default function Sidebar({
       </div>
 
       {/* nav */}
-      <nav style={{ flex: 1, overflowY: 'auto', padding: '8px 6px' }}>
+      <nav className="qf-sidebar-nav">
         {navItems
           .filter((item) => !item.adminOnly || user?.role === 'admin')
           .map((item) => {
